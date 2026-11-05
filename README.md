@@ -32,3 +32,5 @@ Añadir conexión OpenAI compatible apuntando a `http://HOST:8070/v1`, con la AP
 
 ## Limitaciones
 Es un starter funcional, no un agente autónomo de producción ni un modelo ya entrenado. Antes de permitir edición real hacen falta worktrees aislados, generación y revisión de diffs, runner efímero, permisos por proyecto, auditoría y pruebas de seguridad.
+
+# Axion-Atomic
