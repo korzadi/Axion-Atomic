@@ -6,6 +6,8 @@ from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query
 from sqlalchemy import text
 from api.database import engine
+from api.rate_limit import consume_rate_limit, rate_limit_key
+from datetime import timedelta
 
 from api.auth import current_user, authorize_project, require_csrf, COOKIE_NAME, CSRF_COOKIE
 from api.config import settings
@@ -40,6 +42,28 @@ def _csrf_user(
 
 def _project_role(user: dict, project_id: str, roles: tuple[str, ...]):
     return authorize_project(user["id"], project_id, roles)
+
+
+def _enforce_workspace_limit(user_id: str, project_id: str, operation: str, *,
+                             user_limit: int, project_limit: int, window: timedelta):
+    """Límite distribuido por usuario y proyecto; falla cerrado si PostgreSQL falla."""
+    buckets = (
+        (rate_limit_key(f"workspace:{operation}:user", user_id), user_limit),
+        (rate_limit_key(f"workspace:{operation}:project", f"{user_id}:{project_id}"), project_limit),
+    )
+    try:
+        for key, limit in buckets:
+            decision = consume_rate_limit(engine=engine, bucket_key=key, limit=limit, window=window)
+            if not decision.allowed:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Has alcanzado temporalmente el límite de solicitudes. Inténtalo más tarde.",
+                    headers={"Retry-After": str(decision.retry_after_seconds)},
+                )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="La protección de capacidad no está disponible") from exc
 
 
 
@@ -145,6 +169,13 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
     await run_in_threadpool(_project_role, user, req.project_id, ("owner", "admin", "editor", "viewer"))
     if req.stream:
         raise HTTPException(status_code=400, detail="Streaming no está implementado")
+    total_chars = sum(len(message.content) for message in req.messages)
+    if total_chars > 40000:
+        raise HTTPException(status_code=413, detail="La conversación supera el límite de 40000 caracteres")
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], req.project_id, "chat",
+        user_limit=20, project_limit=60, window=timedelta(minutes=1),
+    )
     request_id = str(uuid.uuid4())
     user_text = "\n".join(m.content for m in req.messages if m.role == "user")[-12000:]
     try:
@@ -217,6 +248,10 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
 @router.post("/knowledge/ingest")
 async def workspace_ingest(req: IngestRequest, user=Depends(_csrf_user)):
     await run_in_threadpool(_project_role, user, req.project_id, ("owner", "admin", "editor"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], req.project_id, "knowledge_ingest",
+        user_limit=10, project_limit=30, window=timedelta(hours=1),
+    )
     try:
         count = await ingest_text(req.text, req.source, req.project_id)
     except SensitiveContentError as exc:
