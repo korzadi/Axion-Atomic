@@ -95,35 +95,62 @@ def _open_parent(root: Path, rel: str, create: bool = False) -> tuple[int, str]:
         raise
 
 
+def _read_regular_at(parent_fd: int, leaf: str, limit: int | None = None) -> bytes:
+    """Lee un archivo regular relativo a un descriptor de directorio, sin seguir symlinks."""
+    flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0)
+    try:
+        fd = os.open(leaf, flags, dir_fd=parent_fd)
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise PathViolation("No se permiten symlinks ni archivos especiales") from None
+        raise
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise AccessDenied("Solo se permiten archivos regulares")
+        chunks, total = [], 0
+        while True:
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if limit is not None and total > limit:
+                raise AccessDenied(f"Archivo mayor que {limit} bytes")
+            chunks.append(chunk)
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
+
+
+def _open_directory(root: Path, rel: str = ".") -> int:
+    """Abre un directorio y todos sus ancestros sin seguir symlinks."""
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    if rel == ".":
+        return os.open(root, flags)
+    parts = _relative_parts(rel)
+    fd = os.open(root, flags)
+    try:
+        for part in parts:
+            try:
+                next_fd = os.open(part, flags, dir_fd=fd)
+            except OSError as exc:
+                if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+                    raise PathViolation("No se permiten symlinks ni componentes que no sean directorios") from None
+                raise
+            os.close(fd)
+            fd = next_fd
+        return fd
+    except Exception:
+        os.close(fd)
+        raise
+
+
 def _read_regular(root: Path, rel: str, limit: int | None = None) -> bytes:
     parent_fd, leaf = _open_parent(root, rel)
     try:
-        flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0)
-        try:
-            fd = os.open(leaf, flags, dir_fd=parent_fd)
-        except OSError as exc:
-            if exc.errno in (errno.ELOOP, errno.ENOTDIR):
-                raise PathViolation("No se permiten symlinks ni archivos especiales") from None
-            raise
-        try:
-            st = os.fstat(fd)
-            if not stat.S_ISREG(st.st_mode):
-                raise AccessDenied("Solo se permiten archivos regulares")
-            chunks, total = [], 0
-            while True:
-                chunk = os.read(fd, 65536)
-                if not chunk:
-                    break
-                total += len(chunk)
-                if limit is not None and total > limit:
-                    raise AccessDenied(f"Archivo mayor que {limit} bytes")
-                chunks.append(chunk)
-            return b"".join(chunks)
-        finally:
-            os.close(fd)
+        return _read_regular_at(parent_fd, leaf, limit)
     finally:
         os.close(parent_fd)
-
 
 class Workspace:
     def __init__(self, root: str | Path, project_id: str, max_read_bytes: int = 200_000):
@@ -152,7 +179,8 @@ class Workspace:
     def read(self, rel: str, start_line: int | None = None, end_line: int | None = None) -> str:
         path = self._check_readable(rel)
         try:
-            raw = _read_regular(self.root, rel, self.max_read_bytes if start_line is None else None)
+            # Incluso las lecturas parciales respetan el límite total de memoria.
+            raw = _read_regular(self.root, rel, self.max_read_bytes)
         except FileNotFoundError:
             raise FileNotFoundError(rel) from None
         if b"\0" in raw[:8192]:
@@ -167,52 +195,90 @@ class Workspace:
 
     def list_dir(self, rel: str = ".") -> list[dict]:
         path = self._check_readable(rel)
-        if not path.is_dir():
-            raise NotADirectoryError(rel)
-        out = []
-        for child in sorted(path.iterdir()):
-            r = self.relpath(child)
-            if child.is_symlink() or is_sensitive_path(r) or self.ignore.is_ignored(r, child.is_dir()):
-                continue
-            out.append({"name": child.name, "type": "dir" if child.is_dir() else "file",
-                        "size": child.stat().st_size if child.is_file() else None})
-        return out
+        fd = _open_directory(self.root, rel)
+        try:
+            out = []
+            for name in sorted(os.listdir(fd)):
+                r = name if rel == "." else f"{rel}/{name}"
+                try:
+                    st = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                except FileNotFoundError:
+                    # El elemento desapareció durante la enumeración: omitirlo.
+                    continue
+                if stat.S_ISLNK(st.st_mode) or not (stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode)):
+                    continue
+                is_dir = stat.S_ISDIR(st.st_mode)
+                if is_sensitive_path(r) or self.ignore.is_ignored(r, is_dir):
+                    continue
+                out.append({"name": name, "type": "dir" if is_dir else "file",
+                            "size": st.st_size if stat.S_ISREG(st.st_mode) else None})
+            return out
+        finally:
+            os.close(fd)
 
     def walk(self, max_files: int = 5000) -> Iterator[str]:
+        if max_files <= 0:
+            return
         count = 0
-        for dirpath, dirnames, filenames in os.walk(self.root, followlinks=False):
-            d = Path(dirpath)
-            dirnames[:] = sorted(n for n in dirnames
-                                 if not (d / n).is_symlink()
-                                 and not self.ignore.is_ignored(self.relpath(d / n), True)
-                                 and not is_sensitive_path(self.relpath(d / n) + "/x"))
-            for n in sorted(filenames):
-                p = d / n
-                r = self.relpath(p)
-                if p.is_symlink() or is_sensitive_path(r) or self.ignore.is_ignored(r, False):
-                    continue
-                yield r
-                count += 1
+
+        def visit(dir_fd: int, prefix: str):
+            nonlocal count
+            try:
+                names = sorted(os.listdir(dir_fd))
+            except OSError:
+                return
+            for name in names:
                 if count >= max_files:
                     return
+                rel = f"{prefix}/{name}" if prefix else name
+                try:
+                    st = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+                except FileNotFoundError:
+                    continue
+                if stat.S_ISLNK(st.st_mode):
+                    continue
+                if stat.S_ISDIR(st.st_mode):
+                    if is_sensitive_path(rel + "/x") or self.ignore.is_ignored(rel, True):
+                        continue
+                    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+                    try:
+                        child_fd = os.open(name, flags, dir_fd=dir_fd)
+                    except (FileNotFoundError, NotADirectoryError, OSError):
+                        continue
+                    try:
+                        yield from visit(child_fd, rel)
+                    finally:
+                        os.close(child_fd)
+                elif stat.S_ISREG(st.st_mode):
+                    if is_sensitive_path(rel) or self.ignore.is_ignored(rel, False):
+                        continue
+                    count += 1
+                    yield rel
+
+        root_fd = _open_directory(self.root, ".")
+        try:
+            yield from visit(root_fd, "")
+        finally:
+            os.close(root_fd)
 
     def search(self, query: str, glob: str | None = None, max_results: int = 50, case_sensitive: bool = False) -> list[dict]:
         if not query:
             raise ValueError("Consulta vacía")
         needle = query if case_sensitive else query.lower()
         out = []
-        for r in self.walk():
-            if glob and not Path(r).match(glob):
+        for rel in self.walk():
+            if glob and not Path(rel).match(glob):
                 continue
-            p = self.root / r
-            if p.stat().st_size > self.max_read_bytes:
+            try:
+                raw = _read_regular(self.root, rel, self.max_read_bytes)
+            except (FileNotFoundError, PathViolation, AccessDenied):
+                # Nunca seguir un reemplazo por symlink ni leer archivos especiales.
                 continue
-            raw = p.read_bytes()
             if b"\0" in raw[:8192]:
                 continue
             for no, line in enumerate(raw.decode("utf-8", "replace").splitlines(), 1):
                 if needle in (line if case_sensitive else line.lower()):
-                    out.append({"path": r, "line": no, "text": redact(line.strip())[:200]})
+                    out.append({"path": rel, "line": no, "text": redact(line.strip())[:200]})
                     if len(out) >= max_results:
                         return out
         return out
@@ -286,14 +352,26 @@ class Workspace:
         parent_fd, leaf = _open_parent(self.root, change.rel, create=True)
         tmp_name = f".axion-{os.getpid()}-{hashlib.sha256(os.urandom(16)).hexdigest()[:16]}"
         try:
+            # Revalidar el hash usando el mismo descriptor de directorio que se
+            # utilizará para replace/unlink; no confiar en una lectura previa por ruta.
+            try:
+                current_at_parent = _read_regular_at(parent_fd, leaf, MAX_WRITE_BYTES)
+            except FileNotFoundError:
+                current_at_parent = None
+            current_sha = _sha(current_at_parent) if current_at_parent is not None else None
+            if current_sha != change.before_sha:
+                raise ConflictError(f"{change.rel} cambió antes de aplicar la modificación")
             try:
                 existing = os.stat(leaf, dir_fd=parent_fd, follow_symlinks=False)
                 if not stat.S_ISREG(existing.st_mode):
                     raise AccessDenied("El destino dejó de ser un archivo regular")
                 mode = existing.st_mode & 0o777
             except FileNotFoundError:
+                if change.before_sha is not None:
+                    raise ConflictError(f"{change.rel} desapareció antes de aplicar la modificación")
                 mode = 0o600
             if change.kind == "delete":
+                # Comprobación final del tipo; el directorio padre permanece abierto.
                 os.unlink(leaf, dir_fd=parent_fd)
                 return f"Eliminado {change.rel}"
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
