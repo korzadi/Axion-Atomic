@@ -1,6 +1,6 @@
 # AXION ATOMIC — Diseño de persistencia de telemetría Shadow Mode en PostgreSQL
 
-**Estado:** propuesta técnica para revisión; no es una migración ni una implementación activa.  
+**Estado:** implementado parcialmente en `main` mediante migración 006 y escritura best-effort; no es facturación.  
 **Fecha:** 6 de noviembre de 2026.  
 **Objetivo:** pasar de eventos JSON en logs a registros consultables y auditables de uso de inferencia, sin activar cuotas, créditos, reservas, facturación ni cobros.
 
@@ -25,7 +25,7 @@ Excluye:
 
 ## 2. Tabla propuesta: inference_usage_events
 
-La tabla debe añadirse mediante una migración nueva, por ejemplo 006_inference_usage_events.sql, sin editar migraciones históricas.
+La tabla se añadió mediante `migrations/006_inference_usage_events.sql`, sin editar migraciones históricas.
 
 | Campo | Tipo PostgreSQL | Regla |
 |---|---|---|
@@ -33,7 +33,7 @@ La tabla debe añadirse mediante una migración nueva, por ejemplo 006_inference
 | request_id | UUID | NOT NULL, UNIQUE; estable durante los reintentos de persistencia |
 | user_id | TEXT | FK a users(id), NOT NULL, ON DELETE RESTRICT |
 | project_id | TEXT | FK a projects(id), nullable, ON DELETE RESTRICT |
-| provider | TEXT | NOT NULL; inicialmente ollama |
+| provider | TEXT | No se almacena en la primera versión; el adaptador configurado es Ollama |
 | requested_model | TEXT | NOT NULL |
 | returned_model | TEXT | nullable |
 | prompt_tokens | BIGINT | nullable; CHECK >= 0 |
@@ -45,7 +45,7 @@ La tabla debe añadirse mediante una migración nueva, por ejemplo 006_inference
 | prompt_eval_duration_ns | BIGINT | nullable; CHECK >= 0 |
 | eval_duration_ns | BIGINT | nullable; CHECK >= 0 |
 | observed_at | TIMESTAMPTZ | NOT NULL, generado en servidor |
-| schema_version | SMALLINT | NOT NULL, inicialmente 1 |
+
 
 Reglas de integridad:
 - No convertir contadores o duraciones desconocidos en cero.
@@ -78,7 +78,7 @@ No crear índices por cada columna ni particionar prematuramente. Revisar volume
 
 1. La ruta autenticada genera un request_id UUID antes de iniciar la inferencia.
 2. El adaptador devuelve InferenceResult con contadores reales o None.
-3. Si la inferencia finaliza, la ruta intenta insertar un evento usando el mismo request_id.
+3. Si la inferencia finaliza, la ruta intenta insertar un evento usando el mismo request_id mediante `api/usage_events.py`.
 4. La inserción se hace en una transacción breve e independiente; no mantener una transacción PostgreSQL abierta mientras Ollama genera.
 5. Un conflicto UNIQUE se interpreta como evento ya persistido y no duplica la observación.
 6. Si PostgreSQL falla, la respuesta de inferencia sigue siendo exitosa. Se registra una métrica/log operacional sin incluir contenido sensible y se marca la persistencia como no confirmada.
@@ -140,4 +140,4 @@ Esta fase solo se considera completa cuando:
 - La caída de PostgreSQL no convierte una respuesta exitosa de Ollama en error.
 - Se documentan retención, acceso, métricas de pérdida y límites de observabilidad.
 
-**Estado actual:** diseño propuesto. No se ha creado la migración, no se ha ejecutado PostgreSQL, no se han añadido tablas y no se ha activado facturación.
+**Estado actual:** migración 006 y persistencia best-effort publicadas. No se han ejecutado en el VPS ni se ha activado facturación, cuotas, reservas, créditos o pagos. La aplicación todavía no tiene permisos de tabla restringidos ni reintentos durables.
