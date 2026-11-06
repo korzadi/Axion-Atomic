@@ -59,5 +59,87 @@ class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
         engine.begin.assert_not_called()
 
 
+    async def test_approval_updates_gate_and_run_action_in_one_transaction(self):
+        from contextlib import contextmanager
+
+        class Result:
+            rowcount = 1
+            def first(self):
+                return type("ApprovalRow", (), {"action_hash": "hash-1"})()
+
+        class Connection:
+            def __init__(self):
+                self.calls = []
+            def execute(self, statement, params):
+                self.calls.append((str(statement), params))
+                return Result()
+
+        class Engine:
+            def __init__(self):
+                self.connection = Connection()
+                self.transactions = 0
+            @contextmanager
+            def begin(self):
+                self.transactions += 1
+                yield self.connection
+
+        engine = Engine()
+        request = ApprovalRequest(approved=True, note="Revisado")
+        with patch("api.workspace_routes._project_role", return_value="owner"), \
+             patch("api.workspace_routes.engine", engine):
+            result = await workspace_approve(
+                "approval-1", request, project_id="project-1",
+                user={"id": "owner-1"},
+            )
+
+        self.assertEqual(result["status"], "approved")
+        self.assertEqual(result["execution"], "not_executed")
+        self.assertEqual(engine.transactions, 1)
+        self.assertEqual(len(engine.connection.calls), 2)
+        approval_sql, approval_params = engine.connection.calls[0]
+        action_sql, action_params = engine.connection.calls[1]
+        self.assertIn("UPDATE action_approvals", approval_sql)
+        self.assertIn("expires_at > now()", approval_sql)
+        self.assertIn("UPDATE agent_run_actions", action_sql)
+        self.assertEqual(approval_params["approval_id"], "approval-1")
+        self.assertEqual(action_params["proposal_id"], "approval-1")
+        self.assertEqual(action_params["action_hash"], "hash-1")
+        self.assertEqual(action_params["state"], "approved")
+
+    async def test_approval_rolls_back_when_no_matching_pending_run_action(self):
+        from contextlib import contextmanager
+
+        class Result:
+            def __init__(self, rowcount=0):
+                self.rowcount = rowcount
+            def first(self):
+                return type("ApprovalRow", (), {"action_hash": "hash-1"})()
+
+        class Connection:
+            def __init__(self):
+                self.calls = []
+            def execute(self, statement, params):
+                self.calls.append((str(statement), params))
+                return Result(rowcount=0) if len(self.calls) == 2 else Result(rowcount=1)
+
+        class Engine:
+            @contextmanager
+            def begin(self):
+                yield connection
+
+        connection = Connection()
+        request = ApprovalRequest(approved=True, note="Revisado")
+        with patch("api.workspace_routes._project_role", return_value="owner"), \
+             patch("api.workspace_routes.engine", Engine()):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_approve(
+                    "approval-1", request, project_id="project-1",
+                    user={"id": "owner-1"},
+                )
+
+        self.assertEqual(raised.exception.status_code, 409)
+        self.assertEqual(len(connection.calls), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
