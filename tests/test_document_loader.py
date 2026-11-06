@@ -110,3 +110,21 @@ def test_docx_rejects_extracted_text_over_limit():
         archive.writestr("word/document.xml", xml)
     with pytest.raises(DocumentLoadError, match="100000 caracteres"):
         extract_document("oversized.docx", stream.getvalue())
+
+
+
+def test_document_loader_normalizes_untrusted_paths_without_exposing_directories():
+    cases = [
+        ("../../private/notes.txt", "notes.txt"),
+        (r"..\\..\\private\\notes.MD", "notes.MD"),
+        ("/etc/axion/guide.PDF", "guide.PDF"),
+    ]
+    for supplied_name, expected_name in cases:
+        _, safe_name = extract_document(supplied_name, b"Contenido")
+        assert safe_name == expected_name
+
+
+@pytest.mark.parametrize("filename", ["", "   ", None, 123])
+def test_document_loader_rejects_invalid_filename_types(filename):
+    with pytest.raises(DocumentLoadError, match="nombre válido"):
+        extract_document(filename, b"Contenido")
