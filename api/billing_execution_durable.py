@@ -21,6 +21,7 @@ from api.billing_reservations import (
     reserve_credits,
     settle_reservation,
 )
+from api.billing_result_crypto import EncryptedResult
 from api.billing_execution_store import (
     ExecutionStoreError,
     claim_execution,
@@ -93,11 +94,11 @@ async def execute_durable_reserved_inference(
         if encrypted is None or encrypted.execution_id != claim.execution_id:
             raise ExecutionStoreError("No existe resultado cifrado íntegro para la ejecución completada")
         plaintext = cipher.decrypt(
-            type("EncryptedResult", (), {
-                "ciphertext": encrypted.ciphertext,
-                "nonce": encrypted.nonce,
-                "key_id": encrypted.key_id,
-            })(),
+            EncryptedResult(
+                ciphertext=encrypted.ciphertext,
+                nonce=encrypted.nonce,
+                key_id=encrypted.key_id,
+            ),
             user_id=user_id, reservation_id=reservation.reservation_id,
             execution_id=claim.execution_id,
         )
