@@ -13,6 +13,9 @@
 - Cierre de sesión mediante `POST /auth/logout`, cookie de sesión HttpOnly y encabezado CSRF leído desde la cookie no HttpOnly.
 - Navegación visual del workspace para chat, modelos, agentes, Atomic Code, Atomic Video, proyectos, conocimiento y administración.
 - Vista **Proyectos** conectada a `GET /auth/projects` y `POST /auth/projects`; la creación asigna la membresía `owner` en el backend.
+- Desde cada proyecto se puede consultar el historial real de ejecuciones mediante `GET /workspace/agent/runs` y abrir su detalle con `GET /workspace/agent/runs/{run_id}`; el servidor valida membresía y filtra por `project_id`.
+- Desde proyectos con rol `owner`, `admin` o `editor` se pueden consultar las aprobaciones pendientes mediante `GET /workspace/agent/approvals`; solo `owner` y `admin` pueden decidirlas mediante las rutas CSRF protegidas de aprobación.
+- La interfaz informa expresamente que aprobar registra una decisión pero **no ejecuta ni reanuda** herramientas; el runtime end-to-end sigue pendiente.
 - Los proveedores Google y GitHub permanecen deshabilitados. No hay flujo OAuth implementado ni credenciales confirmadas.
 - FastAPI sirve `frontend/index.html` desde `/` mediante `StaticFiles`, montado después de las rutas API para no interceptar `/auth`, `/workspace`, `/health` ni `/v1`.
 - El `Dockerfile` incluye el directorio `frontend/` en la imagen. Esta modificación de código no implica que se haya construido o desplegado una imagen.
@@ -33,18 +36,19 @@
 - No existe todavía verificación/envío de correo, recuperación de contraseña, MFA ni rate limiting distribuido.
 - Google y GitHub no están conectados; los botones no simulan autenticación.
 - La vista Administración es únicamente informativa. No existe API de administración global ni RBAC global/superadmin verificado.
-- Chat, modelos, agentes, Atomic Code, Atomic Video y Conocimiento conservan estados informativos cuando no tienen integración frontend/backend completa; no deben presentar datos ficticios ni afirmar que están operativos.
+- El historial de ejecuciones y la revisión de aprobaciones sí consultan endpoints autenticados reales. No existe todavía en AXION STUDIO una acción para iniciar/reanudar el runtime de CodingAgent; Chat, modelos, agentes (salvo historial/aprobaciones), Atomic Code, Atomic Video y Conocimiento conservan estados informativos cuando no tienen integración completa.
 - Las rutas legacy `/v1/*` siguen protegidas por API key de servicio y no constituyen una API multiusuario para el navegador.
 - El montaje estático depende de que exista el directorio `frontend/`; el Dockerfile ahora lo copia, pero el comportamiento empaquetado aún requiere CI y prueba de imagen en un entorno autorizado.
 
 ## Siguiente trabajo requerido
 
-1. Añadir pruebas de entrega de `/` y de precedencia de rutas API; verificar CI tras los commits de integración.
-2. Completar verificación/envío de correo, recuperación, rate limiting y controles antiabuso antes de habilitar `AUTH_ENABLED`.
-3. Implementar OAuth Google/GitHub solo después de definir callback URLs y configurar secretos fuera del repositorio.
-4. Diseñar roles globales separados de los roles por proyecto; implementar autorización server-side, auditoría y pruebas negativas antes de exponer un panel superadmin.
-5. Conectar selección de proyecto al chat/workspace y conectar cada módulo únicamente a endpoints autenticados existentes, respetando CSRF y membresía.
-6. Validar la imagen y el despliegue en un entorno de pruebas, con aprobación expresa del operador; no ejecutar esa operación como parte de cambios de código.
+1. Verificar CI de los commits más recientes y mantener pruebas de entrega de `/`, precedencia API, historial y autorizaciones por proyecto.
+2. Diseñar y probar la integración del runtime persistente: inicio, restauración, reanudación tras aprobación, reconciliación de acciones interrumpidas y eventos; nunca ejecutar acciones mutables sin aprobación ligada al hash.
+3. Completar verificación/envío de correo, recuperación, rate limiting y controles antiabuso antes de habilitar `AUTH_ENABLED`.
+4. Implementar OAuth Google/GitHub solo después de definir callback URLs y configurar secretos fuera del repositorio.
+5. Diseñar roles globales separados de los roles por proyecto; implementar autorización server-side, auditoría y pruebas negativas antes de exponer un panel superadmin.
+6. Conectar selección de proyecto al chat/workspace y conectar cada módulo únicamente a endpoints autenticados existentes, respetando CSRF y membresía.
+7. Validar la imagen y el despliegue en un entorno de pruebas, con aprobación expresa del operador; no ejecutar esa operación como parte de cambios de código.
 
 ## Estado operativo
 
