@@ -3,10 +3,14 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from api.usage_events import persist_shadow_usage_event
+from api.usage_events import _INSERT_USAGE, persist_shadow_usage_event
 
 
 class ShadowUsagePersistenceTests(unittest.TestCase):
+    def test_insert_is_idempotent_by_request_id(self):
+        self.assertIn("ON CONFLICT (request_id) DO NOTHING", str(_INSERT_USAGE))
+
+
     def test_persists_provider_counters_without_conversation_content(self):
         connection = MagicMock()
         transaction = MagicMock()
