@@ -269,3 +269,31 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class RetrievalInputBoundsTests(unittest.IsolatedAsyncioTestCase):
+    async def test_retrieval_rejects_out_of_range_or_non_integer_limits_before_store_access(self):
+        for invalid_limit in (0, -1, 21, True, 1.5, "5"):
+            with self.subTest(limit=invalid_limit):
+                with patch.object(service, "ensure_collection") as ensure, patch.object(service, "embed", new=AsyncMock()) as embed, patch.object(service.client, "query_points") as query:
+                    with self.assertRaisesRegex(ValueError, "entre 1 y 20"):
+                        await service.retrieve("consulta", "project-a", limit=invalid_limit)
+                ensure.assert_not_called()
+                embed.assert_not_awaited()
+                query.assert_not_called()
+
+    async def test_retrieval_rejects_non_text_query_before_store_access(self):
+        with patch.object(service, "ensure_collection") as ensure, patch.object(service, "embed", new=AsyncMock()) as embed, patch.object(service.client, "query_points") as query:
+            with self.assertRaisesRegex(ValueError, "consulta debe ser texto"):
+                await service.retrieve(None, "project-a")
+        ensure.assert_not_called()
+        embed.assert_not_awaited()
+        query.assert_not_called()
+
+    async def test_empty_query_returns_without_embedding_or_store_access(self):
+        with patch.object(service, "ensure_collection") as ensure, patch.object(service, "embed", new=AsyncMock()) as embed, patch.object(service.client, "query_points") as query:
+            result = await service.retrieve("   ", "project-a", limit=5)
+        self.assertEqual(result, "")
+        ensure.assert_not_called()
+        embed.assert_not_awaited()
+        query.assert_not_called()
+
