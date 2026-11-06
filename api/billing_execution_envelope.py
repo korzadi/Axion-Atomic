@@ -123,3 +123,41 @@ def parse_execution_envelope(data: bytes) -> VerifiedExecutionEnvelope:
         input_weight=input_weight, output_weight=output_weight,
         credits=credits, policy_version=value["policy_version"],
     )
+
+
+def serialize_billing_execution_result(
+    result: Any,
+    *,
+    expected_model: str,
+    policy_version: str,
+    input_weight: int,
+    output_weight: int,
+) -> bytes:
+    """Adaptador listo para execute_durable_reserved_inference.serialize_result."""
+    return build_execution_envelope(
+        result,
+        expected_model=expected_model,
+        policy_version=policy_version,
+        input_weight=input_weight,
+        output_weight=output_weight,
+    )
+
+
+def deserialize_billing_execution_result(data: bytes) -> Any:
+    """Adaptador para deserialize_result; devuelve un objeto compatible con el orquestador."""
+    from types import SimpleNamespace
+
+    verified = parse_execution_envelope(data)
+    return SimpleNamespace(
+        content=verified.content,
+        requested_model=verified.model,
+        returned_model=verified.model,
+        done=True,
+        prompt_eval_count=verified.prompt_tokens,
+        eval_count=verified.output_tokens,
+        usage_source="ollama_response",
+        policy_version=verified.policy_version,
+        input_weight=verified.input_weight,
+        output_weight=verified.output_weight,
+        actual_credits=verified.credits,
+    )
