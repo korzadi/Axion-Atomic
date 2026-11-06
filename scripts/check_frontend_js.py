@@ -2,6 +2,7 @@
 from html.parser import HTMLParser
 from pathlib import Path
 import subprocess
+import tempfile
 
 
 class ScriptExtractor(HTMLParser):
@@ -34,12 +35,16 @@ def main():
     if not parser.scripts:
         raise SystemExit("No se encontraron scripts inline en frontend/index.html")
     for index, script in enumerate(parser.scripts, start=1):
-        subprocess.run(
-            ["node", "--check"],
-            input=script,
-            text=True,
-            check=True,
-        )
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".js"
+        ) as source:
+            source.write(script)
+            source.flush()
+            subprocess.run(
+                ["node", "--check", source.name],
+                text=True,
+                check=True,
+            )
         print(f"Script inline {index}: sintaxis válida")
 
 
