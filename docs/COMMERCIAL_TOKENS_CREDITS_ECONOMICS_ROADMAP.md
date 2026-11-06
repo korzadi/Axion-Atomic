@@ -310,7 +310,7 @@ La API heredada `/v1` utiliza una clave compartida y no puede atribuir consumo a
 
 El contrato `InferenceResult` y la primera fase de código en modo **shadow** están publicados: capturan identidad, proyecto, modelo, contadores y duración sin bloquear solicitudes, sin descontar créditos, sin crear saldo y sin cobrar. El fallo de telemetría no debe hacer fallar una inferencia que ya fue exitosa.
 
-**Estado actualizado:** el contrato tipado y la medición inicial en Shadow Mode ya están publicados en `api/ollama.py` y `api/workspace_routes.py`; las pruebas focalizadas están añadidas en `tests/test_ollama_usage.py` y `tests/test_workspace_role_matrix_http.py`, pero su ejecución y el CI siguen pendientes de verificación. No existe todavía persistencia PostgreSQL, facturación, ledger, reservas, cuotas activas ni cobros.
+***Estado actualizado:** el contrato tipado y la medición inicial en Shadow Mode ya están publicados en `api/ollama.py` y `api/workspace_routes.py`; las pruebas focalizadas están añadidas en `tests/test_ollama_usage.py` y `tests/test_workspace_role_matrix_http.py`, pero su ejecución y el CI siguen pendientes de verificación. No existe todavía persistencia PostgreSQL, facturación, ledger, reservas, cuotas activas ni cobros.
 
 ## 16. Actualización de Shadow Mode y pruebas pendientes (6 de noviembre de 2026)
 
@@ -318,7 +318,8 @@ La implementación inicial de Shadow Mode se publicó en `main`:
 - `api/ollama.py`: `InferenceResult`, validación de contadores y `chat_with_usage()`; `chat()` conserva compatibilidad devolviendo texto.
 - `api/workspace_routes.py`: la ruta autenticada usa el resultado tipado y emite un evento JSON de observación sin incluir prompts ni respuestas.
 - `tests/test_ollama_usage.py`: pruebas de parsing, petición HTTP no streaming, propagación de timeout y compatibilidad del wrapper.
-- `tests/test_workspace_role_matrix_http.py`: pruebas HTTP actualizadas para el nuevo adaptador, comprobación de respuesta y ausencia del texto del usuario en el evento de log.
+- `tests/test_workspace_role_matrix_http.py`: pruebas HTTP actualizadas para el nuevo adaptador, comprobación de respuesta, ausencia del texto del usuario en el evento de log y aislamiento ante fallo del logger.
+- `tests/test_model_identity.py` y `tests/test_workspace_authorization_boundaries.py`: mocks actualizados al adaptador tipado para retirar referencias obsoletas a `workspace_routes.chat`.
 
 **Verificación:** los archivos de prueba están publicados, pero no se ha confirmado todavía una ejecución satisfactoria de pytest ni de GitHub Actions. La actualización de pruebas evita depender de `pytest-asyncio`, que no figura entre las dependencias fijadas del proyecto.
 
