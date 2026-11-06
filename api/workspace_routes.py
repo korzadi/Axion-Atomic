@@ -108,7 +108,7 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
         raise HTTPException(status_code=503, detail="El modelo ejecutado no coincide con el modelo autorizado")
 
     return {
-        "id": "axion-atomic-local", "object": "chat.completion", "created": 0,
+        "id": f"chatcmpl-{request_id}", "object": "chat.completion", "created": 0,
         "model": req.model,
         "choices": [{"index": 0, "message": {"role": "assistant", "content": result.content}, "finish_reason": "stop"}],
     }
