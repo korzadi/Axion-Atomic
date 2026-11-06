@@ -2,6 +2,7 @@ import sqlite3
 import unittest
 
 from agent.approval_gate import ActionProposal, InMemoryApprovalGate
+from agent.approval_store import DbApprovalGate
 from agent.coding_agent import CodingAgent
 from agent.toolset import Tool
 from rag.meta import MetaStore
@@ -66,6 +67,71 @@ class CodingAgentPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(second_run.status, "done")
         self.assertEqual(applied, ["src/file.py"])
 
+
+    async def test_database_approval_resumes_persisted_action_exactly_once(self):
+        from datetime import datetime, timezone
+
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        conn.execute("CREATE TABLE projects (id TEXT PRIMARY KEY)")
+        conn.execute("INSERT INTO projects(id) VALUES ('p1')")
+        conn.execute("""CREATE TABLE agent_runs (
+            id TEXT PRIMARY KEY, project_id TEXT NOT NULL, goal TEXT NOT NULL, status TEXT NOT NULL,
+            final TEXT, error TEXT, messages TEXT NOT NULL, pending_actions TEXT NOT NULL,
+            steps INTEGER NOT NULL, parse_failures INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        )""")
+        conn.execute("""CREATE TABLE agent_run_actions (
+            id TEXT PRIMARY KEY, run_id TEXT NOT NULL, project_id TEXT NOT NULL, tool TEXT NOT NULL,
+            action_hash TEXT NOT NULL, args_json TEXT NOT NULL, proposal_id TEXT, summary TEXT NOT NULL,
+            state TEXT NOT NULL, result TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            UNIQUE(project_id, action_hash)
+        )""")
+        conn.execute("""CREATE TABLE action_approvals (
+            id TEXT PRIMARY KEY, project_id TEXT NOT NULL, tool TEXT NOT NULL, what TEXT NOT NULL,
+            why TEXT NOT NULL, resources TEXT NOT NULL, modification TEXT NOT NULL, risks TEXT NOT NULL,
+            expected TEXT NOT NULL, fingerprint TEXT NOT NULL, action_hash TEXT NOT NULL,
+            state TEXT NOT NULL, reviewer TEXT, note TEXT, created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL, decided_at TEXT, used_at TEXT
+        )""")
+        conn.commit()
+
+        meta = MetaStore(conn)
+        store = RunStore(meta)
+        now = datetime.now(timezone.utc)
+        gate = DbApprovalGate(meta, ttl_s=900, clock=lambda: now)
+        applied = []
+        proposal = ActionProposal("p1", "change", "Actualizar archivo", "Corregir defecto",
+                                  ("src/file.py",), "diff", (), "archivo actualizado", "fingerprint-db-1")
+        tool = Tool("change", "cambio persistente", {"path": ("str", True)},
+                    propose=lambda args: (proposal, lambda approval: applied.append(args["path"]) or "ok"))
+
+        async def chat(_messages):
+            return '{"tool":"change","args":{"path":"src/file.py"}}'
+
+        agent = CodingAgent(chat, {"change": tool}, gate, run_store=store)
+        run = await agent.run("Corregir", project_id="p1", run_id="db-run-1")
+        self.assertEqual(run.status, "awaiting_approval")
+        pending = run.pending[0]
+        gate.decide(pending.proposal_id, True, "owner-1", "Aprobado")
+
+        # Simula la transacción del endpoint HTTP: ambas filas cambian juntas.
+        with conn:
+            conn.execute(
+                "UPDATE agent_run_actions SET state='approved' WHERE project_id=? AND proposal_id=? AND action_hash=? AND state='pending'",
+                ("p1", str(pending.proposal_id), pending.action_hash),
+            )
+        restored = agent.restore("db-run-1", "p1")
+        completed = await agent.resume(restored)
+
+        self.assertEqual(completed.status, "awaiting_approval")
+        self.assertEqual(applied, ["src/file.py"])
+        self.assertEqual(gate.status(pending.proposal_id)[0], "used")
+        self.assertEqual(store.get_project_action("p1", pending.action_hash)["state"], "applied")
+
+        # Una restauración posterior no vuelve a ejecutar la acción ya aplicada.
+        terminal = agent.restore("db-run-1", "p1")
+        self.assertEqual(terminal.status, "awaiting_approval")
+        self.assertEqual(applied, ["src/file.py"])
 
     async def test_restore_marks_interrupted_running_action_for_reconciliation(self):
         conn = sqlite3.connect(":memory:")
