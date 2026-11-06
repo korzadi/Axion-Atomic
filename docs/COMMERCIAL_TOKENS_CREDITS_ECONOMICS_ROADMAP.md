@@ -216,3 +216,52 @@ Esta ampliación se basa en lectura estática de los archivos indicados en GitHu
 ### Estado actualizado de Fase 1
 
 **Auditoría estática ampliada de la ruta principal de chat, autenticación, seguridad de API, persistencia, composición HTTP y SPA: completada para los archivos enumerados.** La auditoría integral del repositorio sigue pendiente de inventario exhaustivo de módulos, migraciones, pruebas, proveedores de pago y costes operativos. No se ejecutaron pruebas, migraciones ni inferencias.
+
+
+## 11. Inventario ampliado del repositorio y precisión de migraciones (6 de noviembre de 2026)
+
+Se enumeraron los contenidos de `api/`, `agent/`, `rag/`, `migrations/`, `tests/`, `frontend/`, `docs/` y `.github/workflows/` en la rama `main`. La enumeración no equivale a una auditoría línea por línea de cada módulo.
+
+### Migraciones y motor de migración: corrección importante
+
+La inspección ampliada confirma que el repositorio sí dispone de un migrador versionado: `api/migrate.py`. La frase anterior que decía que `api/database.py` no contenía un gestor de migraciones se refería solo a ese archivo, no al repositorio completo. El migrador:
+- descubre archivos `NNN_nombre.sql` en `migrations/`;
+- registra versión, nombre, checksum y fecha en `schema_migrations`;
+- utiliza advisory lock PostgreSQL;
+- ejecuta cada migración en una transacción;
+- aborta si cambia el checksum de una migración ya aplicada.
+
+Migraciones existentes identificadas:
+- `001_initial.sql`: proyectos, aprobaciones, tareas, acciones y versiones de modelos.
+- `002_rag_memory.sql`: índice RAG y memorias por proyecto.
+- `003_approvals_audit.sql`: aprobaciones de acciones y auditoría encadenada del runtime.
+- `004_agent_run_persistence.sql`: ejecuciones y acciones persistentes del agente.
+- `005_identity_sessions_memberships.sql`: usuarios, sesiones y membresías de proyecto.
+
+Las cinco migraciones revisadas no contienen el sistema comercial propuesto. Hay una carpeta `migrations/rollback/`; sus archivos deben auditarse antes de definir cualquier procedimiento de reversión. No se ejecutó el migrador.
+
+### Suite y CI
+
+Se identificaron más de cuarenta módulos de prueba en `tests/`, que cubren API, seguridad, autenticación, modelos, Ollama, RAG, proyectos, workspace, runtime, aprobaciones, sandbox y persistencia. No se encontró suite comercial de cuotas, créditos, facturación, pagos o concurrencia económica en el inventario. Esto describe nombres/alcance aparente; no certifica que todas las pruebas pasen.
+
+`.github/workflows/ci.yml` configura Python 3.12, instalación desde `requirements.txt`, `compileall` y `pytest -q` usando SQLite para CI. Por tanto, el CI actual no valida por sí solo semántica específica de PostgreSQL como `FOR UPDATE`, advisory locks, constraints transaccionales ni concurrencia real. Fase de billing deberá añadir pruebas PostgreSQL compatibles antes de aceptar las garantías económicas.
+
+### QvaPay
+
+`docs/QVAPAY_INTEGRATION_STATUS.md` declara aprobación comercial comunicada por el propietario como `APPROVED`, integración técnica en desarrollo y ausencia de cobros reales. Documenta contrato de factura, verificación servidor, firma HMAC del webhook, timestamp, conciliación y clave idempotente `transaction_uuid`. Esta especificación sirve de base, pero la implementación debe verificarse con el simulador oficial y sin secretos en el repositorio.
+
+### Costes reales y telemetría
+
+La lectura de archivos del repositorio no proporciona facturas ni mediciones atribuibles de VPS, CPU, RAM, almacenamiento, GPU externa, electricidad o servicios auxiliares. Los costes de infraestructura permanecen desconocidos/no verificados. Las tarifas por millón y precios de planes/paquetes en este roadmap siguen siendo valores de referencia, no precios activos ni costes reales.
+
+### Estado de Fase 1 tras inventario
+
+**Inventario estructural de las carpetas principales y lectura de migraciones, CI y estado QvaPay: completados.** La auditoría de cada módulo no es exhaustiva y la auditoría de costes reales requiere documentación/facturas que no se encuentran en el repositorio. No se ejecutaron tests, CI, migraciones, inferencias ni llamadas de pago.
+
+## 12. Diseño técnico de Fase 2
+
+Se ha añadido el documento [COMMERCIAL_BILLING_TECHNICAL_DESIGN.md](COMMERCIAL_BILLING_TECHNICAL_DESIGN.md), con el modelo relacional propuesto, límites de identidad, medición, tarifas versionadas, reservas, cuotas, créditos, pagos QvaPay, costes de infraestructura, idempotencia, concurrencia, errores, seguridad, migraciones y criterios de aceptación.
+
+El diseño recomienda comenzar con facturación individual por `user_id`, mantener `project_id` como dimensión de atribución y dejar organizaciones para una decisión explícita; usar PostgreSQL como autoridad; separar el ledger inmutable de créditos del contador de cuota; y no mantener transacciones/locks DB durante inferencias.
+
+**Fase 2: diseño inicial preparado para revisión; no implementado.** Antes de fijar migraciones y reglas finales deben resolverse las preguntas de política sobre prioridad y caducidad de créditos, zona horaria, sobreconsumo y ámbito individual/organización. No se ha creado código económico ni se han activado cobros.
