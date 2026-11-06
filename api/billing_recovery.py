@@ -72,9 +72,12 @@ def _finish_attempt(
     else:
         statement = text("""
             UPDATE billing_inference_executions
-            SET recovery_next_attempt_at =
-                    now() + interval '1 second' *
-                    LEAST(30 * power(2, LEAST(:attempt - 1, 10)), 21600),
+            SET recovery_next_attempt_at = CASE
+                    WHEN :attempt >= 10 THEN NULL
+                    ELSE now() + interval '1 second' *
+                         LEAST(30 * power(2, LEAST(:attempt - 1, 10)), 21600)
+                END,
+                recovery_requires_review = (:attempt >= 10),
                 recovery_last_error_code = :error_code
             WHERE id = CAST(:id AS UUID) AND state = 'completed'
         """)
@@ -112,6 +115,7 @@ def recover_completed_billing_executions(
               ON e.reservation_id = r.id AND e.user_id = r.user_id
             WHERE r.state = 'held' AND e.state = 'completed'
               AND (CAST(:reservation_id AS UUID) IS NULL OR r.id = CAST(:reservation_id AS UUID))
+              AND e.recovery_requires_review = FALSE
               AND (e.recovery_next_attempt_at IS NULL
                    OR e.recovery_next_attempt_at <= now())
             ORDER BY e.recovery_next_attempt_at NULLS FIRST, e.completed_at, e.id
