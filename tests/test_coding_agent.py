@@ -118,6 +118,27 @@ class AgentTests(AgentBase):
         for fragment in ("denegado", "sale del proyecto", "Herramienta desconocida", "Falta el argumento"):
             self.assertIn(fragment, joined)
 
+    async def test_inference_failure_closes_run_without_leaking_exception_details(self):
+        a = self.agent([])
+        async def unavailable(_messages):
+            raise RuntimeError("private upstream details")
+        a.chat = unavailable
+        run = await a.run("g")
+        self.assertEqual(run.status, "failed")
+        self.assertIn("servicio de inferencia", run.error)
+        self.assertNotIn("private upstream details", run.error)
+        self.assertEqual(run.steps, 0)
+
+    async def test_non_text_model_response_closes_run_safely(self):
+        a = self.agent([])
+        async def invalid(_messages):
+            return {"unexpected": "payload"}
+        a.chat = invalid
+        run = await a.run("g")
+        self.assertEqual(run.status, "failed")
+        self.assertIn("respuesta inválida", run.error)
+        self.assertEqual(run.steps, 0)
+
     async def test_parse_failures_recover_then_fail(self):
         a = self.agent(["hola", fin("ok")]); self.assertEqual((await a.run("g")).status, "done")
         b = self.agent(["x", "y", "z"], max_parse_failures=2)
