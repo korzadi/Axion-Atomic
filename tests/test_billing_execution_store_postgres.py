@@ -1,8 +1,14 @@
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL or not DATABASE_URL.startswith(("postgresql://", "postgresql+")):
+    pytest.skip("Requiere PostgreSQL del job postgres-migrations", allow_module_level=True)
+engine = create_engine(DATABASE_URL, future=True, pool_pre_ping=True)
 
 from api.billing_execution_store import (
     ExecutionAlreadyClaimed,
@@ -40,7 +46,7 @@ def _reservation(engine):
     return user_id, reservation.reservation_id
 
 
-def test_execution_claim_is_unique_and_completed_ciphertext_is_recoverable(engine):
+def test_execution_claim_is_unique_and_completed_ciphertext_is_recoverable():
     user_id, reservation_id = _reservation(engine)
     first = claim_execution(engine=engine, user_id=user_id, reservation_id=reservation_id)
     assert first.claimed is True
@@ -64,7 +70,7 @@ def test_execution_claim_is_unique_and_completed_ciphertext_is_recoverable(engin
         )
 
 
-def test_started_execution_can_be_marked_unknown_and_never_reclaimed(engine):
+def test_started_execution_can_be_marked_unknown_and_never_reclaimed():
     user_id, reservation_id = _reservation(engine)
     first = claim_execution(engine=engine, user_id=user_id, reservation_id=reservation_id)
     mark_execution_unknown(engine=engine, user_id=user_id, execution_id=first.execution_id)

@@ -21,7 +21,7 @@ def test_all_expected_migrations_are_registered():
         versions = conn.execute(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).scalars().all()
-    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009"]
+    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010"]
 
 
 def test_core_postgresql_tables_exist():
@@ -46,7 +46,7 @@ def test_core_postgresql_tables_exist():
         "billing_usage_reservations",
         "billing_reservation_allocations",
         "billing_credit_ledger",
-        "billing_reservation_reconciliations",
+        "billing_reservation_reconciliations",\n        "billing_inference_executions",
     }
     assert expected <= tables
 
@@ -230,3 +230,21 @@ def test_billing_reconciliation_audit_is_append_only():
         "trg_billing_reconciliations_no_update_delete",
         "trg_billing_reconciliations_no_truncate",
     } <= set(triggers)
+
+
+def test_billing_execution_results_are_ciphertext_only_and_recoverable():
+    inspector = inspect(engine)
+    columns = {item["name"]: item for item in inspector.get_columns("billing_inference_executions")}
+    assert {
+        "reservation_id", "user_id", "state", "result_ciphertext",
+        "result_nonce", "result_key_id", "result_sha256", "completed_at",
+    } <= set(columns)
+    assert columns["result_ciphertext"]["type"].__class__.__name__.lower() == "bytea"
+    uniques = inspector.get_unique_constraints("billing_inference_executions")
+    assert any(item.get("column_names") == ["reservation_id"] for item in uniques)
+    with engine.connect() as conn:
+        triggers = conn.execute(text("""
+            SELECT tgname FROM pg_trigger
+            WHERE tgrelid='billing_inference_executions'::regclass AND NOT tgisinternal
+        """)).scalars().all()
+    assert not triggers
