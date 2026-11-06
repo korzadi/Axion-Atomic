@@ -10,6 +10,7 @@ from sqlalchemy import create_engine, text
 from api.billing_policy import InsufficientCredits
 from api.billing_reservations import (
     IdempotencyConflict,
+    mark_reservation_unknown,
     reserve_credits,
     settle_reservation,
 )
@@ -80,6 +81,12 @@ def test_reservation_is_idempotent_and_partial_settlement_releases_unused_quota(
     )
     assert settled.state == "settled"
     assert settled.charged_credits == 5
+    repeated_settlement = settle_reservation(
+        engine=engine, user_id=user_id, reservation_id=first.reservation_id,
+        actual_credits=5,
+    )
+    assert repeated_settlement.idempotent is True
+    assert repeated_settlement.charged_credits is None
 
     with engine.connect() as conn:
         balances = conn.execute(text("""
@@ -226,3 +233,22 @@ def test_purchased_credits_are_not_used_without_plan_permission():
         """), {"user_id": user_id}).one()
     assert row.available_credits == 10
     assert row.reserved_credits == 0
+
+
+
+def test_unknown_provider_result_keeps_credits_reserved():
+    user_id, project_id = _account(quota=10)
+    reservation = _reserve(user_id, project_id, key="unknown-result", amount=6)
+    mark_reservation_unknown(
+        engine=engine, user_id=user_id, reservation_id=reservation.reservation_id,
+    )
+    with engine.connect() as conn:
+        row = conn.execute(text("""
+            SELECT q.reserved_credits, q.consumed_credits, r.state
+            FROM billing_quota_periods q
+            JOIN billing_usage_reservations r ON r.user_id=q.user_id
+            WHERE q.user_id=:user_id
+        """), {"user_id": user_id}).one()
+    assert row.state == "unknown"
+    assert row.reserved_credits == 6
+    assert row.consumed_credits == 0
