@@ -45,6 +45,14 @@ class DbApprovalGateTests(unittest.TestCase):
         with self.assertRaises(ApprovalError):
             self.gate.redeem(pid, "wrong-hash")
 
+    def test_rejected_approval_cannot_be_redeemed(self):
+        pid = self.gate.request(self.proposal)
+        self.gate.decide(pid, False, "reviewer", "No autorizado")
+        self.assertEqual(self.gate.status(pid), ("rejected", "No autorizado"))
+        with self.assertRaises(ApprovalError):
+            self.gate.redeem(pid, self.proposal.action_hash)
+        self.assertEqual(self.gate.status(pid)[0], "rejected")
+
     def test_expired_approval_cannot_be_decided_or_redeemed(self):
         pid = self.gate.request(self.proposal)
         self.now += timedelta(seconds=901)
