@@ -67,3 +67,17 @@ def test_rcache_bypasses_when_disabled(monkeypatch):
         assert await rcache.get_embedding("embed-v1", 2, "hello") is None
 
     asyncio.run(scenario())
+
+
+def test_rcache_fails_open_when_redis_is_unavailable(monkeypatch):
+    async def unavailable():
+        raise ConnectionError("redis offline")
+
+    monkeypatch.setattr(rcache, "_redis_client", unavailable)
+
+    async def scenario():
+        assert await rcache.get_embedding("embed-v1", 2, "hello") is None
+        await rcache.set_embedding("embed-v1", 2, "hello", [0.1, 0.2])
+        assert await rcache.ping_cache() is False
+
+    asyncio.run(scenario())
