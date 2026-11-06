@@ -169,7 +169,7 @@ async def oauth_callback(provider: str, code: str | None = None,
         result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
         return result
     try:
-        state_data = consume_state(engine, provider, state)
+        state_data = await run_in_threadpool(consume_state, engine, provider, state)
         if state_data["terms_accepted"] is not True:
             raise ValueError("Consentimiento legal no registrado")
         profile = await run_in_threadpool(provider_profile, provider, code, state_data["nonce"], settings)
