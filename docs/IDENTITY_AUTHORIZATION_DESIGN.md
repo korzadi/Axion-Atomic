@@ -24,7 +24,7 @@ Estado: esquema aditivo preparado; implementación HTTP y pruebas de integració
 ## Secuencia de implementación
 
 - Crear repositorio de usuarios/sesiones/membresías sobre la conexión compartida.
-- Implementar registro/login/logout/me con cookies seguras, CSRF y rate limits.
+- Rutas iniciales register/login/logout/me creadas y bloqueadas por `AUTH_ENABLED=false`; completar verificación de correo, rate limits distribuidos, pruebas de integración y activar solo tras revisión.
 - Añadir dependencia `current_user` y guardas de rol/proyecto a todas las rutas.
 - Sustituir `reviewer` enviado por el cliente por el usuario autenticado.
 - Probar aislamiento negativo: usuario A no puede leer, indexar, aprobar, ejecutar, enumerar ni borrar recursos del usuario B.
