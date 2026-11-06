@@ -69,6 +69,57 @@ class WorkspaceKnowledgeUploadHttpTests(unittest.TestCase):
         extract.assert_not_called()
         ingest.assert_not_awaited()
 
+    def test_viewer_cannot_delete_knowledge_source(self):
+        self.role = "viewer"
+        source_id = "12345678-1234-5678-1234-567812345678"
+        with (
+            patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.delete_source", new_callable=AsyncMock) as delete_source,
+        ):
+            response = self.client.delete(
+                f"/workspace/knowledge/sources/{source_id}?project_id=private-project"
+            )
+
+        self.assertEqual(response.status_code, 404)
+        delete_source.assert_not_awaited()
+
+    def test_editor_deletes_only_the_requested_project_source(self):
+        source_id = "12345678-1234-5678-1234-567812345678"
+        with (
+            patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.delete_source", new_callable=AsyncMock) as delete_source,
+        ):
+            response = self.client.delete(
+                f"/workspace/knowledge/sources/{source_id}?project_id=project-a"
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "deleted")
+        self.assertEqual(response.json()["project_id"], "project-a")
+        delete_source.assert_awaited_once_with(source_id, "project-a")
+
+    def test_editor_reindexes_only_the_requested_project_source(self):
+        source_id = "12345678-1234-5678-1234-567812345678"
+        with (
+            patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.replace_source", new_callable=AsyncMock, return_value=3) as replace_source,
+        ):
+            response = self.client.put(
+                f"/workspace/knowledge/sources/{source_id}",
+                json={
+                    "project_id": "project-a",
+                    "source": "manual.txt",
+                    "text": "Contenido actualizado y validado.",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "reindexed")
+        self.assertEqual(response.json()["chunks"], 3)
+        replace_source.assert_awaited_once_with(
+            source_id, "Contenido actualizado y validado.", "manual.txt", "project-a"
+        )
+
     def test_unsupported_upload_is_rejected_over_http_without_indexing(self):
         from rag.document_loader import DocumentLoadError
 
