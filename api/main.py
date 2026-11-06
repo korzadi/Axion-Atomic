@@ -9,8 +9,10 @@ from api.database import engine
 from rag.service import ingest_text, retrieve
 from agent.planner import create_plan
 from agent.approvals import create_approval, decide_approval, list_pending
+from api.auth_routes import router as auth_router
 
 app = FastAPI(title="Axion Atomic API", version="0.2.0")
+app.include_router(auth_router)
 
 
 @app.get("/health")
