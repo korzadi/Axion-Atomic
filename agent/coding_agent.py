@@ -26,14 +26,13 @@ class PendingAction:
     args: dict
     action_hash: str
     summary: str
+    action_run_id: str | None = None
 
 
 @dataclass
 class AgentRun:
     goal: str
     messages: list[dict]
-    id: str = field(default_factory=lambda: uuid.uuid4().hex)
-    project_id: str = ""
     status: str = "running"  # running | awaiting_approval | done | failed | max_steps | needs_reconciliation
     final: str | None = None
     error: str | None = None
@@ -41,6 +40,8 @@ class AgentRun:
     steps: int = 0
     repeats: dict = field(default_factory=dict)
     parse_failures: int = 0
+    id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    project_id: str = ""
 
 
 def system_prompt(tools: dict[str, Tool]) -> str:
@@ -126,13 +127,13 @@ class CodingAgent:
         if self.run_store is None:
             raise ValueError("La persistencia de ejecuciones no está configurada")
         saved = self.run_store.get_run(run_id, project_id)
-        pending = [PendingAction(p["proposal_id"], p["tool"], p["args"], p["action_hash"], p["summary"])
+        pending = [PendingAction(p["proposal_id"], p["tool"], p["args"], p["action_hash"], p["summary"], p.get("action_run_id", run_id))
                    for p in saved["pending_actions"]]
         run = AgentRun(saved["goal"], saved["messages"], id=saved["id"], project_id=saved["project_id"],
                        status=saved["status"], final=saved["final"], error=saved["error"],
                        pending=pending, steps=saved["steps"], parse_failures=saved["parse_failures"])
         for action in pending:
-            stored = self.run_store.get_action(run.id, action.action_hash)
+            stored = self.run_store.get_project_action(project_id, action.action_hash)
             if stored and stored["state"] == "running":
                 run.status = "needs_reconciliation"
                 run.error = "Una acción quedó en ejecución durante una interrupción; requiere reconciliación humana."
@@ -195,7 +196,7 @@ class CodingAgent:
                 continue
 
             if self.run_store is not None:
-                existing = self.run_store.get_action(run.id, prop.action_hash)
+                existing = self.run_store.get_project_action(run.project_id, prop.action_hash)
                 if existing:
                     state = existing["state"]
                     if state == "applied":
@@ -240,7 +241,7 @@ class CodingAgent:
             return run
         for p in run.pending:
             if self.run_store is not None:
-                stored = self.run_store.get_action(run.id, p.action_hash)
+                stored = self.run_store.get_project_action(run.project_id, p.action_hash)
                 if stored and stored["state"] == "running":
                     run.status = "needs_reconciliation"
                     run.error = "La acción ya fue reclamada y requiere reconciliación humana."
@@ -255,18 +256,18 @@ class CodingAgent:
             if state == "rejected":
                 result = f"RECHAZADO por el revisor. Motivo: {note or '(sin motivo)'}. No lo repitas igual."
                 if self.run_store is not None:
-                    self.run_store.transition_action(run.id, p.action_hash, ("pending", "approved"), "rejected", result)
+                    self.run_store.transition_action(stored["run_id"] if stored else (p.action_run_id or run.id), p.action_hash, ("pending", "approved"), "rejected", result)
             elif state == "expired":
                 result = "EXPIRADO: se necesita una nueva propuesta y aprobación."
                 if self.run_store is not None:
-                    self.run_store.transition_action(run.id, p.action_hash, ("pending", "approved"), "expired", result)
+                    self.run_store.transition_action(stored["run_id"] if stored else (p.action_run_id or run.id), p.action_hash, ("pending", "approved"), "expired", result)
             elif state != "approved":
                 result = f"No se aplicó: la solicitud está '{state}'."
             else:
                 claimed = True
                 if self.run_store is not None:
                     claimed = self.run_store.transition_action(
-                        run.id, p.action_hash, ("pending", "approved"), "running"
+                        stored["run_id"] if stored else (p.action_run_id or run.id), p.action_hash, ("pending", "approved"), "running"
                     )
                 if not claimed:
                     run.status = "needs_reconciliation"
@@ -284,11 +285,11 @@ class CodingAgent:
                         out = await out
                     result = f"{tool.applied_label}: {out}"
                     if self.run_store is not None:
-                        self.run_store.transition_action(run.id, p.action_hash, ("running",), "applied", result)
+                        self.run_store.transition_action(stored["run_id"] if stored else (p.action_run_id or run.id), p.action_hash, ("running",), "applied", result)
                 except HANDLED as exc:
                     result = f"ERROR al aplicar: {exc}"
                     if self.run_store is not None:
-                        self.run_store.transition_action(run.id, p.action_hash, ("running",), "failed", result)
+                        self.run_store.transition_action(stored["run_id"] if stored else (p.action_run_id or run.id), p.action_hash, ("running",), "failed", result)
             self._emit(run, "approval_result", tool=p.tool, proposal_id=p.proposal_id, result=result)
             self._observe(run, f"RESULTADO de {p.tool}", result)
         run.pending = []
