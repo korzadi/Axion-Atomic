@@ -61,6 +61,7 @@ def reserve_credits(
     payload_sha256: str,
     required_credits: int,
     policy_version: str,
+    purchased_fallback_allowed: bool = False,
     expires_at: datetime,
     now: datetime | None = None,
 ) -> ReservationResult:
@@ -124,7 +125,7 @@ def reserve_credits(
             if not remaining:
                 break
 
-        if remaining:
+        if remaining and purchased_fallback_allowed:
             lot_rows = conn.execute(text("""
                 SELECT id, available_credits
                 FROM billing_credit_lots
