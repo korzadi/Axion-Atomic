@@ -38,13 +38,13 @@ def _csrf_guard(
 
 
 
-def _enforce_rate_limit(request: Request, *, namespace: str, limit: int, window: timedelta):
+def _enforce_rate_limit(request: Request, *, namespace: str, limit: int, window: timedelta, subject: str | None = None):
     # No confiar en X-Forwarded-For: solo usar la IP del socket hasta configurar
     # explícitamente una lista de proxies de confianza.
     client = request.client
     if client is None or not client.host:
         raise HTTPException(status_code=503, detail="No se pudo validar el origen de la solicitud")
-    key = rate_limit_key(namespace, client.host)
+    key = rate_limit_key(namespace, subject if subject is not None else client.host)
     try:
         decision = consume_rate_limit(engine=engine, bucket_key=key, limit=limit, window=window)
     except Exception as exc:
