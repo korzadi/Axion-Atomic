@@ -50,6 +50,8 @@ jobs:
           POSTGRES_USER: axion_ci
           POSTGRES_PASSWORD: ci-only-password
           POSTGRES_DB: axion_ci
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U axion_ci -d axion_ci"
           --health-interval 10s
