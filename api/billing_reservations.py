@@ -80,6 +80,7 @@ def reserve_credits(
         raise ValueError("expires_at debe ser posterior a now")
     # Normaliza y valida UUID antes de abrir la transacción.
     request_uuid = str(uuid.UUID(request_id))
+    project_reference = str(project_id) if project_id is not None else None
     reservation_uuid = str(uuid.uuid4())
 
     with engine.begin() as conn:
@@ -100,7 +101,7 @@ def reserve_credits(
             if (
                 existing["payload_sha256"].strip() != payload_sha256
                 or existing["requested_credits"] != required_credits
-                or existing["project_id"] != project_id
+                or existing["project_id"] != project_reference
                 or str(existing["request_id"]) != request_uuid
                 or existing["policy_version"] != policy_version
             ):
@@ -165,7 +166,7 @@ def reserve_credits(
                  :idempotency_key, :payload_sha256, :requested_credits, 'held',
                  :policy_version, :instant, :expires_at)
         """), {
-            "id": reservation_uuid, "user_id": user_id, "project_id": project_id,
+            "id": reservation_uuid, "user_id": user_id, "project_id": project_reference,
             "request_id": request_uuid, "idempotency_key": idempotency_key,
             "payload_sha256": payload_sha256, "requested_credits": required_credits,
             "policy_version": policy_version, "instant": instant, "expires_at": expiry,
