@@ -47,7 +47,7 @@ def call(**kwargs):
         budget=BUDGET, expected_runtime_model=MODEL,
         reservation_expires_at=datetime.now(timezone.utc)+timedelta(minutes=5),
         cipher=Cipher(), serialize_result=lambda r: b"serialized",
-        deserialize_result=lambda b: result(), **kwargs,
+        deserialize_result=kwargs.pop("deserialize_result", lambda b: result()), **kwargs,
     ))
 
 
@@ -94,4 +94,48 @@ def test_noncompleted_claim_never_reexecutes(state):
     ):
         with pytest.raises(DurableExecutionRecoveryRequired):
             call(inference_call=inference)
+    inference.assert_not_awaited()
+
+
+def test_recovered_envelope_must_match_reserved_policy_snapshot():
+    inference = AsyncMock()
+    stored = EncryptedExecutionResult(
+        "00000000-0000-0000-0000-000000000003",
+        b"enc:serialized", b"n"*12, "k1", "digest",
+    )
+    mismatched = SimpleNamespace(
+        requested_model=MODEL, returned_model=MODEL, done=True,
+        usage_source="ollama_response", prompt_eval_count=12, eval_count=8,
+        policy_version="different-policy", input_weight=1, output_weight=1,
+        actual_credits=20,
+    )
+    with (
+        patch("api.billing_execution_durable.reserve_credits", return_value=RES),
+        patch("api.billing_execution_durable.claim_execution", return_value=ExecutionClaim(stored.execution_id, "completed", False)),
+        patch("api.billing_execution_durable.load_encrypted_result", return_value=stored),
+    ):
+        with pytest.raises(Exception, match="política del resultado cifrado"):
+            call(inference_call=inference, deserialize_result=lambda _: mismatched)
+    inference.assert_not_awaited()
+
+
+def test_recovered_envelope_must_match_saved_credit_calculation():
+    inference = AsyncMock()
+    stored = EncryptedExecutionResult(
+        "00000000-0000-0000-0000-000000000003",
+        b"enc:serialized", b"n"*12, "k1", "digest",
+    )
+    mismatched = SimpleNamespace(
+        requested_model=MODEL, returned_model=MODEL, done=True,
+        usage_source="ollama_response", prompt_eval_count=12, eval_count=8,
+        policy_version="atomic-code-budget-v1", input_weight=1, output_weight=1,
+        actual_credits=999,
+    )
+    with (
+        patch("api.billing_execution_durable.reserve_credits", return_value=RES),
+        patch("api.billing_execution_durable.claim_execution", return_value=ExecutionClaim(stored.execution_id, "completed", False)),
+        patch("api.billing_execution_durable.load_encrypted_result", return_value=stored),
+    ):
+        with pytest.raises(Exception, match="créditos guardados"):
+            call(inference_call=inference, deserialize_result=lambda _: mismatched)
     inference.assert_not_awaited()
