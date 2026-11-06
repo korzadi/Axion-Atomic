@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # La capa HTTP rechaza solicitudes si falta una clave fuerte.
     api_key: str | None = None
     workspace_root: str = "/workspace"
+    # Desactivado hasta incorporar rate limiting distribuido y verificación de correo.
+    auth_enabled: bool = False
+    auth_cookie_secure: bool = True
 
 
 settings = Settings()
