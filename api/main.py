@@ -69,7 +69,7 @@ async def completions(req: ChatRequest):
         "id": "axion-atomic-local",
         "object": "chat.completion",
         "created": 0,
-        "model": "ATOMIC CODE 1.1",
+        "model": settings.chat_model,
         "choices": [{"index": 0, "message": {"role": "assistant", "content": answer}, "finish_reason": "stop"}],
     }
 
