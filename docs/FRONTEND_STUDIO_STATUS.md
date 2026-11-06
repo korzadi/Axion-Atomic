@@ -44,3 +44,18 @@
 ## Estado de publicación
 
 Esta rama no se ha fusionado con `main` ni desplegado. No se han ejecutado migraciones, cambiado variables de entorno, reiniciado servicios ni modificado el VPS.
+
+
+## Actualización — 2026-11-06
+
+Se conectó la vista **Proyectos** del frontend a las rutas existentes de identidad:
+
+- `GET /auth/projects` para listar únicamente los proyectos vinculados al usuario autenticado.
+- `POST /auth/projects` para crear un proyecto y asignar su membresía `owner` en la transacción del backend.
+- La creación envía `X-CSRF-Token` desde la cookie `axion_csrf`; la cookie de sesión sigue siendo HttpOnly.
+- Los errores del backend se muestran en la interfaz; no se inventan proyectos ni datos de actividad.
+- La vista vuelve a consultar la lista después de crear un proyecto.
+
+**Límites sin cambios:** `AUTH_ENABLED=false` por defecto. Por tanto, esta integración solo podrá usarse cuando el operador habilite el servicio después de completar verificación de correo, rate limiting distribuido, pruebas de aislamiento y revisión de seguridad. No se activó el registro ni se ejecutaron migraciones.
+
+**Pendiente:** conectar selección de proyecto al chat/workspace, implementar correo de verificación y recuperación, y construir el panel administrativo únicamente después de definir roles globales y endpoints de administración protegidos en servidor. Google/GitHub continúan deshabilitados hasta configurar y probar OAuth real.
