@@ -22,15 +22,20 @@ def _create_workspace_exclusive(root: str | Path, project_id: str) -> Path:
         os.mkdir(project_id, 0o700, dir_fd=root_fd)
         try:
             child_fd = os.open(project_id, flags, dir_fd=root_fd)
-        except OSError:
-            os.rmdir(project_id, dir_fd=root_fd)
+            try:
+                if not stat.S_ISDIR(os.fstat(child_fd).st_mode):
+                    raise NotADirectoryError("workspace is not a directory")
+                os.fchmod(child_fd, 0o700)
+            finally:
+                os.close(child_fd)
+        except Exception:
+            # La ruta se creó exclusivamente en esta llamada; retirar solo si
+            # continúa vacía. Si otro proceso ya añadió datos, no se borra.
+            try:
+                os.rmdir(project_id, dir_fd=root_fd)
+            except OSError:
+                pass
             raise
-        try:
-            if not stat.S_ISDIR(os.fstat(child_fd).st_mode):
-                raise NotADirectoryError("workspace is not a directory")
-            os.fchmod(child_fd, 0o700)
-        finally:
-            os.close(child_fd)
     finally:
         os.close(root_fd)
     return base / project_id
@@ -85,7 +90,11 @@ def create_owned_project_with_workspace(user_id: str, name: str) -> dict:
             workspace_created = True
     except Exception:
         if workspace_created:
-            _remove_empty_workspace(root, project_id)
+            try:
+                _remove_empty_workspace(root, project_id)
+            except OSError:
+                # No enmascarar el error original de DB/commit.
+                pass
         raise
 
     return {"id": project_id, "name": clean_name, "role": "owner"}
