@@ -36,7 +36,7 @@
 
 - Atomic Video: investigación y desarrollo; no hay flujo de generación audiovisual de producción conectado.
 - Atomic Vision y Atomic Reasoning: no se deben presentar como servicios disponibles sin verificación de sus runtimes.
-- Conocimiento: interfaz conectada para indexar texto y cargar PDF/DOCX/TXT/Markdown (máximo 5 MB y 100000 caracteres extraídos), listar fuentes por proyecto, reindexar fuentes administrables y eliminarlas. La carga usa CSRF, valida rol y limita solicitudes; la recuperación RAG del chat queda filtrada por proyecto. No hay OCR: los PDF escaneados sin texto extraíble se rechazan. Las pruebas de contrato y rutas cubren buena parte del flujo, pero falta una prueba de navegador y una validación end-to-end contra servicios de prueba reales.
+- Conocimiento: interfaz conectada para indexar texto y cargar PDF/DOCX/TXT/Markdown (máximo 5 MB y 100000 caracteres extraídos), listar fuentes por proyecto, reindexar fuentes administrables y eliminarlas. La carga usa CSRF, valida rol y limita solicitudes; la recuperación RAG del chat queda filtrada por proyecto. No hay OCR: los PDF escaneados sin texto extraíble se rechazan. Hay pruebas de navegador para los flujos de interfaz (login, carga, refresco y permisos), pero sus endpoints se simulan en el navegador. También hay una prueba de integración que ejecuta la ruta de carga, la extracción TXT real y el ciclo de indexación/listado/recuperación sobre Qdrant local en memoria; embeddings se sustituyen por un vector determinista. Esto valida el cableado del flujo sin afirmar que se haya probado contra Ollama o Qdrant remoto.
 - Atomic Code como módulo independiente: el modelo se utiliza desde Chat IA; faltan controles y experiencia especializada de programación dentro del workspace.
 - Administración: la API disponible es de solo lectura; faltan operaciones administrativas seguras, auditadas y probadas.
 - Agente ejecutor: faltan inicio/reanudación persistente, recuperación de tareas interrumpidas, eventos y aprobación ligada al hash de la acción.
@@ -52,7 +52,7 @@
 
 ## Siguientes bloques
 
-1. Completar CI y pruebas de integración del ciclo de fuentes (carga, indexación, listado, reindexación, recuperación y eliminación); validar en navegador y con servicios de prueba. OCR de PDF escaneados queda como mejora posterior al MVP.
+1. Mantener CI verde y ampliar la integración del ciclo de fuentes con pruebas de servicios de prueba; la carga TXT, extracción, indexación, listado y recuperación ya tienen cobertura integrada sobre Qdrant local. Reindexación y eliminación se prueban directamente contra Qdrant local. OCR de PDF escaneados queda como mejora posterior al MVP.
 2. Completar el runtime persistente del agente y su ciclo de aprobación/reanudación.
 3. Completar la experiencia de Atomic Code y el módulo de conocimiento usando únicamente endpoints reales.
 4. Validar OAuth, correo y configuración de autenticación en un entorno de pruebas.
