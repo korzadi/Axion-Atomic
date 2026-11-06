@@ -12,6 +12,7 @@
 - Validación posterior de sesión mediante `GET /auth/me`.
 - Cierre de sesión mediante `POST /auth/logout`, cookie de sesión HttpOnly y encabezado CSRF leído desde la cookie no HttpOnly.
 - Navegación visual del workspace para chat, modelos, agentes, Atomic Code, Atomic Video, proyectos, conocimiento y administración.
+- Vista Chat IA conectada a `POST /workspace/chat/completions`: carga proyectos del usuario, permite cambiar de proyecto, mantiene el contexto de la conversación en la sesión del navegador y envía cookie de sesión más encabezado CSRF. El backend usa el modelo configurado en ATOMIC CODE 1.1 y recupera contexto RAG limitado al `project_id`.
 - Vista **Proyectos** conectada a `GET /auth/projects` y `POST /auth/projects`; la creación asigna la membresía `owner` en el backend.
 - Desde cada proyecto se puede consultar el historial real de ejecuciones mediante `GET /workspace/agent/runs` y abrir su detalle con `GET /workspace/agent/runs/{run_id}`; el servidor valida membresía y filtra por `project_id`.
 - Desde proyectos con rol `owner`, `admin` o `editor` se pueden consultar las aprobaciones pendientes mediante `GET /workspace/agent/approvals`; solo `owner` y `admin` pueden decidirlas mediante las rutas CSRF protegidas de aprobación.
@@ -36,7 +37,7 @@
 - No existe todavía verificación/envío de correo, recuperación de contraseña, MFA ni rate limiting distribuido.
 - Google y GitHub no están conectados; los botones no simulan autenticación.
 - La vista Administración es únicamente informativa. No existe API de administración global ni RBAC global/superadmin verificado.
-- El historial de ejecuciones y la revisión de aprobaciones sí consultan endpoints autenticados reales. No existe todavía en AXION STUDIO una acción para iniciar/reanudar el runtime de CodingAgent; Chat, modelos, agentes (salvo historial/aprobaciones), Atomic Code, Atomic Video y Conocimiento conservan estados informativos cuando no tienen integración completa.
+- Chat IA ahora realiza inferencia real mediante `/workspace/chat/completions`, pero es una conversación asistida y no el runtime del agente: no ejecuta herramientas ni modifica archivos. El historial de ejecuciones y la revisión de aprobaciones consultan endpoints autenticados reales. No existe todavía en AXION STUDIO una acción para iniciar/reanudar el runtime de CodingAgent; modelos, agentes (salvo historial/aprobaciones), Atomic Code como módulo independiente, Atomic Video y Conocimiento conservan estados informativos cuando no tienen integración completa.
 - Las rutas legacy `/v1/*` siguen protegidas por API key de servicio y no constituyen una API multiusuario para el navegador.
 - El montaje estático depende de que exista el directorio `frontend/`; el Dockerfile ahora lo copia, pero el comportamiento empaquetado aún requiere CI y prueba de imagen en un entorno autorizado.
 
@@ -47,7 +48,7 @@
 3. Completar verificación/envío de correo, recuperación, rate limiting y controles antiabuso antes de habilitar `AUTH_ENABLED`.
 4. Implementar OAuth Google/GitHub solo después de definir callback URLs y configurar secretos fuera del repositorio.
 5. Diseñar roles globales separados de los roles por proyecto; implementar autorización server-side, auditoría y pruebas negativas antes de exponer un panel superadmin.
-6. Conectar selección de proyecto al chat/workspace y conectar cada módulo únicamente a endpoints autenticados existentes, respetando CSRF y membresía.
+6. Completar pruebas de integración del Chat IA (errores del proveedor, cambio de proyecto, CSRF, límites de contexto y aislamiento RAG); después conectar cada módulo únicamente a endpoints autenticados existentes.
 7. Validar la imagen y el despliegue en un entorno de pruebas, con aprobación expresa del operador; no ejecutar esa operación como parte de cambios de código.
 
 ## Estado operativo
