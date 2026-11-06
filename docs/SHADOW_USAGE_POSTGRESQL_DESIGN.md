@@ -29,8 +29,7 @@ La tabla se añadió mediante `migrations/006_inference_usage_events.sql`, sin e
 
 | Campo | Tipo PostgreSQL | Regla |
 |---|---|---|
-| event_id | UUID | PK, generado por la aplicación |
-| request_id | UUID | NOT NULL, UNIQUE; estable durante los reintentos de persistencia |
+| request_id | UUID | PK; generado por la aplicación y único por inferencia |
 | user_id | TEXT | FK a users(id), NOT NULL, ON DELETE RESTRICT |
 | project_id | TEXT | NOT NULL, FK a projects(id), ON DELETE RESTRICT |
 | provider | TEXT | No se almacena en la primera versión; el adaptador configurado es Ollama |
