@@ -44,7 +44,7 @@ class GlobalAdminRbacTests(unittest.TestCase):
   client=TestClient(app)
   app.dependency_overrides[authenticated_admin_user]=lambda:{"id":"ordinary"}
   try:
-   with patch("api.global_admin.global_roles_for_user",return_value=()):
+   with patch("api.admin_routes.global_roles_for_user",return_value=()):
     response=client.get("/admin/access/me")
    self.assertEqual(response.status_code,200)
    self.assertFalse(response.json()["administration_enabled"])

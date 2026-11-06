@@ -21,7 +21,7 @@ def test_all_expected_migrations_are_registered():
         versions = conn.execute(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).scalars().all()
-    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016"]
+    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016", "017"]
 
 
 def test_core_postgresql_tables_exist():
@@ -56,6 +56,8 @@ def test_core_postgresql_tables_exist():
         "payment_orders",
         "payment_transactions",
         "payment_order_events",
+        "global_role_assignments",
+        "global_admin_audit_events",
     }
     assert expected <= tables
 
