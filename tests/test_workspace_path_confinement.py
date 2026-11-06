@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent.workspace import PathViolation, Workspace
+from agent.workspace import AccessDenied, PathViolation, Workspace
 
 
 class WorkspacePathConfinementTests(unittest.TestCase):
@@ -60,6 +60,36 @@ class WorkspacePathConfinementTests(unittest.TestCase):
             self.skipTest("El sistema de archivos no permite crear symlinks")
         with self.assertRaises(PathViolation):
             self.ws.read("linked-dir/secret.txt")
+
+    def test_list_dir_skips_symlinks(self):
+        (self.root / "visible.txt").write_text("visible", encoding="utf-8")
+        link = self.root / "linked-secret"
+        try:
+            link.symlink_to(self.external_file)
+        except (OSError, NotImplementedError):
+            self.skipTest("El sistema de archivos no permite crear symlinks")
+        names = {entry["name"] for entry in self.ws.list_dir(".")}
+        self.assertIn("visible.txt", names)
+        self.assertNotIn("linked-secret", names)
+
+    def test_walk_and_search_do_not_follow_symlinks(self):
+        (self.root / "visible.txt").write_text("needle visible", encoding="utf-8")
+        link = self.root / "linked-secret"
+        try:
+            link.symlink_to(self.external_file)
+        except (OSError, NotImplementedError):
+            self.skipTest("El sistema de archivos no permite crear symlinks")
+        walked = list(self.ws.walk())
+        self.assertIn("visible.txt", walked)
+        self.assertNotIn("linked-secret", walked)
+        results = self.ws.search("secret")
+        self.assertFalse(any(item["path"] == "linked-secret" for item in results))
+
+    def test_partial_line_read_obeys_global_byte_limit(self):
+        (self.root / "large.txt").write_text("0123456789", encoding="utf-8")
+        self.ws.max_read_bytes = 4
+        with self.assertRaises(AccessDenied):
+            self.ws.read("large.txt", start_line=1, end_line=1)
 
 
 if __name__ == "__main__":

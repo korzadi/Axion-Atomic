@@ -52,9 +52,12 @@ El adaptador no autentica ni autoriza usuarios, no determina el directorio de tr
 - Los symlinks se rechazan incluso cuando apuntan dentro del proyecto. Esta política estricta evita depender de la resolución de destinos para operaciones sensibles.
 - La escritura aprobada usa un archivo temporal creado con `O_EXCL | O_NOFOLLOW` dentro del descriptor del directorio y reemplazo relativo al mismo descriptor. La eliminación también es relativa al descriptor.
 - Se ampliaron `tests/test_workspace_path_confinement.py` para cubrir symlinks de archivo, symlinks de directorio padre y symlinks internos.
-- **Riesgo residual:** la enumeración (`walk/list_dir/search`) sigue usando operaciones de ruta convencionales y no es una garantía de aislamiento frente a un proceso local hostil que modifique simultáneamente el árbol. El backend Docker, el workspace por proyecto y el volumen aislado siguen siendo requisitos antes de producción.
-- Las pruebas añadidas aún deben ejecutarse en CI; no se ha probado una carrera concurrente real.
-- La configuración y el despliegue del backend Docker siguen sin verificarse; no se debe interpretar la existencia de `DockerBackend` como prueba de que la API lo usa correctamente.
+- `list_dir` abre el directorio mediante descriptores y enumera entradas con `os.listdir(fd)` y `os.stat(..., follow_symlinks=False)`; omite symlinks y archivos especiales.
+- `walk` recorre directorios abiertos con `O_DIRECTORY | O_NOFOLLOW`; `search` vuelve a abrir cada archivo mediante descriptor y aplica el límite global de lectura.
+- Las lecturas parciales por rango de líneas también respetan `max_read_bytes`, evitando cargar archivos ilimitados en memoria.
+- `apply` vuelve a calcular `before_sha` desde el descriptor del directorio que utilizará para `replace/unlink`, antes de mutar el destino.
+- **Riesgo residual:** un proceso local hostil con permisos de escritura sobre el mismo directorio todavía podría competir en la estrecha ventana entre la última comprobación y `replace/unlink`; las primitivas portables usadas no proporcionan un compare-and-swap de nombre de archivo. El aislamiento de workspace por proyecto, permisos exclusivos y backend Docker siguen siendo requisitos antes de producción.
+- Se añadieron pruebas para enumeración sin symlinks y para el límite de lectura en rangos parciales; el CI de código actualizado debe confirmarlas.
 
 
 ## Revisión del despliegue del sandbox Docker
