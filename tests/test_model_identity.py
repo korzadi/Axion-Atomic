@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import AsyncMock, patch
 
+from fastapi import HTTPException
+
 from api.ollama import InferenceResult
 from api.schemas import ChatRequest, Message
 from api.workspace_routes import workspace_chat
@@ -31,9 +33,9 @@ class ModelIdentityTests(unittest.IsolatedAsyncioTestCase):
             patch("api.workspace_routes.chat_with_usage", new=AsyncMock(return_value=InferenceResult(content="Respuesta", requested_model="atomic-code:test", returned_model="different-model", done=True, prompt_eval_count=1, eval_count=1, total_duration_ns=1, load_duration_ns=None, prompt_eval_duration_ns=None, eval_duration_ns=None, usage_source="ollama_response"))),
             patch("api.workspace_routes.settings.chat_model", "atomic-code:test"),
         ):
-            with self.assertRaises(Exception) as raised:
+            with self.assertRaises(HTTPException) as raised:
                 await workspace_chat(self.request, user={"id": "user-test"})
-        self.assertEqual(getattr(raised.exception, "status_code", None), 503)
+        self.assertEqual(raised.exception.status_code, 503)
 
     async def test_legacy_chat_reports_configured_model(self):
         with (

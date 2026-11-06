@@ -20,7 +20,7 @@ El primer lanzamiento será limitado: un modelo, usuarios individuales y catálo
 - Precios, límites y tarifas de referencia no son tarifas activas ni costes reales medidos.
 - La salud exige PostgreSQL, Ollama y Qdrant; hay que validar dependencias y configuración real antes de desplegar.
 - La identidad del modelo en runtime debe verificarse contra el artefacto servido. No declarar ATOMIC CODE 1.1 si el motor ejecuta otra versión.
-- Se detectó una discrepancia de contrato que debe resolverse antes de integrar cobro: `ChatRequest.model` tiene un valor predeterminado heredado (`qwen-engineering`), mientras que `chat_with_usage` selecciona el modelo desde `settings.chat_model` (`atomic-code:16k-8k`). El campo enviado por el cliente no selecciona el modelo real. La API debe exponer un identificador de catálogo estable y verificarlo contra el modelo configurado, sin permitir selección arbitraria ni etiquetar una inferencia con un modelo distinto.
+- La discrepancia de contrato del modelo quedó corregida en el repositorio: el cliente solo puede solicitar el ID público `atomic-code`; el runtime continúa seleccionando el alias configurado en servidor y la ruta de workspace rechaza la respuesta si `requested_model` o `returned_model` no coinciden con `settings.chat_model`. CI #252 aprobó esquema, catálogo y pruebas de identidad; CI #253 está en curso para la validación de rechazo en runtime. Esto todavía no conecta el cobro.
 
 ## 3. Entregables obligatorios antes de cobrar
 
@@ -36,7 +36,7 @@ El primer lanzamiento será limitado: un modelo, usuarios individuales y catálo
 - Persistir cada petición y medición en PostgreSQL con UUID, usuario, proyecto, modelo, política y estado.
 - Contadores reales de Ollama; valores ausentes permanecen NULL y nunca se cobran como cero ni como estimación silenciosa.
 - Idempotencia por petición y hash de payload.
-- Reservas atómicas, cuotas diarias/mensuales, límites de salida, concurrencia y RPM.
+- Reservas atómicas ANTES de inferir, cuotas diarias/mensuales, límites de salida, concurrencia y RPM. La reserva previa debe tener un límite superior defendible para el prompt completo (system, historial y RAG) y la salida; no usar contadores posteriores como si fueran una reserva previa ni permitir deuda/ saldo negativo.
 - Conciliación idempotente de éxito, fallo, parcial y estado desconocido.
 - Ledger append-only de créditos, asientos compensatorios y reconstrucción/verificación de saldos.
 - Pruebas de concurrencia, doble solicitud, timeout, caída del proceso y recuperación.
@@ -71,7 +71,7 @@ El primer lanzamiento será limitado: un modelo, usuarios individuales y catálo
 1. Cerrar y verificar CI de las migraciones 007/008 y el servicio transaccional de reservas.
 2. Ampliar pruebas de ledger, FEFO, expiración, fallos, estados desconocidos y recuperación.
 3. Completar identidad segura: verificación, recuperación, rate limits y RBAC global.
-4. Integrar medición Shadow Usage con reservas y conciliación sin habilitar cobros prematuramente.
+4. Diseñar y probar un límite superior conservador de tokens antes de integrar medición Shadow Usage con reservas y conciliación; mantener Shadow Mode hasta demostrar que nunca se inicia inferencia sin reserva suficiente.
 5. Implementar órdenes y QvaPay en sandbox.
 6. Completar vistas de usuario y administración sobre APIs probadas.
 7. Ejecutar auditoría de seguridad, privacidad, aislamiento, concurrencia, carga y recuperación.
