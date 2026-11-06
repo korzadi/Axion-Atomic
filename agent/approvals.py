@@ -1,8 +1,6 @@
 import json
-from sqlalchemy import create_engine, text
-from api.config import settings
-
-engine = create_engine(settings.database_url, future=True)
+from sqlalchemy import text
+from api.database import engine
 
 def create_approval(project_id, goal, plan):
     with engine.begin() as conn:
