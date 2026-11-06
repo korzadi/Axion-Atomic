@@ -13,6 +13,7 @@ class KnowledgeUploadRouteTests(unittest.IsolatedAsyncioTestCase):
         denied = HTTPException(status_code=404, detail="Proyecto no encontrado")
         with (
             patch("api.workspace_routes._project_role", side_effect=denied),
+            patch("api.workspace_routes._enforce_workspace_limit"),
             patch("api.workspace_routes.extract_document") as extract,
             patch("api.workspace_routes.ingest_text", new=AsyncMock()) as ingest,
         ):
@@ -26,6 +27,7 @@ class KnowledgeUploadRouteTests(unittest.IsolatedAsyncioTestCase):
         upload = UploadFile(filename="notes.txt", file=io.BytesIO(b"hello"))
         with (
             patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
             patch("api.workspace_routes.extract_document", return_value=("hello", "notes.txt")),
             patch("api.workspace_routes.ingest_text", new=AsyncMock(return_value=1)) as ingest,
         ):
