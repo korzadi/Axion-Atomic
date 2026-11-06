@@ -21,7 +21,7 @@ def test_all_expected_migrations_are_registered():
         versions = conn.execute(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).scalars().all()
-    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008"]
+    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009"]
 
 
 def test_core_postgresql_tables_exist():
@@ -46,6 +46,7 @@ def test_core_postgresql_tables_exist():
         "billing_usage_reservations",
         "billing_reservation_allocations",
         "billing_credit_ledger",
+        "billing_reservation_reconciliations",
     }
     assert expected <= tables
 
@@ -207,4 +208,25 @@ def test_billing_ledger_rejects_update_delete_and_truncate():
     assert {
         "trg_billing_ledger_no_update_delete",
         "trg_billing_ledger_no_truncate",
+    } <= set(triggers)
+
+
+
+def test_billing_reconciliation_audit_is_append_only():
+    inspector = inspect(engine)
+    columns = {item["name"] for item in inspector.get_columns("billing_reservation_reconciliations")}
+    assert {
+        "reservation_id", "user_id", "actor_user_id", "resolution",
+        "idempotency_key", "reason", "created_at",
+    } <= columns
+    with engine.connect() as conn:
+        triggers = conn.execute(text("""
+            SELECT tgname
+            FROM pg_trigger
+            WHERE tgrelid = 'billing_reservation_reconciliations'::regclass
+              AND NOT tgisinternal
+        """)).scalars().all()
+    assert {
+        "trg_billing_reconciliations_no_update_delete",
+        "trg_billing_reconciliations_no_truncate",
     } <= set(triggers)
