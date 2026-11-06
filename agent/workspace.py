@@ -55,6 +55,66 @@ def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _relative_parts(rel: str) -> list[str]:
+    if not isinstance(rel, str) or not rel or "\\0" in rel or "\\\\" in rel:
+        raise PathViolation("Ruta relativa inválida")
+    if rel.startswith("/") or (len(rel) > 1 and rel[1] == ":"):
+        raise PathViolation("Se requieren rutas relativas al proyecto")
+    parts = rel.split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        raise PathViolation("Ruta relativa inválida")
+    return parts
+
+
+def _open_parent(root: Path, rel: str, create: bool = False) -> tuple[int, str]:
+    """Abre cada directorio por descriptor y sin seguir symlinks."""
+    parts = _relative_parts(rel)
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+        raise PathViolation("El sistema no admite apertura segura sin symlinks")
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    fd = os.open(root, flags)
+    try:
+        for part in parts[:-1]:
+            try:
+                next_fd = os.open(part, flags, dir_fd=fd)
+            except FileNotFoundError:
+                if not create:
+                    raise
+                os.mkdir(part, 0o700, dir_fd=fd)
+                next_fd = os.open(part, flags, dir_fd=fd)
+            os.close(fd)
+            fd = next_fd
+        return fd, parts[-1]
+    except Exception:
+        os.close(fd)
+        raise
+
+
+def _read_regular(root: Path, rel: str, limit: int | None = None) -> bytes:
+    parent_fd, leaf = _open_parent(root, rel)
+    try:
+        flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0)
+        fd = os.open(leaf, flags, dir_fd=parent_fd)
+        try:
+            st = os.fstat(fd)
+            if not __import__("stat").S_ISREG(st.st_mode):
+                raise AccessDenied("Solo se permiten archivos regulares")
+            chunks, total = [], 0
+            while True:
+                chunk = os.read(fd, 65536)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if limit is not None and total > limit:
+                    raise AccessDenied(f"Archivo mayor que {limit} bytes")
+                chunks.append(chunk)
+            return b"".join(chunks)
+        finally:
+            os.close(fd)
+    finally:
+        os.close(parent_fd)
+
+
 class Workspace:
     def __init__(self, root: str | Path, project_id: str, max_read_bytes: int = 200_000):
         self.root = Path(root).resolve()
@@ -81,11 +141,10 @@ class Workspace:
     # ---------- lectura
     def read(self, rel: str, start_line: int | None = None, end_line: int | None = None) -> str:
         path = self._check_readable(rel)
-        if not path.is_file():
-            raise FileNotFoundError(rel)
-        if path.stat().st_size > self.max_read_bytes and start_line is None:
-            raise AccessDenied(f"Archivo mayor que {self.max_read_bytes} bytes: usa start_line/end_line")
-        raw = path.read_bytes()
+        try:
+            raw = _read_regular(self.root, rel, self.max_read_bytes if start_line is None else None)
+        except FileNotFoundError:
+            raise FileNotFoundError(rel) from None
         if b"\0" in raw[:8192]:
             raise AccessDenied("Archivo binario")
         text = raw.decode("utf-8", errors="replace")
@@ -178,14 +237,17 @@ class Workspace:
             raise ValueError("Contenido demasiado grande")
         if path.is_dir():
             raise IsADirectoryError(rel)
-        before = path.read_bytes() if path.exists() else None
+        try:
+            before = _read_regular(self.root, rel, MAX_WRITE_BYTES)
+        except FileNotFoundError:
+            before = None
         return self._make("write" if before is not None else "create", self.relpath(path), before, content, why)
 
     def propose_edit(self, rel: str, old: str, new: str, why: str) -> ProposedChange:
         path = self._writable(rel)
         if not path.is_file():
             raise FileNotFoundError(rel)
-        text = path.read_text(encoding="utf-8")
+        text = _read_regular(self.root, rel, MAX_WRITE_BYTES).decode("utf-8")
         if not old:
             raise ValueError("El texto a reemplazar no puede estar vacío")
         n = text.count(old)
@@ -197,28 +259,49 @@ class Workspace:
         path = self._writable(rel)
         if not path.is_file():
             raise FileNotFoundError(rel)
-        return self._make("delete", self.relpath(path), path.read_bytes(), None, why)
+        return self._make("delete", self.relpath(path), _read_regular(self.root, rel, MAX_WRITE_BYTES), None, why)
 
     # ---------- aplicación (requiere aprobación ligada)
     def apply(self, change: ProposedChange, approval: ApprovedAction) -> str:
         if approval.action_hash != change.proposal.action_hash:
             raise ConflictError("La aprobación no corresponde a este cambio")
         path = self._writable(change.rel)
-        current = _sha(path.read_bytes()) if path.exists() else None
+        try:
+            current_bytes = _read_regular(self.root, change.rel, MAX_WRITE_BYTES)
+        except FileNotFoundError:
+            current_bytes = None
+        current = _sha(current_bytes) if current_bytes is not None else None
         if current != change.before_sha:
             raise ConflictError(f"{change.rel} cambió desde que se propuso la modificación")
-        if change.kind == "delete":
-            path.unlink()
-            return f"Eliminado {change.rel}"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".axion-")
+        parent_fd, leaf = _open_parent(self.root, change.rel, create=True)
+        tmp_name = f".axion-{os.getpid()}-{hashlib.sha256(os.urandom(16)).hexdigest()[:16]}"
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(change.new_content or "")
-            if path.exists():
-                os.chmod(tmp, path.stat().st_mode & 0o777)
-            os.replace(tmp, path)
+            try:
+                existing = os.stat(leaf, dir_fd=parent_fd, follow_symlinks=False)
+                if not __import__("stat").S_ISREG(existing.st_mode):
+                    raise AccessDenied("El destino dejó de ser un archivo regular")
+                mode = existing.st_mode & 0o777
+            except FileNotFoundError:
+                mode = 0o600
+            if change.kind == "delete":
+                os.unlink(leaf, dir_fd=parent_fd)
+                return f"Eliminado {change.rel}"
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+            fd = os.open(tmp_name, flags, mode, dir_fd=parent_fd)
+            try:
+                data = (change.new_content or "").encode("utf-8")
+                view = memoryview(data)
+                while view:
+                    written = os.write(fd, view)
+                    view = view[written:]
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            os.replace(tmp_name, leaf, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+            return f"{'Creado' if change.kind == 'create' else 'Modificado'} {change.rel}"
         finally:
-            if os.path.exists(tmp):
-                os.unlink(tmp)
-        return f"{'Creado' if change.kind == 'create' else 'Modificado'} {change.rel}"
+            try:
+                os.unlink(tmp_name, dir_fd=parent_fd)
+            except FileNotFoundError:
+                pass
+            os.close(parent_fd)
