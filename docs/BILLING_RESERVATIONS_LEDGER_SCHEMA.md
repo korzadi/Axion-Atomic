@@ -17,6 +17,12 @@ La migración `007_billing_reservations_ledger.sql` añade el esquema persistent
 
 Las operaciones transaccionales iniciales están en `api/billing_reservations.py`: `reserve_credits` serializa claves idempotentes, bloquea cuotas y lotes con `FOR UPDATE`, aplica cuota diaria → suscripción y solo usa lotes comprados FEFO cuando `purchased_fallback_allowed=True` para el plan, registrando reservas en una transacción. `settle_reservation` liquida hasta el importe reservado y devuelve el exceso; un uso superior pasa a `review`. `mark_reservation_unknown` conserva saldo reservado ante resultados inciertos. La migración 008 bloquea UPDATE, DELETE y TRUNCATE del ledger. Estas operaciones aún no están conectadas a rutas HTTP ni a inferencia. No debe considerarse listo para facturar hasta superar pruebas PostgreSQL de concurrencia, idempotencia, atomicidad y recuperación.
 
+## Medición de inferencia y tarifa
+
+El módulo `api/billing_metering.py` incorpora `ModelRatePolicy` y `calculate_inference_charge` como cálculo puro de uso. Solo acepta una política habilitada mediante booleano literal `True`, versión y nombre no vacíos, modelo solicitado y modelo devuelto por Ollama coincidentes, inferencia final (`done=True`) y contadores de entrada/salida procedentes de `ollama_response`. Los contadores desconocidos, una respuesta no final o una identidad de modelo distinta bloquean la liquidación. La salida `InferenceCharge` conserva la versión y ponderadores aplicados.
+
+Las pruebas están en `tests/test_billing_metering.py`. Este helper todavía no reserva saldo, no invoca inferencia, no escribe en el ledger y no está conectado a `/workspace/chat/completions`. La telemetría Shadow Mode sigue sin ser una fuente de cobro. El modelo ATOMIC CODE no debe facturarse hasta implementar una reserva máxima segura antes de ejecutar, liquidación posterior y recuperación auditada ante resultados inciertos.
+
 ## Contrato obligatorio de implementación
 
 1. Validar identidad y clave idempotente; misma clave con hash distinto debe producir conflicto.
