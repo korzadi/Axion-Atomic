@@ -323,7 +323,7 @@ def mark_reservation_unknown(*, engine: Engine, user_id: str, reservation_id: st
     with engine.begin() as conn:
         result = conn.execute(text("""
             UPDATE billing_usage_reservations SET state='unknown'
-            WHERE id=CAST(:id AS UUID) AND user_id=:user_id AND state='held'
+            WHERE id=CAST(:id AS UUID) AND user_id=:user_id AND state IN ('held', 'unknown')
         """), {"id": reservation_uuid, "user_id": user_id})
         if result.rowcount != 1:
             raise ReservationStateError("La reserva no existe o ya no está en estado held")
