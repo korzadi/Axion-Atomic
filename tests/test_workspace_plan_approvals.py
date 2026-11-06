@@ -8,6 +8,11 @@ from api.workspace_routes import workspace_approvals, workspace_decide_plan_appr
 
 
 class WorkspacePlanApprovalTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        admission = patch("api.workspace_routes._enforce_workspace_limit")
+        admission.start()
+        self.addCleanup(admission.stop)
+
     async def test_list_returns_plan_and_action_approvals_separately(self):
         action_rows = [{"id": "action-1", "state": "pending"}]
         plan_rows = [{"id": 7, "project_id": "project-a", "goal": "Inspect", "status": "pending"}]
