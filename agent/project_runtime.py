@@ -75,7 +75,7 @@ class ProjectAgentRuntime:
         if not isinstance(run_id, str) or not run_id.strip():
             raise ValueError("run_id es obligatorio")
         agent = self._agent(user, project_id)
-        run = agent.restore(run_id, project_id)
+        run = agent.restore(run_id.strip(), project_id)
         if run.status == "awaiting_approval":
             return await agent.resume(run)
         if run.status == "running":
