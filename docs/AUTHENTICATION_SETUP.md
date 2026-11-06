@@ -63,3 +63,7 @@ Los tokens de correo expiran en 30 minutos y son de un solo uso. Las rutas de re
 6. Confirmar CI verde y aplicar migraciones en un entorno controlado antes de cualquier despliegue.
 
 No activar AUTH_ENABLED hasta que estas verificaciones se completen. La aprobación comercial de QvaPay no implica que la integración de pagos esté activa.
+
+## Consentimiento legal
+
+El formulario solicita aceptación explícita de los términos y la política de privacidad antes de crear una cuenta o iniciar OAuth con Google/GitHub. El backend guarda la fecha de aceptación en `users.terms_accepted_at`; para OAuth también guarda la aceptación en el estado de autorización de un solo uso y la verifica en el callback. No se registra consentimiento si el usuario no marca la casilla.
