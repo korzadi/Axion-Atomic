@@ -135,3 +135,16 @@ La inspección estática de `Dockerfile`, `compose.yaml` y `sandbox/backends.py`
 - No se encontraron rutas multiusuario para invitar, retirar o cambiar el rol de miembros. La gestión de membresías sigue siendo una capacidad pendiente, no debe suponerse implementada.
 - Las pruebas actuales verifican el helper de autorización y el alcance de consultas de aprobaciones, pero todavía no constituyen una matriz HTTP completa para todos los roles y endpoints.
 
+
+
+
+## Remediación aplicada: ingestión manual RAG
+
+- `rag.service.ingest_text` valida texto, origen e identificador de proyecto antes de llamar a Qdrant o al modelo de embeddings.
+- El contenido y el campo `source` se inspeccionan con el detector compartido `agent.secrets.find_secrets`. Si se detectan patrones de credenciales, la operación se rechaza con un error genérico que solo informa tipos y números de línea; nunca incluye el valor detectado.
+- Se aplica un límite de 100.000 caracteres al texto y 500 al origen también en la capa de servicio, además de la validación del esquema HTTP.
+- Las rutas de ingestión multiusuario y de servicio convierten la entrada rechazada en HTTP 422. No se persiste ni se genera embedding para ese contenido.
+- `tests/test_rag_manual_ingest.py` añade cuatro pruebas: secreto sintético en texto, secreto en origen, ingestión válida con `project_id` preservado y rechazo de tamaño/proyecto inválidos. Las pruebas verifican que Qdrant y el embedder no se invocan en los dos casos de secreto.
+- CI del commit `a00f19fc2e02a580738b33eb5a5dd46668b85f13` terminó correctamente: compilación y suite de pruebas (`python-tests: success`).
+
+**Límites pendientes:** `find_secrets` es una heurística, no un detector universal; no debe prometerse que detecta todas las credenciales. La API de ingestión todavía usa llamadas síncronas del cliente Qdrant dentro de funciones `async`, por lo que su comportamiento bajo concurrencia/carga necesita una mejora y pruebas específicas. La ruta de recuperación también mantiene manejo degradado que oculta fallos Qdrant devolviendo contexto vacío. No se conectó el runtime ni se cambió infraestructura.
