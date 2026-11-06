@@ -99,5 +99,33 @@ class RunStoreTests(unittest.TestCase):
                                      {"content": fake_key}, "secret-hash", "approval", "no guardar")
 
 
+    def test_same_hash_with_different_payload_is_rejected(self):
+        class Run:
+            id, project_id, goal = "r-conflict", "p1", "Conflicto"
+            status, final, error = "running", None, None
+            messages, pending, steps, parse_failures = [], [], 0, 0
+        self.store.create_run(Run())
+        self.store.record_action("r-conflict", "p1", "write_file", {"path": "a.py"},
+                                 "same-hash", "approval-1", "crear")
+        with self.assertRaises(RunStoreError):
+            self.store.record_action("r-conflict", "p1", "write_file", {"path": "b.py"},
+                                     "same-hash", "approval-2", "crear otro")
+
+    def test_idempotency_key_is_scoped_to_project(self):
+        self.conn.execute("INSERT INTO projects(id) VALUES ('p2')")
+        self.conn.commit()
+        class Run:
+            status, final, error = "running", None, None
+            messages, pending, steps, parse_failures = [], [], 0, 0
+        one, two = Run(), Run()
+        one.id, one.project_id, one.goal = "r-p1", "p1", "acción p1"
+        two.id, two.project_id, two.goal = "r-p2", "p2", "acción p2"
+        self.store.create_run(one)
+        self.store.create_run(two)
+        self.store.record_action("r-p1", "p1", "write_file", {"path": "a.py"}, "same-hash", "a1", "crear")
+        self.store.record_action("r-p2", "p2", "write_file", {"path": "a.py"}, "same-hash", "a2", "crear")
+        self.assertEqual(self.store.get_project_action("p1", "same-hash")["run_id"], "r-p1")
+        self.assertEqual(self.store.get_project_action("p2", "same-hash")["run_id"], "r-p2")
+
 if __name__ == "__main__":
     unittest.main()
