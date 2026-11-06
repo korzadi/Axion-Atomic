@@ -40,9 +40,83 @@ def _project_role(user: dict, project_id: str, roles: tuple[str, ...]):
     return authorize_project(user["id"], project_id, roles)
 
 
+def _list_runs(project_id: str, limit: int):
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT id, goal, status, final, error, steps, created_at, updated_at "
+                 "FROM agent_runs WHERE project_id=:project_id "
+                 "ORDER BY updated_at DESC LIMIT :limit"),
+            {"project_id": project_id, "limit": limit},
+        ).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def _get_run(run_id: str, project_id: str):
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT id, project_id, goal, status, final, error, messages, pending_actions, "
+                 "steps, parse_failures, created_at, updated_at "
+                 "FROM agent_runs WHERE id=:run_id AND project_id=:project_id"),
+            {"run_id": run_id, "project_id": project_id},
+        ).mappings().first()
+    return dict(row) if row is not None else None
+
+
+def _list_approvals(project_id: str):
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT id, tool, what, why, resources, modification, risks, expected, "
+                 "action_hash, state, created_at, expires_at "
+                 "FROM action_approvals WHERE project_id=:project_id AND state='pending' "
+                 "AND expires_at > now() ORDER BY created_at"),
+            {"project_id": project_id},
+        ).mappings().all()
+        plan_rows = conn.execute(
+            text("SELECT id, project_id, goal, plan_json, status, created_at "
+                 "FROM approvals WHERE project_id=:project_id AND status='pending' "
+                 "ORDER BY created_at"),
+            {"project_id": project_id},
+        ).mappings().all()
+    return {"items": [dict(row) for row in rows], "plan_items": [dict(row) for row in plan_rows]}
+
+
+def _decide_plan_approval(approval_id: int, project_id: str, user_id: str, status: str, note: str | None):
+    with engine.begin() as conn:
+        row = conn.execute(
+            text("UPDATE approvals SET status=:status, reviewer=:reviewer, reviewer_note=:note, decided_at=now() "
+                 "WHERE id=:approval_id AND project_id=:project_id AND status='pending' RETURNING id"),
+            {"status": status, "reviewer": user_id, "note": note,
+             "approval_id": approval_id, "project_id": project_id},
+        ).first()
+    return row is not None
+
+
+def _decide_action_approval(approval_id: str, project_id: str, user_id: str, state: str, note: str | None):
+    with engine.begin() as conn:
+        row = conn.execute(
+            text("UPDATE action_approvals SET state=:state, reviewer=:reviewer, note=:note, decided_at=now() "
+                 "WHERE id=:approval_id AND project_id=:project_id AND state='pending' "
+                 "AND expires_at > now() RETURNING id, action_hash"),
+            {"state": state, "reviewer": user_id, "note": note,
+             "approval_id": str(approval_id), "project_id": project_id},
+        ).first()
+        if row is None:
+            return False
+        changed = conn.execute(
+            text("UPDATE agent_run_actions SET state=:state, updated_at=now() "
+                 "WHERE project_id=:project_id AND proposal_id=:proposal_id AND action_hash=:action_hash "
+                 "AND state='pending'"),
+            {"state": state, "project_id": project_id, "proposal_id": str(approval_id),
+             "action_hash": row.action_hash},
+        ).rowcount
+        if changed != 1:
+            raise RuntimeError("La aprobación no está vinculada a una acción pendiente")
+    return True
+
+
 @router.post("/chat/completions")
 async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
-    _project_role(user, req.project_id, ("owner", "admin", "editor", "viewer"))
+    await run_in_threadpool(_project_role, user, req.project_id, ("owner", "admin", "editor", "viewer"))
     if req.stream:
         raise HTTPException(status_code=400, detail="Streaming no está implementado")
     request_id = str(uuid.uuid4())
@@ -116,7 +190,7 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
 
 @router.post("/knowledge/ingest")
 async def workspace_ingest(req: IngestRequest, user=Depends(_csrf_user)):
-    _project_role(user, req.project_id, ("owner", "admin", "editor"))
+    await run_in_threadpool(_project_role, user, req.project_id, ("owner", "admin", "editor"))
     try:
         count = await ingest_text(req.text, req.source, req.project_id)
     except SensitiveContentError as exc:
@@ -130,7 +204,7 @@ async def workspace_ingest(req: IngestRequest, user=Depends(_csrf_user)):
 async def workspace_task(req: TaskRequest, user=Depends(_csrf_user)):
     _project_role(user, req.project_id, ("owner", "admin", "editor"))
     plan = await create_plan(req.goal)
-    approval_id = create_approval(req.project_id, req.goal, plan)
+    approval_id = await run_in_threadpool(create_approval, req.project_id, req.goal, plan)
     return {"status": "awaiting_approval", "approval_id": approval_id, "project_id": req.project_id, "plan": plan}
 
 
@@ -141,17 +215,8 @@ async def workspace_runs(
     user=Depends(_enabled_user),
 ):
     """Lista ejecuciones persistidas exclusivamente del proyecto autorizado."""
-    _project_role(user, project_id, ("owner", "admin", "editor", "viewer"))
-    with engine.connect() as conn:
-        rows = conn.execute(
-            text(
-                "SELECT id, goal, status, final, error, steps, created_at, updated_at "
-                "FROM agent_runs WHERE project_id=:project_id "
-                "ORDER BY updated_at DESC LIMIT :limit"
-            ),
-            {"project_id": project_id, "limit": limit},
-        ).mappings().all()
-    return {"items": [dict(row) for row in rows]}
+    await run_in_threadpool(_project_role, user, project_id, ("owner", "admin", "editor", "viewer"))
+    return {"items": await run_in_threadpool(_list_runs, project_id, limit)}
 
 
 @router.get("/agent/runs/{run_id}")
@@ -162,18 +227,9 @@ async def workspace_run_detail(
 ):
     """Devuelve el snapshot de una ejecución solo dentro del proyecto autorizado."""
     _project_role(user, project_id, ("owner", "admin", "editor", "viewer"))
-    with engine.connect() as conn:
-        row = conn.execute(
-            text(
-                "SELECT id, project_id, goal, status, final, error, messages, pending_actions, "
-                "steps, parse_failures, created_at, updated_at "
-                "FROM agent_runs WHERE id=:run_id AND project_id=:project_id"
-            ),
-            {"run_id": run_id, "project_id": project_id},
-        ).mappings().first()
-    if row is None:
+    result = await run_in_threadpool(_get_run, run_id, project_id)
+    if result is None:
         raise HTTPException(status_code=404, detail="Ejecución inexistente o fuera del proyecto autorizado")
-    result = dict(row)
     for field in ("messages", "pending_actions"):
         try:
             result[field] = json.loads(result[field])
@@ -187,30 +243,8 @@ async def workspace_approvals(
     project_id: str = Query(min_length=1, max_length=200),
     user=Depends(_enabled_user),
 ):
-    _project_role(user, project_id, ("owner", "admin", "editor"))
-    with engine.connect() as conn:
-        rows = conn.execute(
-            text(
-                "SELECT id, tool, what, why, resources, modification, risks, expected, "
-                "action_hash, state, created_at, expires_at "
-                "FROM action_approvals WHERE project_id=:project_id AND state='pending' "
-                "AND expires_at > now() ORDER BY created_at"
-            ),
-            {"project_id": project_id},
-        ).mappings().all()
-    with engine.connect() as conn:
-        plan_rows = conn.execute(
-            text(
-                "SELECT id, project_id, goal, plan_json, status, created_at "
-                "FROM approvals WHERE project_id=:project_id AND status='pending' "
-                "ORDER BY created_at"
-            ),
-            {"project_id": project_id},
-        ).mappings().all()
-    return {
-        "items": [dict(row) for row in rows],
-        "plan_items": [dict(row) for row in plan_rows],
-    }
+    await run_in_threadpool(_project_role, user, project_id, ("owner", "admin", "editor"))
+    return await run_in_threadpool(_list_approvals, project_id)
 
 
 @router.post("/agent/plan-approvals/{approval_id}")
@@ -221,23 +255,10 @@ async def workspace_decide_plan_approval(
     user=Depends(_csrf_user),
 ):
     """Decide una aprobación de plan legado; no ejecuta herramientas."""
-    _project_role(user, project_id, ("owner", "admin"))
+    await run_in_threadpool(_project_role, user, project_id, ("owner", "admin"))
     status = "approved" if req.approved else "rejected"
-    with engine.begin() as conn:
-        row = conn.execute(
-            text(
-                "UPDATE approvals SET status=:status, reviewer=:reviewer, reviewer_note=:note, decided_at=now() "
-                "WHERE id=:approval_id AND project_id=:project_id AND status='pending' RETURNING id"
-            ),
-            {
-                "status": status,
-                "reviewer": user["id"],
-                "note": req.note,
-                "approval_id": approval_id,
-                "project_id": project_id,
-            },
-        ).first()
-    if row is None:
+    changed = await run_in_threadpool(_decide_plan_approval, approval_id, project_id, user["id"], status, req.note)
+    if not changed:
         raise HTTPException(status_code=404, detail="Aprobación de plan inexistente o ya resuelta")
     return {"id": approval_id, "project_id": project_id, "status": status, "execution": "not_executed"}
 
@@ -251,38 +272,12 @@ async def workspace_approve(
 ):
     _project_role(user, project_id, ("owner", "admin"))
     new_state = "approved" if req.approved else "rejected"
-    with engine.begin() as conn:
-        row = conn.execute(
-            text(
-                "UPDATE action_approvals SET state=:state, reviewer=:reviewer, note=:note, decided_at=now() "
-                "WHERE id=:approval_id AND project_id=:project_id AND state='pending' "
-                "AND expires_at > now() RETURNING id, action_hash"
-            ),
-            {
-                "state": new_state,
-                "reviewer": user["id"],
-                "note": req.note,
-                "approval_id": str(approval_id),
-                "project_id": project_id,
-            },
-        ).first()
-        if row is None:
-            raise HTTPException(status_code=404, detail="Aprobación inexistente, expirada o ya resuelta")
-        changed = conn.execute(
-            text(
-                "UPDATE agent_run_actions SET state=:state, updated_at=now() "
-                "WHERE project_id=:project_id AND proposal_id=:proposal_id AND action_hash=:action_hash "
-                "AND state='pending'"
-            ),
-            {
-                "state": new_state,
-                "project_id": project_id,
-                "proposal_id": str(approval_id),
-                "action_hash": row.action_hash,
-            },
-        ).rowcount
-        if changed != 1:
-            raise HTTPException(status_code=409, detail="La aprobación no está vinculada a una acción pendiente")
+    try:
+        changed = await run_in_threadpool(_decide_action_approval, approval_id, project_id, user["id"], new_state, req.note)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    if not changed:
+        raise HTTPException(status_code=404, detail="Aprobación inexistente, expirada o ya resuelta")
     return {
         "id": str(approval_id),
         "project_id": project_id,
