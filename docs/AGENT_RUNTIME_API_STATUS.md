@@ -95,3 +95,13 @@ La inspección estática de `Dockerfile`, `compose.yaml` y `sandbox/backends.py`
 - Cualquier solicitud de ejecución Docker con `network=True` falla cerrada antes de invocar el daemon.
 - Se añadieron pruebas para rechazar tanto la ejecución con red como los intentos de configurar `allow_egress` o una red egress.
 - Esto no demuestra aislamiento de Docker en tiempo real: el daemon, los montajes y los límites siguen pendientes de integración en un entorno desechable.
+
+
+## Auditoría de límites entre API de servicio y API multiusuario
+
+- Las rutas heredadas `/v1/chat/completions`, `/v1/knowledge/ingest`, `/v1/agent/tasks` y `/v1/agent/approvals` se protegen con una única API key de servicio. Esa clave autentica al servicio, pero no identifica a un usuario ni comprueba una membresía de proyecto.
+- Por ello, esas rutas no deben exponerse directamente a clientes finales ni a Internet como sustituto de las rutas `/workspace/*`. La API key debe permanecer en un backend de confianza y los proyectos deben tratarse como un límite de seguridad.
+- La API heredada usa el identificador `service-api` como revisor en decisiones de aprobación; no equivale a una aprobación atribuible a una persona. No debe interpretarse como auditoría humana individual.
+- Las rutas `/workspace/*` sí exigen sesión, CSRF en operaciones mutables y comprobación de membresía/rol del proyecto. Aun así, autenticación sigue desactivada por defecto y no se debe habilitar para producción sin verificación de correo, rate limiting distribuido, MFA y recuperación segura.
+- La ruta `/health` consulta y revela el estado general de PostgreSQL, Ollama y Qdrant. Antes de publicar la API, limitar su exposición o devolver únicamente un estado agregado sin detalles de dependencias.
+- No se cambió el comportamiento de estas rutas en esta fase. El objetivo de esta anotación es dejar explícito el límite de confianza y evitar que una API key global se confunda con autorización multiusuario.
