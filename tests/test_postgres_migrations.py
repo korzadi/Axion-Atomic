@@ -21,7 +21,7 @@ def test_all_expected_migrations_are_registered():
         versions = conn.execute(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).scalars().all()
-    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013"]
+    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014"]
 
 
 def test_core_postgresql_tables_exist():
@@ -51,6 +51,8 @@ def test_core_postgresql_tables_exist():
         "email_verification_tokens",
         "password_reset_tokens",
         "auth_rate_limit_buckets",
+        "oauth_identities",
+        "oauth_login_states",
     }
     assert expected <= tables
 
