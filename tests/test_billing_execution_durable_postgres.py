@@ -266,12 +266,18 @@ def test_recovery_decrypt_failure_sets_backoff_and_is_not_retried_immediately():
         with pytest.raises(RuntimeError, match="settlement outage"):
             _execute(user_id, project_id, request_id, inference)
 
+    with engine.connect() as conn:
+        target_reservation_id = conn.execute(text("""
+            SELECT id FROM billing_usage_reservations WHERE user_id=:user_id
+        """), {"user_id": user_id}).scalar_one()
+
     class BrokenCipher:
         def decrypt(self, *args, **kwargs):
             raise ValueError("invalid test ciphertext")
 
     batch = recover_completed_billing_executions(
         engine=engine, cipher=BrokenCipher(), limit=10,
+        reservation_id=str(target_reservation_id),
     )
     assert batch.examined == 1
     assert batch.failed == 1
@@ -289,6 +295,7 @@ def test_recovery_decrypt_failure_sets_backoff_and_is_not_retried_immediately():
 
     repeated = recover_completed_billing_executions(
         engine=engine, cipher=BrokenCipher(), limit=10,
+        reservation_id=str(target_reservation_id),
     )
     assert repeated.examined == 0
     assert repeated.failed == 0
