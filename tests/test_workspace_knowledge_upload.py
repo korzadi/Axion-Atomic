@@ -149,7 +149,7 @@ class KnowledgeUploadRouteTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(HTTPException) as caught:
                 await workspace_list_knowledge_sources("project-a", 100, {"id": "viewer"})
         self.assertEqual(caught.exception.status_code, 503)
-        self.assertEqual(caught.exception.detail, "El almacén de conocimiento no está disponible")
+        self.assertEqual(caught.exception.detail, "safe unavailable")
 
     async def test_source_deletion_maps_store_outage_to_503(self):
         from rag.service import KnowledgeStoreUnavailable
@@ -169,7 +169,7 @@ class KnowledgeUploadRouteTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("api.workspace_routes._project_role"),
             patch("api.workspace_routes._enforce_workspace_limit"),
-            patch("api.workspace_routes.delete_source", new=AsyncMock()) as deletion,
+            patch("api.workspace_routes.delete_source", new=AsyncMock(side_effect=ValueError("source_id debe ser un UUID válido"))) as deletion,
         ):
             with self.assertRaises(HTTPException) as caught:
                 await workspace_delete_knowledge_source("not-a-uuid", "project-a", {"id": "editor"})
