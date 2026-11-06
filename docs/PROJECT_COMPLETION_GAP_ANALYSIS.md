@@ -132,3 +132,10 @@ Esta sección registra una inspección adicional de `api/workspace_routes.py`, `
 - La rama `main` tiene como commits más recientes `89c3922` (documentación) y `f5f1927` (chat de AXION STUDIO).
 - La consulta de estados de commit no devolvió status checks para ninguno de esos dos commits. Esto no demuestra éxito ni fallo de GitHub Actions; el resultado debe quedar como **CI no confirmado** hasta consultar los runs y sus jobs.
 - No se ejecutaron pruebas locales ni se construyó una imagen Docker durante esta revisión.
+
+
+### Hallazgo adicional: identidad del modelo y API heredada
+
+- `api/config.py` declara como modelo predeterminado `atomic-code:16k-8k` y `num_ctx=16384`; sin embargo, la respuesta de `/workspace/chat/completions` etiqueta el resultado como `ATOMIC CODE 1.1`. Esa etiqueta es texto fijo y no demuestra qué modelo respondió. Antes de anunciar compatibilidad con Atomic Code 1.1, el backend debe exponer el identificador configurado/real y validarlo sin alterar Ollama.
+- La API heredada `/v1/*` está protegida además por `legacy_api_enabled=false` por defecto y exige una clave fuerte con comparación de tiempo constante cuando se habilita. Mantenerla cerrada para el navegador multiusuario; la clave compartida no representa identidad ni membresía de proyecto.
+- `agent/runtime.py` sí contiene una composición de `CodingAgent` con `RunStore` y `DbApprovalGate` persistentes. Esto confirma que existe una fábrica del runtime, pero no la integración HTTP: la propia fábrica declara que no autentica, no autoriza, no crea workspaces ni activa endpoints. La capa de rutas debe construir herramientas confinadas después de autorizar al usuario y proyecto.
