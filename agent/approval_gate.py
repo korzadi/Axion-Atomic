@@ -1,6 +1,5 @@
 """Aprobaciones ligadas a una acción concreta. Una aprobación se canjea UNA vez y solo si el hash
-de la acción coincide con el aprobado. Implementación en memoria (un proceso); la versión
-persistente en PostgreSQL usa la misma interfaz y se construye en la Fase 6."""
+de la acción coincide con el aprobado. Implementación en memoria (un proceso); DbApprovalGate proporciona la variante persistente en PostgreSQL."""
 import hashlib
 import itertools
 import json
