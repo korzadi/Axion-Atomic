@@ -21,7 +21,7 @@ def test_all_expected_migrations_are_registered():
         versions = conn.execute(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).scalars().all()
-    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016", "017", "018"]
+    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016", "017", "018", "019"]
 
 
 def test_core_postgresql_tables_exist():
@@ -274,3 +274,5 @@ def test_billing_execution_results_are_ciphertext_only_and_recoverable():
         item["name"] for item in inspector.get_indexes("billing_inference_executions")
     }
     assert "idx_billing_execution_recovery_due" in recovery_indexes
+    assert "recovery_requires_review" in recovery_columns
+    assert "idx_billing_execution_recovery_review" in recovery_indexes
