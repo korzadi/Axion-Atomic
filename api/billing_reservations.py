@@ -365,13 +365,15 @@ def reconcile_confirmed_no_execution(
             {"key": f"axion-reconcile:{idempotency_key}"},
         )
         prior = conn.execute(text("""
-            SELECT reservation_id, user_id, resolution
+            SELECT reservation_id, user_id, actor_user_id, resolution, reason
             FROM billing_reservation_reconciliations
             WHERE idempotency_key=:key
         """), {"key": idempotency_key}).mappings().first()
         if prior:
             if (str(prior["reservation_id"]) != reservation_uuid
                     or prior["user_id"] != user_id
+                    or prior["actor_user_id"] != actor_user_id
+                    or prior["reason"] != reason.strip()
                     or prior["resolution"] != "confirmed_no_execution"):
                 raise IdempotencyConflict("La clave de conciliación ya pertenece a otra decisión")
             return ReconciliationResult(reservation_uuid, "released", True)
@@ -446,9 +448,11 @@ def reconcile_confirmed_no_execution(
                 "reason": "Liberación conciliada: ejecución confirmada como no realizada",
                 "actor_user_id": actor_user_id,
             })
-        conn.execute(text("""
+        state_update = conn.execute(text("""
             UPDATE billing_usage_reservations SET state='released'
-            WHERE id=CAST(:id AS UUID)
+            WHERE id=CAST(:id AS UUID) AND state IN ('unknown', 'review')
         """), {"id": reservation_uuid})
+        if state_update.rowcount != 1:
+            raise ReservationStateError("El estado de la reserva cambió durante la conciliación")
 
     return ReconciliationResult(reservation_uuid, "released")
