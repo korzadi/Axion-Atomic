@@ -310,4 +310,16 @@ La API heredada `/v1` utiliza una clave compartida y no puede atribuir consumo a
 
 Se especificó el contrato `InferenceResult` y la primera fase de código en modo **shadow**: capturar identidad, proyecto, modelo, contadores y duración sin bloquear solicitudes, sin descontar créditos, sin crear saldo y sin cobrar. El fallo de telemetría no debe hacer fallar una inferencia que ya fue exitosa.
 
-**Estado:** contrato y criterios documentados; todavía no hay implementación de medición, migración ni pruebas ejecutadas.
+**Estado actualizado:** el contrato tipado y la medición inicial en Shadow Mode ya están publicados en `api/ollama.py` y `api/workspace_routes.py`; las pruebas focalizadas están añadidas en `tests/test_ollama_usage.py` y `tests/test_workspace_role_matrix_http.py`, pero su ejecución y el CI siguen pendientes de verificación. No existe todavía persistencia PostgreSQL, facturación, ledger, reservas, cuotas activas ni cobros.
+
+## 16. Actualización de Shadow Mode y pruebas pendientes (6 de noviembre de 2026)
+
+La implementación inicial de Shadow Mode se publicó en `main`:
+- `api/ollama.py`: `InferenceResult`, validación de contadores y `chat_with_usage()`; `chat()` conserva compatibilidad devolviendo texto.
+- `api/workspace_routes.py`: la ruta autenticada usa el resultado tipado y emite un evento JSON de observación sin incluir prompts ni respuestas.
+- `tests/test_ollama_usage.py`: pruebas de parsing, petición HTTP no streaming, propagación de timeout y compatibilidad del wrapper.
+- `tests/test_workspace_role_matrix_http.py`: pruebas HTTP actualizadas para el nuevo adaptador, comprobación de respuesta y ausencia del texto del usuario en el evento de log.
+
+**Verificación:** los archivos de prueba están publicados, pero no se ha confirmado todavía una ejecución satisfactoria de pytest ni de GitHub Actions. La actualización de pruebas evita depender de `pytest-asyncio`, que no figura entre las dependencias fijadas del proyecto.
+
+**Siguiente paso:** confirmar CI; después añadir pruebas de fallo de telemetría y persistencia append-only en PostgreSQL de prueba. No activar reservas, cuotas ni cobros.
