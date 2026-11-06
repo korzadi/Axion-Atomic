@@ -56,6 +56,22 @@ class SnapshotTests(Base):
             with Snapshot(self.ws, max_bytes=10, base_dir=self.sbx_base.name): pass
         self.assertEqual(self.leftover(), [])
 
+    def test_snapshot_open_rejects_symlink_files_and_parent_directories(self):
+        outside = self.root.parent / (self.root.name + "-outside")
+        outside.mkdir()
+        self.addCleanup(lambda: __import__("shutil").rmtree(outside, ignore_errors=True))
+        (outside / "secret.txt").write_text("outside", encoding="utf-8")
+        (self.root / "file-link").symlink_to(outside / "secret.txt")
+        (self.root / "dir-link").symlink_to(outside, target_is_directory=True)
+        root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            with self.assertRaises(OSError):
+                Snapshot._open_regular_file(root_fd, "file-link")
+            with self.assertRaises(OSError):
+                Snapshot._open_regular_file(root_fd, "dir-link/secret.txt")
+        finally:
+            os.close(root_fd)
+
 
 class ExecTests(Base):
     async def test_runs_and_never_modifies_project_or_leaves_files(self):
