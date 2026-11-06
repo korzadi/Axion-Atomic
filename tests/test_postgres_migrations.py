@@ -62,6 +62,8 @@ def test_identity_constraints_and_relationships_exist():
 
     user_columns = {column["name"] for column in inspector.get_columns("users")}
     assert {"id", "email_normalized", "password_hash", "status", "terms_accepted_at"} <= user_columns
+    oauth_state_columns = {column["name"] for column in inspector.get_columns("oauth_login_states")}
+    assert {"state_hash", "provider", "nonce", "terms_accepted", "consumed_at"} <= oauth_state_columns
 
     user_uniques = inspector.get_unique_constraints("users")
     assert any("email_normalized" in item.get("column_names", []) for item in user_uniques)
