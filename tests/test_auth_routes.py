@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 from fastapi import HTTPException
 
-from api.auth_routes import _require_auth_feature
+from api.auth_routes import _require_auth_feature, _authenticated_user
 from api.schemas import LoginRequest, RegisterRequest
 
 
@@ -12,6 +12,13 @@ class AuthRouteGateTests(unittest.TestCase):
             with self.assertRaises(HTTPException) as raised:
                 _require_auth_feature()
             self.assertEqual(raised.exception.status_code, 503)
+
+    def test_authenticated_route_checks_global_gate_before_session(self):
+        with patch("api.auth_routes.settings.auth_enabled", False), patch("api.auth_routes.current_user") as current:
+            with self.assertRaises(HTTPException) as raised:
+                _authenticated_user()
+        self.assertEqual(raised.exception.status_code, 503)
+        current.assert_not_called()
 
     def test_auth_routes_can_pass_gate_only_when_explicitly_enabled(self):
         with patch("api.auth_routes.settings.auth_enabled", True):

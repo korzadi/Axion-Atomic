@@ -15,10 +15,11 @@ from agent.approvals import create_approval
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 
 
-def _enabled_user(user=Depends(current_user)):
+def _enabled_user(axion_session: str | None = Cookie(default=None, alias=COOKIE_NAME)):
+    # La puerta de configuración precede a la validación de sesión.
     if not settings.auth_enabled:
         raise HTTPException(status_code=503, detail="La autenticación web aún no está habilitada")
-    return user
+    return current_user(axion_session)
 
 
 def _csrf_user(

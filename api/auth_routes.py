@@ -19,9 +19,11 @@ def _require_auth_feature():
         raise HTTPException(status_code=503, detail="La autenticación web aún no está habilitada")
 
 
-def _authenticated_user(user=Depends(current_user)):
+def _authenticated_user(axion_session: str | None = Cookie(default=None, alias=COOKIE_NAME)):
+    # Comprobar primero el interruptor global: no revelar un 401 de sesión
+    # cuando el servicio completo de autenticación está deshabilitado.
     _require_auth_feature()
-    return user
+    return current_user(axion_session)
 
 
 def _csrf_guard(
