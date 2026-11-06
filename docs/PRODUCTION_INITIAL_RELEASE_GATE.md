@@ -20,6 +20,7 @@ El primer lanzamiento será limitado: un modelo, usuarios individuales y catálo
 - Precios, límites y tarifas de referencia no son tarifas activas ni costes reales medidos.
 - La salud exige PostgreSQL, Ollama y Qdrant; hay que validar dependencias y configuración real antes de desplegar.
 - La identidad del modelo en runtime debe verificarse contra el artefacto servido. No declarar ATOMIC CODE 1.1 si el motor ejecuta otra versión.
+- Se detectó una discrepancia de contrato que debe resolverse antes de integrar cobro: `ChatRequest.model` tiene un valor predeterminado heredado (`qwen-engineering`), mientras que `chat_with_usage` selecciona el modelo desde `settings.chat_model` (`atomic-code:16k-8k`). El campo enviado por el cliente no selecciona el modelo real. La API debe exponer un identificador de catálogo estable y verificarlo contra el modelo configurado, sin permitir selección arbitraria ni etiquetar una inferencia con un modelo distinto.
 
 ## 3. Entregables obligatorios antes de cobrar
 
