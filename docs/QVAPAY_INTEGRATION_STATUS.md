@@ -3,44 +3,67 @@
 ## Estado comercial y técnico
 
 - Aprobación comercial comunicada por el propietario: `APPROVED`.
-- Integración técnica: en desarrollo; no declarar `PRODUCTION_READY` hasta completar pruebas verificables con el simulador oficial y revisión del flujo de acreditación.
-- Credenciales: no están disponibles en el repositorio y no deben solicitarse ni publicarse en commits, incidencias o logs.
-- No se han realizado cobros reales.
+- Método elegido por el propietario para recibir pagos: Lightning Address de QvaPay (`axionatomic@qvpay.me`), con recepción en USD/conversión automática según la pantalla compartida.
+- Integración técnica: bloqueada hasta confirmar el contrato servidor-a-servidor específico de Lightning Address.
+- No se han realizado cobros reales y la acreditación automática permanece deshabilitada.
+- Credenciales, códigos de acceso y secretos no deben solicitarse ni publicarse en Git, incidencias o logs.
 
-## Contrato oficial consultado
+## Distinción obligatoria entre dos productos/flows
 
-- Base API: `https://api.qvapay.com`.
-- Crear factura: `POST /v2/create_invoice`.
-- Autenticación servidor-servidor: headers `app-id` y `app-secret`.
-- Campos documentados: `amount`, `description`, `remote_id`, `webhook`, `products`, `expire_at`.
-- Verificación servidor: `POST /v2/transactions/:uuid` con las credenciales de la App.
-- Webhook: cuerpo crudo JSON, header `x-qvapay-signature` con `sha256=<hex>` HMAC-SHA256 usando el `app-secret`, y `x-qvapay-timestamp`.
-- La transacción debe conciliarse en backend; una redirección del navegador no acredita un pago.
-- `transaction_uuid` es la clave de idempotencia recomendada para procesar notificaciones repetidas.
+La documentación pública consultada de QvaPay describe un flujo Merchant API de facturas:
 
-## Reglas de implementación
+- Base API documentada: `https://api.qvapay.com`.
+- Crear factura Merchant: `POST /v2/create_invoice`, con credenciales de aplicación y campos como `amount`, `description`, `remote_id`, `webhook` y `expire_at`.
+- Consultar transacción Merchant: `POST /v2/transactions/:uuid`.
+- Para el flujo de mini-apps se documenta una firma HMAC-SHA256 sobre el cuerpo crudo mediante `x-qvapay-signature`, además de timestamp.
 
-1. Crear una factura por orden interna y persistir la relación entre `remote_id` y `transaction_uuid`.
-2. Validar firma del webhook sobre los bytes originales antes de parsear el JSON.
-3. Validar la antigüedad del timestamp y mantener registro idempotente por `transaction_uuid`.
-4. Consultar la transacción en QvaPay desde el backend y comprobar UUID, `remote_id`, importe y estado `paid` contra la orden local.
-5. Aplicar el crédito o plan en la misma transacción de base de datos que registra el pago y su evento procesado.
-6. No acreditar a partir de datos del frontend ni únicamente de un webhook no conciliado.
-7. No emitir reembolsos hasta confirmar el endpoint y su semántica en la documentación vigente.
-8. No ejecutar pruebas con dinero real; utilizar el simulador o modo de prueba oficial.
+**Ese contrato Merchant/mini-app no demuestra que el Lightning Address de la cuenta tenga las mismas funciones.** No se debe sustituir el método Lightning elegido por facturas Merchant, ni asumir que acepta `remote_id`, webhook, HMAC, invoice por orden o consulta API.
 
-## Pendiente para producción
+## Evidencia del método Lightning
 
-- Implementar Payment Manager y el adaptador QvaPay.
-- Definir y migrar tablas de órdenes, eventos y ledger después de inspeccionar el esquema comercial existente.
-- Implementar endpoint webhook con cuerpo crudo y verificación HMAC.
-- Implementar conciliación backend y acreditación idempotente.
-- Añadir pruebas unitarias y pruebas oficiales en modo de prueba.
-- Configurar App ID, App Secret y URL pública de webhook directamente en el gestor de secretos del despliegue; nunca en Git.
+La captura compartida por el propietario mostraba:
 
-## Fuente oficial
+- Dirección Lightning: `axionatomic@qvpay.me`.
+- Recepción en USD con conversión automática.
+- Comisión de conversión mostrada en esa pantalla: 0,5 %.
+- Límites visibles en ese momento: USD 0,10–500 por pago y disponibilidad diaria de USD 1.000.
+
+Son datos de una pantalla/cuenta en ese momento, no tarifas ni límites contractuales permanentes. La comisión de conversión tampoco debe confundirse con una comisión de AXION ATOMIC.
+
+## Confirmaciones necesarias de QvaPay para Lightning Address
+
+Antes de implementar o activar el adaptador, obtener confirmación oficial por escrito de:
+
+1. Si cada orden puede generar una invoice Lightning única o incluir una referencia externa.
+2. Si existe webhook/notificación de pagos Lightning entrantes y su autenticación/firma exacta.
+3. Si existe endpoint servidor-a-servidor para consultar una transacción Lightning y obtener identificador estable, importe, moneda, destinatario y estado final.
+4. Cómo correlacionar inequívocamente cada pago con una orden de AXION ATOMIC.
+5. Cómo se representan pagos parciales, pagos repetidos, tardíos, expirados, reembolsados o revertidos.
+6. Si USD es el importe de liquidación verificable o solo una preferencia de conversión de la cuenta.
+7. Límites y comisiones vigentes para la cuenta comercial al momento de operar.
+
+No inventar endpoints, cabeceras, payloads, firmas, eventos ni campos. No aceptar capturas de pantalla como prueba de pago.
+
+## Diseño interno permitido mientras se confirma el contrato
+
+Se puede desarrollar el Payment Manager independiente del proveedor: órdenes internas persistidas, estados, vencimientos, historial append-only, idempotencia, conciliación manual/revisión y acreditación transaccional preparada. El adaptador de QvaPay debe permanecer desconectado hasta que el contrato específico de Lightning esté confirmado y probado.
+
+La futura acreditación debe validar desde backend la identidad de la transacción, orden, destinatario, importe, moneda y estado final; registrar evento y movimiento económico en una transacción atómica; y procesar duplicados sin volver a acreditar. Los reembolsos/reversiones deben ser movimientos compensatorios, nunca borrado del historial.
+
+## Estado de activación
+
+- Aprobación comercial: confirmada por el propietario.
+- Método elegido: Lightning Address QvaPay.
+- Merchant API: documentada públicamente, pero es un flujo distinto y no se considera integración del método elegido.
+- Contrato técnico de Lightning Address: pendiente de confirmación oficial.
+- Payment Manager: pendiente de implementación.
+- Webhook/consulta Lightning: no implementados ni probados.
+- Acreditación automática: deshabilitada.
+- Cobros reales: deshabilitados.
+
+## Fuentes oficiales consultadas
 
 - Introducción: https://www.qvapay.com/docs
-- Crear factura: https://www.qvapay.com/docs/merchants/create-invoice
-- Detalle de transacción: https://www.qvapay.com/docs/merchants/transaction-detail
-- Flujo y firma de webhook: https://www.qvapay.com/docs/miniapps/payments
+- Crear factura Merchant: https://www.qvapay.com/docs/merchants/create-invoice
+- Detalle de transacción Merchant: https://www.qvapay.com/docs/merchants/transaction-detail
+- Firma de pagos mini-app: https://www.qvapay.com/docs/miniapps/payments
