@@ -20,14 +20,10 @@ concurrency:
 jobs:
   python-tests:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -38,12 +34,6 @@ jobs:
         run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
       - name: Validate AXION STUDIO JavaScript syntax
         run: python scripts/check_frontend_js.py
-      - name: Install Playwright browser test runner
-        run: npm install --no-save --no-package-lock playwright@1.58.2
-      - name: Install Chromium for browser tests
-        run: npx playwright install --with-deps chromium
-      - name: Run AXION STUDIO browser end-to-end tests
-        run: node tests/e2e/studio-browser.mjs
       - name: Compile Python modules
         run: python -m compileall -q api agent core rag sandbox audit tests scripts
       - name: Run unit tests
@@ -51,6 +41,24 @@ jobs:
           API_KEY: ci-only-not-a-production-secret-0123456789
           DATABASE_URL: sqlite:///./ci-test.db
         run: python -m pytest -q
+
+
+  studio-browser-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Playwright browser test runner
+        run: npm install --no-save --no-package-lock playwright@1.58.2
+      - name: Install Chromium for browser tests
+        run: npx playwright install --with-deps chromium
+      - name: Run AXION STUDIO browser end-to-end tests
+        run: node tests/e2e/studio-browser.mjs
 
   postgres-migrations:
     runs-on: ubuntu-latest
