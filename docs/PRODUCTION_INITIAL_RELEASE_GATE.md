@@ -14,7 +14,7 @@ El primer lanzamiento será limitado: un modelo, usuarios individuales y catálo
 - auth_enabled está desactivado por defecto. El registro crea usuarios pending_verification, pero no se encontró un flujo completo de verificación de correo.
 - No habilitar autenticación pública hasta añadir verificación, recuperación de contraseña, rate limiting y pruebas de abuso.
 - La medición de Ollama está en Shadow Mode: emite logs, no persiste uso durable ni calcula/cobra créditos.
-- No existe todavía un ledger económico transaccional ni reservas/cuotas conciliadas. La tabla de telemetría es observacional y no debe usarse como fuente de cobro.
+- Existe una base PostgreSQL aditiva para cuotas, reservas, asignaciones y ledger (migraciones 007/008), además de un servicio transaccional inicial de reserva/liquidación con idempotencia, bloqueos de fila y estados `unknown`/`review`. Aún no está conectado a inferencia ni a rutas HTTP; requiere CI verde y pruebas adicionales de FEFO, expiración, recuperación y conciliación. La tabla de telemetría sigue siendo observacional y no debe usarse directamente como fuente de cobro.
 - La API heredada /v1 usa una clave compartida y no representa identidad individual; queda fuera de facturación.
 - QvaPay está APPROVED comercialmente según el propietario, pero faltan órdenes, firma, consulta de transacción, webhook e idempotencia.
 - Precios, límites y tarifas de referencia no son tarifas activas ni costes reales medidos.
@@ -67,10 +67,10 @@ El primer lanzamiento será limitado: un modelo, usuarios individuales y catálo
 
 ## 4. Orden de ejecución
 
-1. Cerrar y verificar CI actual.
-2. Completar identidad segura: verificación, recuperación, rate limits y RBAC global.
-3. Implementar persistencia Shadow Usage en PostgreSQL y validar migración aditiva en CI.
-4. Implementar cuotas, reservas, ledger y conciliación; mantener cobro apagado hasta superar pruebas.
+1. Cerrar y verificar CI de las migraciones 007/008 y el servicio transaccional de reservas.
+2. Ampliar pruebas de ledger, FEFO, expiración, fallos, estados desconocidos y recuperación.
+3. Completar identidad segura: verificación, recuperación, rate limits y RBAC global.
+4. Integrar medición Shadow Usage con reservas y conciliación sin habilitar cobros prematuramente.
 5. Implementar órdenes y QvaPay en sandbox.
 6. Completar vistas de usuario y administración sobre APIs probadas.
 7. Ejecutar auditoría de seguridad, privacidad, aislamiento, concurrencia, carga y recuperación.
