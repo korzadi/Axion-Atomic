@@ -20,7 +20,7 @@ def main() -> int:
         raise SystemExit("ERROR: QDRANT_URL no es un endpoint HTTPS válido de Qdrant Cloud.")
 
     collection = f"axion_ci_{uuid.uuid4().hex}"
-    client = QdrantClient(url=url, api_key=api_key, timeout=30)
+    client = QdrantClient(url=url, api_key=api_key, timeout=30, check_compatibility=False)
     created = False
     try:
         # Solo se crea un nombre aleatorio; nunca se consulta ni modifica la colección de producción.
@@ -29,6 +29,12 @@ def main() -> int:
             vectors_config=models.VectorParams(size=768, distance=models.Distance.COSINE),
         )
         created = True
+        client.create_payload_index(
+            collection_name=collection,
+            field_name="project_id",
+            field_schema=models.PayloadSchemaType.KEYWORD,
+            wait=True,
+        )
         project_a = f"ci-project-a-{uuid.uuid4()}"
         project_b = f"ci-project-b-{uuid.uuid4()}"
         vector_a = [1.0] + [0.0] * 767
