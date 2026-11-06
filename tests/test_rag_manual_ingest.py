@@ -1,5 +1,6 @@
 import threading
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import rag.service as service
@@ -71,6 +72,29 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
                 await service.retrieve("consulta", "project-a")
         self.assertEqual(str(caught.exception), "El almacén de conocimiento no está disponible")
         self.assertNotIn("internal endpoint details", str(caught.exception))
+
+    async def test_retrieval_enforces_project_filter_and_rechecks_payload(self):
+        loop_thread = threading.get_ident()
+        call_threads = []
+
+        def query_points(**kwargs):
+            call_threads.append(threading.get_ident())
+            project_filter = kwargs["query_filter"]
+            self.assertEqual(project_filter.must[0].key, "project_id")
+            self.assertEqual(project_filter.must[0].match.value, "project-a")
+            return SimpleNamespace(points=[
+                SimpleNamespace(payload={"project_id": "project-a", "source": "manual", "text": "contenido propio"}),
+                SimpleNamespace(payload={"project_id": "project-b", "source": "manual", "text": "contenido ajeno"}),
+            ])
+
+        embed = AsyncMock(return_value=[0.1, 0.2, 0.3, 0.4])
+        with patch.object(service, "ensure_collection"), patch.object(service, "embed", embed), patch.object(service.client, "query_points", side_effect=query_points):
+            context = await service.retrieve("consulta", "project-a")
+
+        self.assertIn("contenido propio", context)
+        self.assertNotIn("contenido ajeno", context)
+        self.assertEqual(len(call_threads), 1)
+        self.assertNotEqual(call_threads[0], loop_thread)
 
 
 if __name__ == "__main__":
