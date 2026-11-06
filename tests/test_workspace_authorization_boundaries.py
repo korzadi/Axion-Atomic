@@ -8,6 +8,7 @@ from api.workspace_routes import (
     workspace_approve,
     workspace_chat,
     workspace_ingest,
+    workspace_delete_knowledge_source,
     workspace_task,
 )
 
@@ -233,6 +234,33 @@ class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 await workspace_ingest(request, user={"id": "user-1"})
         self.assertEqual(raised.exception.status_code, 403)
         ingest.assert_not_awaited()
+
+
+    async def test_knowledge_source_delete_requires_editor_role(self):
+        denied = HTTPException(status_code=403, detail="forbidden")
+        with (
+            patch("api.workspace_routes._project_role", side_effect=denied),
+            patch("api.workspace_routes.delete_source", new=AsyncMock()) as delete,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_delete_knowledge_source(
+                    "12345678-1234-5678-1234-567812345678",
+                    project_id="project-1", user={"id": "user-1"},
+                )
+        self.assertEqual(raised.exception.status_code, 403)
+        delete.assert_not_awaited()
+
+    async def test_knowledge_source_delete_maps_store_outage_to_503(self):
+        from rag.service import KnowledgeStoreUnavailable
+        source_id = "12345678-1234-5678-1234-567812345678"
+        with (
+            patch("api.workspace_routes._project_role", return_value="editor"),
+            patch("api.workspace_routes.delete_source", new=AsyncMock(side_effect=KnowledgeStoreUnavailable("El almacén de conocimiento no está disponible"))) as delete,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_delete_knowledge_source(source_id, project_id="project-1", user={"id": "user-1"})
+        self.assertEqual(raised.exception.status_code, 503)
+        delete.assert_awaited_once_with(source_id, "project-1")
 
 
 if __name__ == "__main__":
