@@ -96,7 +96,7 @@ class KnowledgeUploadRouteTests(unittest.IsolatedAsyncioTestCase):
             patch("api.workspace_routes.list_sources", new=AsyncMock(return_value=expected)) as listing,
         ):
             result = await workspace_list_knowledge_sources("project-a", 50, {"id": "viewer"})
-        authorize.assert_called_once_with("viewer", "project-a", ("owner", "admin", "editor", "viewer"))
+        authorize.assert_called_once_with({"id": "viewer"}, "project-a", ("owner", "admin", "editor", "viewer"))
         listing.assert_awaited_once_with("project-a", limit=50)
         self.assertEqual(result["project_id"], "project-a")
         self.assertEqual(result["sources"], expected["sources"])
@@ -123,7 +123,7 @@ class KnowledgeUploadRouteTests(unittest.IsolatedAsyncioTestCase):
                 await workspace_delete_knowledge_source(
                     "12345678-1234-5678-1234-567812345678", "project-a", {"id": "viewer"}
                 )
-        authorize.assert_called_once_with("viewer", "project-a", ("owner", "admin", "editor"))
+        authorize.assert_called_once_with({"id": "viewer"}, "project-a", ("owner", "admin", "editor"))
         deletion.assert_not_awaited()
 
     async def test_source_deletion_uses_exact_project_and_source_id(self):
