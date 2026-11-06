@@ -136,3 +136,42 @@ class KnowledgeUploadRouteTests(unittest.IsolatedAsyncioTestCase):
             result = await workspace_delete_knowledge_source(source_id, "project-a", {"id": "editor"})
         deletion.assert_awaited_once_with(source_id, "project-a")
         self.assertEqual(result, {"status": "deleted", "project_id": "project-a", "source_id": source_id})
+
+
+    async def test_source_listing_maps_store_outage_to_503(self):
+        from rag.service import KnowledgeStoreUnavailable
+
+        with (
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.list_sources", new=AsyncMock(side_effect=KnowledgeStoreUnavailable("safe unavailable"))),
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                await workspace_list_knowledge_sources("project-a", 100, {"id": "viewer"})
+        self.assertEqual(caught.exception.status_code, 503)
+        self.assertEqual(caught.exception.detail, "El almacén de conocimiento no está disponible")
+
+    async def test_source_deletion_maps_store_outage_to_503(self):
+        from rag.service import KnowledgeStoreUnavailable
+
+        source_id = "12345678-1234-5678-1234-567812345678"
+        with (
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.delete_source", new=AsyncMock(side_effect=KnowledgeStoreUnavailable("safe unavailable"))),
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                await workspace_delete_knowledge_source(source_id, "project-a", {"id": "editor"})
+        self.assertEqual(caught.exception.status_code, 503)
+        self.assertEqual(caught.exception.detail, "El almacén de conocimiento no está disponible")
+
+    async def test_source_deletion_rejects_invalid_uuid_without_store_access(self):
+        with (
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.delete_source", new=AsyncMock()) as deletion,
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                await workspace_delete_knowledge_source("not-a-uuid", "project-a", {"id": "editor"})
+        self.assertEqual(caught.exception.status_code, 422)
+        deletion.assert_awaited_once_with("not-a-uuid", "project-a")
