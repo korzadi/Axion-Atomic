@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS agent_run_actions (
     result TEXT,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
-    UNIQUE(run_id, action_hash)
+    UNIQUE(project_id, action_hash)
 );
 CREATE INDEX IF NOT EXISTS idx_agent_run_actions_project_state
     ON agent_run_actions(project_id, state);
