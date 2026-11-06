@@ -74,3 +74,17 @@ La ejecución de GitHub Actions del commit `94b1d864c20db560af5007b77c3cb85e380b
 ## Estado operativo
 
 Los cambios de código se guardan en el repositorio. No se ha accedido al VPS, construido o reiniciado Docker, aplicado migraciones, cambiado variables de entorno, alterado servicios ni modificado datos.
+
+
+## Actualización de validación — 6 de noviembre de 2026 (run 42295136956)
+
+Esta sección sustituye los estados de CI y Qdrant Cloud descritos en las secciones anteriores cuando exista contradicción:
+
+- GitHub Actions: **success** en el commit `7fe150e3` ([run 42295136956](https://github.com/korzadi/Axion-Atomic/actions/runs/42295136956)).
+- Python: **599 passed, 8 skipped**, 3 warnings.
+- AXION STUDIO browser E2E: **3 escenarios aprobados**.
+- PostgreSQL: job de migraciones completado con éxito.
+- Qdrant Cloud remoto: **prueba autenticada aprobada**. El job creó una colección temporal, insertó vectores, buscó por proyecto, verificó aislamiento entre proyectos, eliminó puntos y eliminó su propia colección temporal. No se usó Qdrant local ni se tocaron colecciones ajenas.
+- Esta prueba acredita el ciclo remoto específico del smoke test; no valida todavía reindexación completa de documentos, OAuth con proveedores reales, correo en dominio de producción, runtime de agente, cobros ni despliegue.
+
+No se accedió al VPS ni se modificó infraestructura, servicios o datos de producción.
