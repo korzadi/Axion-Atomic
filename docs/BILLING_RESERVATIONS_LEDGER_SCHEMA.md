@@ -15,7 +15,7 @@ La migración `007_billing_reservations_ledger.sql` añade el esquema persistent
 
 ## Alcance y limitaciones
 
-El esquema todavía no implementa transacciones de reserva/liquidación, bloqueo ordenado de filas, reconciliador, cálculo de tokens, endpoints ni la protección append-only efectiva del ledger. Tampoco concede créditos ni activa cobros. No debe considerarse listo para facturar hasta superar pruebas PostgreSQL de concurrencia, idempotencia, atomicidad y recuperación.
+Las operaciones transaccionales iniciales están en `api/billing_reservations.py`: `reserve_credits` serializa claves idempotentes, bloquea cuotas y lotes con `FOR UPDATE`, aplica cuota diaria → suscripción → FEFO y registra reservas en una transacción. `settle_reservation` liquida hasta el importe reservado y devuelve el exceso; un uso superior pasa a `review`. `mark_reservation_unknown` conserva saldo reservado ante resultados inciertos. La migración 008 bloquea UPDATE, DELETE y TRUNCATE del ledger. Estas operaciones aún no están conectadas a rutas HTTP ni a inferencia. No debe considerarse listo para facturar hasta superar pruebas PostgreSQL de concurrencia, idempotencia, atomicidad y recuperación.
 
 ## Contrato obligatorio de implementación
 
@@ -25,6 +25,6 @@ El esquema todavía no implementa transacciones de reserva/liquidación, bloqueo
 4. Ejecutar inferencia fuera de la transacción.
 5. Conciliar el uso medido en otra transacción idempotente; liberar exceso reservado y consumir solo el importe real.
 6. Ante resultado incierto, conservar la reserva en `unknown` o `review`; nunca asumir consumo cero ni liberar automáticamente.
-7. Probar en PostgreSQL real, incluyendo dos workers intentando reservar el mismo saldo.
+7. Probar en PostgreSQL real, incluyendo dos workers intentando reservar el mismo saldo. Las pruebas de integración iniciales están en `tests/test_billing_reservations_postgres.py` y las comprobaciones de esquema en `tests/test_postgres_migrations.py`.
 
-No ejecutar esta migración en el VPS como parte del trabajo de repositorio.
+La autenticación, autorización de proyecto y política comercial deben validarse en la capa superior antes de invocar el servicio. No ejecutar estas migraciones en el VPS como parte del trabajo de repositorio.
