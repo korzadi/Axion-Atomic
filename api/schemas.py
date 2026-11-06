@@ -9,7 +9,8 @@ class Message(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    model: str = "qwen-engineering"
+    # ID público estable del catálogo; nunca es una etiqueta arbitraria de Ollama.
+    model: Literal["atomic-code"] = "atomic-code"
     project_id: str = Field(min_length=1, max_length=200)
     messages: list[Message] = Field(min_length=1, max_length=100)
     temperature: float = Field(0.2, ge=0, le=2)
