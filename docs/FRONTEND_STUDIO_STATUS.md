@@ -52,7 +52,7 @@
 
 ## Siguientes bloques
 
-1. Pruebas funcionales del panel y de cada flujo web con sesión, CSRF, errores de API y aislamiento entre proyectos.
+1. Completar CI y pruebas end-to-end de carga, indexación, recuperación en chat y ciclo de fuentes; decidir OCR de PDF escaneados como mejora posterior al MVP si no es bloqueante.
 2. Completar el runtime persistente del agente y su ciclo de aprobación/reanudación.
 3. Completar la experiencia de Atomic Code y el módulo de conocimiento usando únicamente endpoints reales.
 4. Validar OAuth, correo y configuración de autenticación en un entorno de pruebas.
