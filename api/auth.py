@@ -73,7 +73,8 @@ def authenticate(email: str, password: str, user_agent: str | None = None) -> tu
         if row is None:
             _passwords.hash("invalid-login-placeholder-password")
             raise HTTPException(status_code=401, detail="Credenciales incorrectas")
-        if row["status"] != "active" or not verify_password(row["password_hash"], password):
+        password_valid = verify_password(row["password_hash"], password)
+        if row["status"] != "active" or not password_valid:
             raise HTTPException(status_code=401, detail="Credenciales incorrectas")
         token = secrets.token_urlsafe(48)
         csrf = secrets.token_urlsafe(32)
