@@ -32,7 +32,7 @@ class RunStore:
         self.meta.execute(
             "INSERT INTO agent_runs (id, project_id, goal, status, final, error, messages, pending_actions, "
             "steps, parse_failures, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (run.id, run.project_id, run.goal, run.status, run.final, run.error,
+            (run.id, run.project_id, redact(run.goal), run.status, run.final, run.error,
              redact(json.dumps(run.messages, ensure_ascii=False)), "[]", run.steps, run.parse_failures, now, now),
         )
 
