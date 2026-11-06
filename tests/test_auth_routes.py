@@ -46,7 +46,7 @@ class AuthRouteGateTests(unittest.TestCase):
                 RegisterRequest(email="new@example.com", password="StrongPassword123!", display_name="New"),
                 request,
             ))
-        limiter.assert_called_once()
+        self.assertEqual(limiter.call_count, 2)
 
     def test_login_enforces_ip_and_account_rate_limits(self):
         from unittest.mock import Mock
