@@ -129,6 +129,19 @@ try{const data=await request('/workspace/knowledge/ingest',{method:'POST',header
 catch(error){notice.textContent=error.message;}
 finally{busy=false;updateSubmit();}
 });
+uploadButton.addEventListener('click',async()=>{
+const selected=fileInput.files&&fileInput.files[0],projectId=project.value;
+if(!selected||!projectId||!canEdit()||busy)return;
+if(selected.size>5*1024*1024){uploadNotice.textContent='El archivo supera el límite de 5 MB.';return;}
+busy=true;updateSubmit();uploadNotice.textContent='Extrayendo e indexando documento…';
+try{
+const form=new FormData();form.append('file',selected,selected.name);
+const data=await request('/workspace/knowledge/upload?'+new URLSearchParams({project_id:projectId}),{method:'POST',body:form});
+uploadNotice.textContent='Documento indexado: '+String(data.chunks)+' fragmentos.';
+fileInput.value='';await loadSources();
+}catch(error){uploadNotice.textContent=error.message;}
+finally{busy=false;updateSubmit();}
+});
 }
 
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x===b));const v=b.dataset.view;if(v==='home')return renderHome();if(v==='projects')return renderProjects();if(v==='payments')return renderPayments();if(v==='chat')return renderChat();if(v==='agents')return renderAgents();if(v==='models')return renderModels();if(v==='knowledge')return renderKnowledge();if(v==='admin')return renderAdminAccess();const titles={home:'Inicio',chat:'Chat IA',models:'Modelos ATOMIC',agents:'Centro de agentes',code:'ATOMIC CODE',video:'ATOMIC VIDEO',knowledge:'Conocimiento',admin:'Administración'};$('#viewContent').innerHTML='<div class="eyebrow">AXION STUDIO</div><h2>'+titles[v]+'</h2><p class="muted">'+(v==='admin'?'El panel administrativo requiere endpoints de administración y autorización RBAC verificada en el servidor. Esta vista no concede privilegios.':'Este módulo está preparado visualmente; su integración se habilitará cuando exista un endpoint real, probado y autorizado. No se muestran datos simulados.')+'</p>';}));
