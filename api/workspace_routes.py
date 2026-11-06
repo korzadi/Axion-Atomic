@@ -317,6 +317,10 @@ async def workspace_runs(
 ):
     """Lista ejecuciones persistidas exclusivamente del proyecto autorizado."""
     await run_in_threadpool(_project_role, user, project_id, ("owner", "admin", "editor", "viewer"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], project_id, "agent_read",
+        user_limit=60, project_limit=120, window=timedelta(minutes=1),
+    )
     return {"items": await run_in_threadpool(_list_runs, project_id, limit)}
 
 
@@ -328,6 +332,10 @@ async def workspace_run_detail(
 ):
     """Devuelve el snapshot de una ejecución solo dentro del proyecto autorizado."""
     await run_in_threadpool(_project_role, user, project_id, ("owner", "admin", "editor", "viewer"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], project_id, "agent_read",
+        user_limit=60, project_limit=120, window=timedelta(minutes=1),
+    )
     result = await run_in_threadpool(_get_run, run_id, project_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Ejecución inexistente o fuera del proyecto autorizado")
@@ -345,6 +353,10 @@ async def workspace_approvals(
     user=Depends(_enabled_user),
 ):
     await run_in_threadpool(_project_role, user, project_id, ("owner", "admin", "editor"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], project_id, "agent_read",
+        user_limit=60, project_limit=120, window=timedelta(minutes=1),
+    )
     return await run_in_threadpool(_list_approvals, project_id)
 
 
@@ -357,6 +369,10 @@ async def workspace_decide_plan_approval(
 ):
     """Decide una aprobación de plan legado; no ejecuta herramientas."""
     await run_in_threadpool(_project_role, user, project_id, ("owner", "admin"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], project_id, "agent_decision",
+        user_limit=20, project_limit=40, window=timedelta(minutes=1),
+    )
     status = "approved" if req.approved else "rejected"
     changed = await run_in_threadpool(_decide_plan_approval, approval_id, project_id, user["id"], status, req.note)
     if not changed:
@@ -372,6 +388,10 @@ async def workspace_approve(
     user=Depends(_csrf_user),
 ):
     await run_in_threadpool(_project_role, user, project_id, ("owner", "admin"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], project_id, "agent_decision",
+        user_limit=20, project_limit=40, window=timedelta(minutes=1),
+    )
     new_state = "approved" if req.approved else "rejected"
     try:
         changed = await run_in_threadpool(_decide_action_approval, approval_id, project_id, user["id"], new_state, req.note)

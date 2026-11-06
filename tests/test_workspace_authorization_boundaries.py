@@ -12,6 +12,11 @@ from api.workspace_routes import (
 
 
 class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        admission = patch("api.workspace_routes._enforce_workspace_limit")
+        admission.start()
+        self.addCleanup(admission.stop)
+
     async def test_chat_rejects_non_member_before_retrieval_or_model_call(self):
         request = ChatRequest(
             project_id="foreign-project",

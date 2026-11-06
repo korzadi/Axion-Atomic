@@ -7,6 +7,11 @@ from api.workspace_routes import workspace_run_detail, workspace_runs
 
 
 class WorkspaceRunRouteTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        admission = patch("api.workspace_routes._enforce_workspace_limit")
+        admission.start()
+        self.addCleanup(admission.stop)
+
     async def test_list_is_scoped_to_authorized_project(self):
         rows = [{"id": "run-1", "goal": "Review", "status": "done"}]
         conn = MagicMock()

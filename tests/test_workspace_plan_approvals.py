@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from fastapi import HTTPException
+
 from api.schemas import ApprovalRequest
 from api.workspace_routes import workspace_approvals, workspace_decide_plan_approval
 
@@ -58,6 +60,37 @@ class WorkspacePlanApprovalTests(unittest.IsolatedAsyncioTestCase):
                 )
         self.assertEqual(getattr(raised.exception, "status_code", None), 404)
 
+
+
+    async def test_approval_decision_rate_limit_blocks_database_write(self):
+        denied = HTTPException(status_code=429, detail="rate limited")
+        with (
+            patch("api.workspace_routes._project_role", return_value="owner"),
+            patch("api.workspace_routes._enforce_workspace_limit", side_effect=denied) as limit,
+            patch("api.workspace_routes.engine.begin") as begin,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_decide_plan_approval(
+                    approval_id=7, req=ApprovalRequest(approved=True),
+                    project_id="project-a", user={"id": "owner-a"},
+                )
+        self.assertEqual(raised.exception.status_code, 429)
+        self.assertEqual(limit.call_args.args, ("owner-a", "project-a", "agent_decision"))
+        self.assertEqual(limit.call_args.kwargs["user_limit"], 20)
+        begin.assert_not_called()
+
+    async def test_approval_listing_rate_limit_blocks_database_read(self):
+        denied = HTTPException(status_code=429, detail="rate limited")
+        with (
+            patch("api.workspace_routes._project_role", return_value="editor"),
+            patch("api.workspace_routes._enforce_workspace_limit", side_effect=denied) as limit,
+            patch("api.workspace_routes.engine.connect") as connect,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_approvals(project_id="project-a", user={"id": "user-a"})
+        self.assertEqual(raised.exception.status_code, 429)
+        self.assertEqual(limit.call_args.args, ("user-a", "project-a", "agent_read"))
+        connect.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()
