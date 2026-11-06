@@ -30,7 +30,7 @@ def configured(settings, provider: str) -> bool:
     return False
 
 
-def begin(engine: Engine, provider: str, settings) -> str:
+def begin(engine: Engine, provider: str, settings) -> tuple[str, str]:
     if provider not in PROVIDERS or not configured(settings, provider):
         raise ValueError("Proveedor OAuth no configurado")
     state, nonce = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
@@ -46,10 +46,10 @@ def begin(engine: Engine, provider: str, settings) -> str:
         params = {"client_id": settings.google_oauth_client_id, "redirect_uri": callback,
                   "response_type": "code", "scope": "openid email profile",
                   "state": state, "nonce": nonce, "prompt": "select_account"}
-        return "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
+        return "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params), state
     params = {"client_id": settings.github_oauth_client_id, "redirect_uri": callback,
               "scope": "read:user user:email", "state": state}
-    return "https://github.com/login/oauth/authorize?" + urlencode(params)
+    return "https://github.com/login/oauth/authorize?" + urlencode(params), state
 
 
 def consume_state(engine: Engine, provider: str, state: str) -> str:
