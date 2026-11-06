@@ -118,12 +118,12 @@ No exponer datos de otros usuarios a través de filtros manipulables. No almacen
 - No aparecen prompts, respuestas, cookies, credenciales ni secretos en filas/logs.
 
 ### CI
-La suite SQLite actual es útil para lógica general, pero no acredita constraints, índices, roles, transacciones ni concurrencia de PostgreSQL. Añadir un job PostgreSQL de CI con servicio efímero y fixtures aisladas antes de declarar validada esta fase.
+La suite SQLite actual es útil para lógica general, pero no acredita constraints, índices, roles, transacciones ni concurrencia de PostgreSQL. Se añadió un job `postgres-migrations` al CI con PostgreSQL 16 efímero: aplica las migraciones dos veces para comprobar idempotencia y ejecuta `tests/test_postgres_migrations.py` sobre el esquema real. El resultado de ese job aún debe verificarse en GitHub Actions; esta ampliación no prueba todavía la futura tabla de telemetría.
 
 ## 8. Orden seguro de implementación
 
 1. Revisar el resultado de CI actual y cerrar las incompatibilidades de Shadow Mode.
-2. Añadir tests de contrato del repositorio y pruebas PostgreSQL en CI.
+2. Ejecutar y cerrar el nuevo job PostgreSQL de CI; ampliar sus pruebas cuando se implemente el repositorio de telemetría.
 3. Implementar migración 006 solo después de aprobar este diseño y sus pruebas.
 4. Añadir un repositorio de escritura append-only y pruebas de aislamiento ante fallo de DB.
 5. Añadir consultas de lectura protegidas por identidad/RBAC.
