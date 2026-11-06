@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import Mock
-from api.oauth import configured, digest
+from api.oauth import configured, digest, begin, resolve_user
 
 
 class OAuthConfigurationTests(unittest.TestCase):
@@ -17,6 +17,16 @@ class OAuthConfigurationTests(unittest.TestCase):
                         oauth_public_base_url=None)
         self.assertFalse(configured(settings, "google"))
         self.assertFalse(configured(settings, "github"))
+
+    def test_oauth_start_rejects_missing_legal_consent_before_database_access(self):
+        settings = Mock(google_oauth_client_id="id", google_oauth_client_secret="secret",
+                        oauth_public_base_url="https://studio.example")
+        with self.assertRaises(ValueError):
+            begin(None, "google", settings, terms_accepted=False)
+
+    def test_oauth_user_resolution_rejects_missing_legal_consent(self):
+        with self.assertRaises(ValueError):
+            resolve_user(None, "google", {}, terms_accepted=False)
 
     def test_state_is_stored_as_sha256_digest_not_plaintext(self):
         self.assertEqual(len(digest("random-oauth-state")), 64)
