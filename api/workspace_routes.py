@@ -1,5 +1,7 @@
 """API de trabajo multiusuario; cada petición valida sesión y membresía."""
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query
+from sqlalchemy import text
+from api.database import engine
 
 from api.auth import current_user, authorize_project, require_csrf, COOKIE_NAME, CSRF_COOKIE
 from api.config import settings
@@ -7,7 +9,7 @@ from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest
 from api.ollama import chat
 from rag.service import ingest_text, retrieve
 from agent.planner import create_plan
-from agent.approvals import create_approval, decide_approval, list_pending
+from agent.approvals import create_approval
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 
@@ -75,7 +77,17 @@ async def workspace_approvals(
     user=Depends(_enabled_user),
 ):
     _project_role(user, project_id, ("owner", "admin", "editor"))
-    return {"items": list_pending(project_id)}
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT id, tool, what, why, resources, modification, risks, expected, "
+                "action_hash, state, created_at, expires_at "
+                "FROM action_approvals WHERE project_id=:project_id AND state='pending' "
+                "AND expires_at > now() ORDER BY created_at"
+            ),
+            {"project_id": project_id},
+        ).mappings().all()
+    return {"items": [dict(row) for row in rows]}
 
 
 @router.post("/agent/approvals/{approval_id}")
@@ -86,7 +98,43 @@ async def workspace_approve(
     user=Depends(_csrf_user),
 ):
     _project_role(user, project_id, ("owner", "admin"))
-    try:
-        return decide_approval(approval_id, project_id, req.approved, user["id"], req.note)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    new_state = "approved" if req.approved else "rejected"
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                "UPDATE action_approvals SET state=:state, reviewer=:reviewer, note=:note, decided_at=now() "
+                "WHERE id=:approval_id AND project_id=:project_id AND state='pending' "
+                "AND expires_at > now() RETURNING id, action_hash"
+            ),
+            {
+                "state": new_state,
+                "reviewer": user["id"],
+                "note": req.note,
+                "approval_id": str(approval_id),
+                "project_id": project_id,
+            },
+        ).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Aprobación inexistente, expirada o ya resuelta")
+        changed = conn.execute(
+            text(
+                "UPDATE agent_run_actions SET state=:state, updated_at=now() "
+                "WHERE project_id=:project_id AND proposal_id=:proposal_id AND action_hash=:action_hash "
+                "AND state='pending'"
+            ),
+            {
+                "state": new_state,
+                "project_id": project_id,
+                "proposal_id": str(approval_id),
+                "action_hash": row.action_hash,
+            },
+        ).rowcount
+        if changed != 1:
+            raise HTTPException(status_code=409, detail="La aprobación no está vinculada a una acción pendiente")
+    return {
+        "id": str(approval_id),
+        "project_id": project_id,
+        "status": new_state,
+        "reviewer": user["id"],
+        "execution": "not_executed",
+    }
