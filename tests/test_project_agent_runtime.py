@@ -47,6 +47,23 @@ class ProjectAgentRuntimeTests(unittest.IsolatedAsyncioTestCase):
         agent.resume.assert_not_awaited()
         agent.continue_run.assert_not_awaited()
 
+    async def test_resume_delegates_approval_waiting_run_to_approval_gate(self):
+        runtime = self._runtime()
+        restored = SimpleNamespace(status="awaiting_approval")
+        agent = SimpleNamespace(
+            restore=Mock(return_value=restored),
+            resume=AsyncMock(return_value="resumed"),
+            continue_run=AsyncMock(),
+        )
+        with patch("agent.project_runtime.build_authorized_project_toolset", return_value=(object(), {})), \
+             patch("agent.project_runtime.build_coding_agent_from_engine", return_value=agent):
+            result = await runtime.resume({"id": "user-1"}, "project-1", " run-1 ")
+
+        self.assertEqual(result, "resumed")
+        agent.restore.assert_called_once_with("run-1", "project-1")
+        agent.resume.assert_awaited_once_with(restored)
+        agent.continue_run.assert_not_awaited()
+
     async def test_resume_continues_only_a_safe_running_state(self):
         runtime = self._runtime()
         restored = SimpleNamespace(status="running")
