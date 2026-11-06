@@ -90,5 +90,45 @@ class WorkspaceChatHistoryTests(unittest.IsolatedAsyncioTestCase):
         begin.assert_not_called()
 
 
+    def test_get_history_query_requires_both_user_and_project_scope(self):
+        conn = MagicMock()
+        conn.execute.return_value.mappings.return_value.first.return_value = {
+            "messages": [{"role": "user", "content": "private"}],
+            "updated_at": "now",
+        }
+        context = MagicMock()
+        context.__enter__.return_value = conn
+        with patch("api.workspace_routes.engine.connect", return_value=context):
+            result = _get_chat_history("user-a", "project-a")
+        statement = " ".join(str(conn.execute.call_args.args[0]).split())
+        self.assertIn("WHERE user_id=:user_id AND project_id=:project_id", statement)
+        self.assertEqual(conn.execute.call_args.args[1], {"user_id": "user-a", "project_id": "project-a"})
+        self.assertEqual(result["messages"][0]["content"], "private")
+
+    def test_get_history_rejects_more_than_100_stored_messages(self):
+        conn = MagicMock()
+        conn.execute.return_value.mappings.return_value.first.return_value = {
+            "messages": [{"role": "user", "content": "x"} for _ in range(101)],
+            "updated_at": "now",
+        }
+        context = MagicMock()
+        context.__enter__.return_value = conn
+        with patch("api.workspace_routes.engine.connect", return_value=context):
+            with self.assertRaises(ValueError):
+                _get_chat_history("user-a", "project-a")
+
+    def test_get_history_rejects_malformed_json(self):
+        conn = MagicMock()
+        conn.execute.return_value.mappings.return_value.first.return_value = {
+            "messages": "{not-json",
+            "updated_at": "now",
+        }
+        context = MagicMock()
+        context.__enter__.return_value = conn
+        with patch("api.workspace_routes.engine.connect", return_value=context):
+            with self.assertRaises(ValueError):
+                _get_chat_history("user-a", "project-a")
+
+
 if __name__ == "__main__":
     unittest.main()
