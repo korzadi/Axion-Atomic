@@ -63,8 +63,9 @@ def _enforce_rate_limit(request: Request, *, namespace: str, limit: int, window:
 
 
 @router.post("/register", status_code=202)
-async def register(req: RegisterRequest):
+async def register(req: RegisterRequest, request: Request):
     _require_auth_feature()
+    _enforce_rate_limit(request, namespace="auth:register:ip", limit=10, window=timedelta(minutes=10))
     try:
         create_user(req.email, req.password, req.display_name)
     except IntegrityError:
@@ -81,6 +82,8 @@ async def register(req: RegisterRequest):
 @router.post("/login")
 async def login(req: LoginRequest, request: Request, response: Response):
     _require_auth_feature()
+    _enforce_rate_limit(request, namespace="auth:login:ip", limit=30, window=timedelta(minutes=1))
+    _enforce_rate_limit(request, namespace="auth:login:account", subject=req.email.strip().casefold(), limit=10, window=timedelta(minutes=5))
     user, token, csrf = authenticate(req.email, req.password, request.headers.get("user-agent"))
     response.set_cookie(
         key=COOKIE_NAME, value=token, max_age=SESSION_MAX_AGE, httponly=True,
