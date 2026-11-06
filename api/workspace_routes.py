@@ -179,6 +179,16 @@ def _get_chat_history(user_id: str, project_id: str):
         messages = json.loads(messages)
     if not isinstance(messages, list) or len(messages) > 100:
         raise ValueError("Historial de chat inválido")
+    total_chars = 0
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") not in ("user", "assistant"):
+            raise ValueError("Mensaje de historial inválido")
+        content = message.get("content")
+        if not isinstance(content, str):
+            raise ValueError("Contenido de historial inválido")
+        total_chars += len(content)
+        if len(content) > 40000 or total_chars > 40000:
+            raise ValueError("Historial de chat fuera de los límites")
     return {"messages": messages, "updated_at": row["updated_at"]}
 
 
