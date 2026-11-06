@@ -49,7 +49,7 @@ def _enforce_workspace_limit(user_id: str, project_id: str, operation: str, *,
     """Límite distribuido por usuario y proyecto; falla cerrado si PostgreSQL falla."""
     buckets = (
         (rate_limit_key(f"workspace:{operation}:user", user_id), user_limit),
-        (rate_limit_key(f"workspace:{operation}:project", f"{user_id}:{project_id}"), project_limit),
+        (rate_limit_key(f"workspace:{operation}:project", project_id), project_limit),
     )
     try:
         for key, limit in buckets:
