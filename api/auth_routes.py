@@ -125,26 +125,36 @@ async def oauth_start(provider: str, request: Request):
     _enforce_rate_limit(request, namespace="auth:oauth:start:" + provider,
                         limit=10, window=timedelta(minutes=10))
     try:
-        return RedirectResponse(begin(engine, provider, settings), status_code=302)
+        destination, oauth_state = begin(engine, provider, settings)
+        result = RedirectResponse(destination, status_code=302)
+        result.set_cookie(key="axion_oauth_state", value=oauth_state, max_age=600,
+                          httponly=True, secure=settings.auth_cookie_secure,
+                          samesite="lax", path="/auth/oauth")
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/oauth/{provider}/callback")
 async def oauth_callback(provider: str, code: str | None = None,
-                         state: str | None = None, error: str | None = None):
+                         state: str | None = None, error: str | None = None,
+                         browser_state: str | None = Cookie(default=None, alias="axion_oauth_state")):
     _require_auth_feature()
     if provider not in ("google", "github"):
         raise HTTPException(status_code=404, detail="Proveedor no admitido")
-    if error or not code or not state:
-        return RedirectResponse("/?oauth_error=cancelled", status_code=303)
+    if error or not code or not state or not browser_state or not secrets.compare_digest(state, browser_state):
+        result = RedirectResponse("/?oauth_error=cancelled", status_code=303)
+        result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
+        return result
     try:
         nonce = consume_state(engine, provider, state)
         profile = provider_profile(provider, code, nonce, settings)
         user = resolve_user(engine, provider, profile)
     except Exception:
         # Nunca mostrar ni registrar códigos, tokens ni respuestas del proveedor.
-        return RedirectResponse("/?oauth_error=failed", status_code=303)
+        result = RedirectResponse("/?oauth_error=failed", status_code=303)
+        result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
+        return result
     import secrets
     from datetime import datetime, timezone
     from api.auth import _digest
@@ -160,6 +170,7 @@ async def oauth_callback(provider: str, code: str | None = None,
         conn.execute(text("UPDATE users SET last_login_at=:now WHERE id=:id"),
                      {"now": now, "id": user["id"]})
     result = RedirectResponse("/?oauth=success", status_code=303)
+    result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
     result.set_cookie(key=COOKIE_NAME, value=session, max_age=SESSION_MAX_AGE,
                       httponly=True, secure=settings.auth_cookie_secure,
                       samesite="lax", path="/")
