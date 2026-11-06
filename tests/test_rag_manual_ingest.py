@@ -38,6 +38,7 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
             kwargs = store.call_args.kwargs
             self.assertEqual(kwargs["points"][0].payload["project_id"], "project-a")
             self.assertEqual(kwargs["points"][0].payload["source"], "manual")
+            self.assertTrue(kwargs["points"][0].payload["source_id"])
             self.assertEqual(kwargs["points"][0].payload["text"], "Documentación pública del proyecto")
 
     async def test_invalid_size_and_project_are_rejected(self):
@@ -116,6 +117,31 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(service, "ensure_collection"), patch.object(service, "embed", AsyncMock(return_value=[0.1, 0.2, 0.3, 0.4])), patch.object(service.client, "upsert", side_effect=RuntimeError("private qdrant endpoint")):
             with self.assertRaises(service.KnowledgeStoreUnavailable) as caught:
                 await service.ingest_text("Texto seguro", "manual", "project-a")
+        self.assertEqual(str(caught.exception), "El almacén de conocimiento no está disponible")
+        self.assertNotIn("private qdrant endpoint", str(caught.exception))
+
+
+    async def test_delete_source_uses_project_and_source_filters(self):
+        source_id = "12345678-1234-5678-1234-567812345678"
+        with patch.object(service, "ensure_collection"), patch.object(service.client, "delete") as delete:
+            await service.delete_source(source_id, "project-a")
+        kwargs = delete.call_args.kwargs
+        conditions = kwargs["points_selector"].filter.must
+        self.assertEqual([(item.key, item.match.value) for item in conditions], [
+            ("project_id", "project-a"), ("source_id", source_id)
+        ])
+        self.assertTrue(kwargs["wait"])
+
+    async def test_delete_source_rejects_invalid_uuid_before_store_access(self):
+        with patch.object(service.client, "delete") as delete:
+            with self.assertRaisesRegex(ValueError, "UUID válido"):
+                await service.delete_source("not-a-uuid", "project-a")
+        delete.assert_not_called()
+
+    async def test_delete_source_store_failure_is_safe(self):
+        with patch.object(service, "ensure_collection"), patch.object(service.client, "delete", side_effect=RuntimeError("private qdrant endpoint")):
+            with self.assertRaises(service.KnowledgeStoreUnavailable) as caught:
+                await service.delete_source("12345678-1234-5678-1234-567812345678", "project-a")
         self.assertEqual(str(caught.exception), "El almacén de conocimiento no está disponible")
         self.assertNotIn("private qdrant endpoint", str(caught.exception))
 
