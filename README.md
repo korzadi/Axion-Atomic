@@ -50,7 +50,8 @@ El alcance de medición de tokens, cuotas, costes por modelo, créditos, suscrip
 - [Auditoría, diseño y roadmap de tokens, créditos y economía](docs/COMMERCIAL_TOKENS_CREDITS_ECONOMICS_ROADMAP.md)
 - [Diseño técnico de facturación y créditos](docs/COMMERCIAL_BILLING_TECHNICAL_DESIGN.md)
 - [Implementación de medición Shadow Mode](docs/SHADOW_USAGE_IMPLEMENTATION.md)
-- [Diseño de persistencia PostgreSQL para Shadow Mode](docs/SHADOW_USAGE_POSTGRESQL_DESIGN.md)
+- [Diseño e implementación de persistencia PostgreSQL para Shadow Mode](docs/SHADOW_USAGE_POSTGRESQL_DESIGN.md)
+- [Puerta de salida a producción inicial](docs/PRODUCTION_INITIAL_RELEASE_GATE.md)
 - La Fase 1 contiene la auditoría inicial de los módulos inspeccionados y las brechas verificadas.
 - No habilitar cobros, ventas ni límites comerciales hasta completar las fases de diseño, implementación, seguridad y pruebas.
 
