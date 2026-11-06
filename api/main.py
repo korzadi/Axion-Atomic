@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi.staticfiles import StaticFiles
 import httpx
 from sqlalchemy import text
 from api.security import require_api_key
@@ -101,3 +104,10 @@ async def approve(approval_id: int, req: ApprovalRequest, project_id: str = Quer
         return decide_approval(approval_id, project_id, req.approved, "service-api", req.note)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
+
+
+# AXION STUDIO es una SPA estática sin proceso de build. Se monta al final para
+# que /auth, /workspace, /health y /v1 conserven prioridad sobre el fallback web.
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+if FRONTEND_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="axion-studio")
