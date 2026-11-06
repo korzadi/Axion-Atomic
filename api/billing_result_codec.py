@@ -60,7 +60,7 @@ def _validate(data: dict) -> None:
     returned = data.get("returned_model")
     if returned is not None and (not isinstance(returned, str) or not returned):
         raise InferenceResultCodecError("Modelo devuelto inválido")
-    if data.get("done") not in (True, False, None) or isinstance(data.get("done"), int):
+    if data.get("done") is not None and type(data.get("done")) is not bool:
         raise InferenceResultCodecError("Estado done inválido")
     if data.get("usage_source") not in ("ollama_response", "unavailable"):
         raise InferenceResultCodecError("Fuente de medición inválida")
