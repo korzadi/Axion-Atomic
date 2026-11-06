@@ -111,7 +111,7 @@ def recover_completed_billing_executions(
             JOIN billing_inference_executions e
               ON e.reservation_id = r.id AND e.user_id = r.user_id
             WHERE r.state = 'held' AND e.state = 'completed'
-              AND (:reservation_id IS NULL OR r.id = CAST(:reservation_id AS UUID))
+              AND (CAST(:reservation_id AS UUID) IS NULL OR r.id = CAST(:reservation_id AS UUID))
               AND (e.recovery_next_attempt_at IS NULL
                    OR e.recovery_next_attempt_at <= now())
             ORDER BY e.recovery_next_attempt_at NULLS FIRST, e.completed_at, e.id
