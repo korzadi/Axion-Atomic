@@ -300,4 +300,4 @@ Shadow Mode no crea registros persistentes en PostgreSQL, saldos, créditos, res
 
 ## 12. Diseño separado de persistencia Shadow Mode
 
-La propuesta para persistir eventos de inferencia sin facturar se mantiene en `docs/SHADOW_USAGE_POSTGRESQL_DESIGN.md`. Este diseño de facturación no autoriza crear la migración 006 ni activar cuotas, reservas, ledger o cobros. Primero deben pasar las pruebas de contrato y el job PostgreSQL de CI.
+La persistencia Shadow Mode está implementada parcialmente mediante migración 006 y escritura best-effort, sin facturación. No activa cuotas, reservas, ledger ni cobros. Las pruebas PostgreSQL de CI deben pasar antes de cualquier despliegue.
