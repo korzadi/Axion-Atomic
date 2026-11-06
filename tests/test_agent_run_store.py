@@ -20,7 +20,7 @@ class RunStoreTests(unittest.TestCase):
             id TEXT PRIMARY KEY, run_id TEXT NOT NULL, project_id TEXT NOT NULL, tool TEXT NOT NULL,
             action_hash TEXT NOT NULL, args_json TEXT NOT NULL, proposal_id TEXT, summary TEXT NOT NULL,
             state TEXT NOT NULL, result TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-            UNIQUE(run_id, action_hash)
+            UNIQUE(project_id, action_hash)
         )""")
         self.conn.commit()
         self.store = RunStore(MetaStore(self.conn), clock=lambda: "2026-01-01T00:00:00+00:00")
@@ -66,6 +66,21 @@ class RunStoreTests(unittest.TestCase):
         self.store.record_action("r1", "p1", "run_command", {"command": "pytest"}, "hash2", "a2", "tests")
         self.assertTrue(self.store.transition_action("r1", "hash2", ("pending",), "running"))
         self.assertFalse(self.store.transition_action("r1", "hash2", ("pending", "approved"), "running"))
+
+    def test_same_action_is_deduplicated_across_runs_in_one_project(self):
+        class Run:
+            status, final, error = "running", None, None
+            messages, pending, steps, parse_failures = [], [], 0, 0
+        first_run = Run()
+        first_run.id, first_run.project_id, first_run.goal = "r1", "p1", "primera"
+        second_run = Run()
+        second_run.id, second_run.project_id, second_run.goal = "r2", "p1", "segunda"
+        self.store.create_run(first_run)
+        self.store.create_run(second_run)
+        first = self.store.record_action("r1", "p1", "write_file", {"path": "a.py"}, "same-hash", "approval-1", "crear")
+        second = self.store.record_action("r2", "p1", "write_file", {"path": "a.py"}, "same-hash", "approval-2", "crear")
+        self.assertEqual(first["id"], second["id"])
+        self.assertEqual(self.store.get_project_action("p1", "same-hash")["run_id"], "r1")
 
 
 if __name__ == "__main__":
