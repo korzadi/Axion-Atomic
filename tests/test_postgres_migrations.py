@@ -21,7 +21,7 @@ def test_all_expected_migrations_are_registered():
         versions = conn.execute(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).scalars().all()
-    assert versions == ["001", "002", "003", "004", "005"]
+    assert versions == ["001", "002", "003", "004", "005", "006"]
 
 
 def test_core_postgresql_tables_exist():
@@ -40,6 +40,7 @@ def test_core_postgresql_tables_exist():
         "audit_chain_head",
         "agent_runs",
         "agent_run_actions",
+        "inference_usage_events",
     }
     assert expected <= tables
 
@@ -90,3 +91,33 @@ def test_membership_role_check_is_present():
     definitions = " ".join(item.get("sqltext", "") for item in checks)
     assert "owner" in definitions
     assert "viewer" in definitions
+
+
+
+def test_inference_usage_event_schema_is_durable_and_nullable():
+    inspector = inspect(engine)
+    columns = {column["name"]: column for column in inspector.get_columns("inference_usage_events")}
+    assert {
+        "request_id", "user_id", "project_id", "requested_model", "returned_model",
+        "prompt_tokens", "output_tokens", "usage_source", "observed_at",
+    } <= set(columns)
+    assert columns["prompt_tokens"]["nullable"] is True
+    assert columns["output_tokens"]["nullable"] is True
+
+    indexes = {item["name"] for item in inspector.get_indexes("inference_usage_events")}
+    assert {
+        "idx_inference_usage_user_observed",
+        "idx_inference_usage_project_observed",
+        "idx_inference_usage_model_observed",
+    } <= indexes
+
+    with engine.connect() as conn:
+        definitions = conn.execute(text("""
+            SELECT pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE conrelid = 'inference_usage_events'::regclass
+        """)).scalars().all()
+    joined = " ".join(definitions)
+    assert "prompt_tokens" in joined
+    assert "output_tokens" in joined
+    assert "ollama_response" in joined
