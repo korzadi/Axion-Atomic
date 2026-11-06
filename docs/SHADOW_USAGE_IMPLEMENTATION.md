@@ -1,6 +1,6 @@
 # AXION ATOMIC — Implementación inicial de medición en shadow mode
 
-**Estado:** código publicado en `main`; ejecución de pruebas pendiente.  
+**Estado:** implementación de correlación publicada en `main`; CI en ejecución tras los últimos cambios.  
 **Alcance:** preservar la respuesta pública del chat y observar los metadatos que Ollama devuelve. No es facturación ni contabilidad.
 
 ## Cambios
@@ -9,11 +9,11 @@
 - `chat_with_usage()` conserva texto, modelo solicitado/devuelto, estado `done`, contadores de prompt/output y duraciones en nanosegundos.
 - Los contadores ausentes o inválidos quedan como `None`; nunca se convierten silenciosamente en cero. Los booleanos, negativos, strings y floats no se aceptan como contadores.
 - La función pública previa `chat()` continúa devolviendo únicamente texto para no romper consumidores existentes.
-- `/workspace/chat/completions` usa el resultado tipado y emite un evento JSON de observación con usuario autenticado, proyecto, modelos, contadores y duraciones.
+- `/workspace/chat/completions` genera un `request_id` UUID por inferencia y emite un evento JSON de observación con ese identificador, usuario autenticado, proyecto, modelos, contadores y duraciones. El identificador permite correlacionar logs y será reutilizable como clave de idempotencia cuando exista persistencia; todavía no crea garantías de entrega.
 - La respuesta pública mantiene la estructura previa y no expone los metadatos nuevos.
 - La ruta heredada `/v1` no se incorpora a medición individual.
 - `tests/test_ollama_usage.py` cubre parsing completo, contadores ausentes/inválidos, contenido inválido, modelos solicitado/devuelto, petición HTTP no streaming, propagación de timeout y compatibilidad del wrapper `chat()`.
-- `tests/test_workspace_role_matrix_http.py` se actualizó para simular el contrato `InferenceResult`, comprobar la respuesta del endpoint, verificar que el evento no contiene el texto del usuario y que un logger defectuoso no interrumpe la respuesta.
+- `tests/test_workspace_role_matrix_http.py` se actualizó para simular el contrato `InferenceResult`, comprobar la respuesta del endpoint, validar el UUID y la identidad/proyecto del evento, verificar que el evento no contiene el texto del usuario y que un logger defectuoso no interrumpe la respuesta.
 - `tests/test_model_identity.py` y `tests/test_workspace_authorization_boundaries.py` actualizan sus mocks al adaptador `chat_with_usage()`.
 
 ## Límites deliberados
@@ -28,7 +28,7 @@
 
 ## Verificación
 
-Las pruebas focalizadas están añadidas y publicadas. No se ejecutó pytest ni se confirmó una ejecución de GitHub Actions desde esta sesión; su resultado sigue **pendiente de ejecución**. Las pruebas asíncronas usan `asyncio.run` para no añadir una dependencia de `pytest-asyncio`. Tampoco se ejecutaron migraciones, llamadas reales a Ollama, cambios en VPS, Docker o despliegues.
+Las pruebas focalizadas están añadidas y publicadas. La ejecución PostgreSQL anterior pasó; los cambios de correlación actuales han disparado una nueva ejecución de GitHub Actions y deben verificarse antes de declarar esta revisión cerrada. Las pruebas asíncronas usan `asyncio.run` para no añadir una dependencia de `pytest-asyncio`. Tampoco se ejecutaron migraciones, llamadas reales a Ollama, cambios en VPS, Docker o despliegues.
 
 ## Siguiente paso
 
