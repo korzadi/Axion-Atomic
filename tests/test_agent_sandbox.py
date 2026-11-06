@@ -25,7 +25,7 @@ def fin(t): return json.dumps({"final": t})
 
 class IntegrationTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        p = mock.patch.dict(os.environ, {"AXION_ALLOW_UNSAFE_LOCAL_SANDBOX": "1"}); p.start(); self.addCleanup(p.stop)
+        p = mock.patch.dict(os.environ, {"AXION_ALLOW_UNSAFE_LOCAL_SANDBOX": "1", "AXION_ALLOW_UNSAFE_LOCAL_NETWORK": "1"}); p.start(); self.addCleanup(p.stop)
         self.tmp, self.sbx = tempfile.TemporaryDirectory(), tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup); self.addCleanup(self.sbx.cleanup)
         self.root = Path(self.tmp.name)
