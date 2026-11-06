@@ -19,6 +19,7 @@ engine = create_engine(DATABASE_URL, future=True, pool_pre_ping=True)
 from api.billing_budget import InferenceBudget
 from api.billing_execution_durable import execute_durable_reserved_inference
 from api.billing_result_crypto import AesGcmResultCipher
+from api.billing_recovery import recover_completed_billing_executions
 from api.billing_execution_envelope import (
     serialize_billing_execution_result,
     deserialize_billing_execution_result,
@@ -144,3 +145,59 @@ def test_persisted_result_recovers_after_settlement_failure_without_second_infer
     assert balances.consumed_credits == 20
     assert states.state == "settled"
     assert states.execution_state == "completed"
+
+
+
+def test_recovery_worker_settles_completed_execution_without_second_inference():
+    user_id, project_id = _account()
+    request_id = str(uuid.uuid4())
+    calls = []
+
+    async def inference():
+        calls.append("called")
+        return SimpleNamespace(
+            requested_model="atomic-code:16k-8k",
+            returned_model="atomic-code:16k-8k",
+            done=True, usage_source="ollama_response",
+            prompt_eval_count=12, eval_count=8,
+            content="recovery-worker-secret-marker",
+        )
+
+    with patch(
+        "api.billing_execution_durable.settle_reservation",
+        side_effect=RuntimeError("simulated settlement outage"),
+    ):
+        with pytest.raises(RuntimeError, match="settlement outage"):
+            _execute(user_id, project_id, request_id, inference)
+
+    cipher = AesGcmResultCipher(TestKeyProvider())
+    batch = recover_completed_billing_executions(
+        engine=engine, cipher=cipher, limit=10,
+    )
+    assert batch.examined == 1
+    assert batch.settled == 1
+    assert batch.failed == 0
+    assert calls == ["called"]
+
+    repeated = recover_completed_billing_executions(
+        engine=engine, cipher=cipher, limit=10,
+    )
+    assert repeated.examined == 0
+    assert repeated.settled == 0
+
+    with engine.connect() as conn:
+        row = conn.execute(text("""
+            SELECT r.state AS reservation_state, q.reserved_credits,
+                   q.consumed_credits, e.recovery_attempts,
+                   e.recovery_next_attempt_at, e.recovery_settled_at
+            FROM billing_usage_reservations r
+            JOIN billing_quota_periods q ON q.user_id=r.user_id
+            JOIN billing_inference_executions e ON e.reservation_id=r.id
+            WHERE r.user_id=:user_id
+        """), {"user_id": user_id}).mappings().one()
+    assert row["reservation_state"] == "settled"
+    assert row["reserved_credits"] == 0
+    assert row["consumed_credits"] == 20
+    assert row["recovery_attempts"] == 1
+    assert row["recovery_next_attempt_at"] is None
+    assert row["recovery_settled_at"] is not None
