@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "qwen_knowledge"
     database_url: str = "postgresql+psycopg://qwen:change-me@localhost:5433/qwen_engineering"
-    # None permite importar módulos en pruebas; la capa HTTP rechaza solicitudes si falta una clave fuerte.
+    # La capa HTTP rechaza solicitudes si falta una clave fuerte.
     api_key: str | None = None
     workspace_root: str = "/workspace"
 
