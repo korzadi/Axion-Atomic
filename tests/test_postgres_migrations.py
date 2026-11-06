@@ -46,7 +46,8 @@ def test_core_postgresql_tables_exist():
         "billing_usage_reservations",
         "billing_reservation_allocations",
         "billing_credit_ledger",
-        "billing_reservation_reconciliations",\n        "billing_inference_executions",
+        "billing_reservation_reconciliations",
+        "billing_inference_executions",
     }
     assert expected <= tables
 
