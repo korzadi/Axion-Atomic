@@ -33,3 +33,13 @@ def test_home_navigation_routes_to_existing_workspace_views():
     assert "if(v==='projects')return renderProjects()" in source
     assert "if(v==='chat')return renderChat()" in source
     assert "if(v==='models')return renderModels()" in source
+
+
+def test_knowledge_workspace_uses_authenticated_project_scoped_ingestion():
+    source = FRONTEND.read_text(encoding="utf-8")
+    assert "async function renderKnowledge()" in source
+    assert "fetch(API+'/workspace/knowledge/ingest'" in source
+    assert "X-CSRF-Token" in source
+    assert "project_id:projectId" in source
+    assert "El backend valida permisos" in source
+    assert "document.querySelector('[data-view=\\\"chat\\\"]')" in source
