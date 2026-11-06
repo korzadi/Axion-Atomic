@@ -1,6 +1,6 @@
 # Diseño técnico — economía, medición, cuotas y créditos de AXION ATOMIC
 
-**Estado:** propuesta técnica para revisión; no implementada  
+**Estado:** diseño parcialmente implementado; la base de reservas/ledger está en el repositorio, pero no está conectada a inferencia ni habilita cobros  
 **Fecha:** 6 de noviembre de 2026  
 **Alcance:** Fase 2 del roadmap comercial. Este documento no activa pagos, créditos, límites ni migraciones.
 
@@ -27,7 +27,7 @@ Toda inferencia facturable debe provenir de una identidad autenticada. Las rutas
 
 ## 3. Modelo relacional propuesto
 
-Las tablas son una propuesta lógica. Nombres y tipos finales se ajustarán a las convenciones del repositorio durante la implementación.
+Las tablas de cuotas, lotes, reservas, asignaciones y ledger están creadas por las migraciones 007/008. El servicio inicial está en `api/billing_reservations.py`; el resto de las entidades descritas en esta sección continúa siendo diseño pendiente. Los nombres y tipos finales del resto se ajustarán a las convenciones del repositorio.
 
 ### 3.1 Catálogo comercial
 
@@ -89,7 +89,7 @@ Los periodos de cuota guardan UTC de inicio/fin y la zona horaria IANA que origi
 | `billing_credit_ledger` | Eventos inmutables de concesión, reserva, consumo, liberación, expiración, compra y reverso |
 | `billing_reservation_allocations` | Enlace de reserva a cada lote utilizado |
 
-No permitir UPDATE/DELETE de entradas contables ordinarias. Correcciones se representan con entradas compensatorias vinculadas al movimiento original. El saldo disponible y reservado se actualiza dentro de la misma transacción que inserta el movimiento; una reconciliación puede reconstruir/verificar las proyecciones desde el ledger.
+La migración 008 bloquea UPDATE, DELETE y TRUNCATE de `billing_credit_ledger`; no permitir modificaciones de entradas contables ordinarias. Correcciones se representan con entradas compensatorias vinculadas al movimiento original. El saldo disponible y reservado se actualiza dentro de la misma transacción que inserta el movimiento; una reconciliación puede reconstruir/verificar las proyecciones desde el ledger.
 
 El orden de consumo debe estar versionado y ser determinista: por ejemplo, créditos gratuitos con expiración próxima, créditos incluidos en suscripción y créditos comprados, o la prioridad final que se apruebe. No asumir que la cuota de plan y los créditos comprados se suman o sustituyen: la política debe expresarlo de forma explícita y versionada.
 
