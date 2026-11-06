@@ -10,8 +10,8 @@ from sqlalchemy import create_engine, inspect, text
 
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
-if not DATABASE_URL:
-    pytest.skip("DATABASE_URL no configurado: requiere el job PostgreSQL de CI", allow_module_level=True)
+if not DATABASE_URL or not DATABASE_URL.startswith(("postgresql://", "postgresql+")):
+    pytest.skip("Requiere DATABASE_URL PostgreSQL del job postgres-migrations", allow_module_level=True)
 
 engine = create_engine(DATABASE_URL, future=True)
 
