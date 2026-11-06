@@ -61,11 +61,15 @@ app.include_router(admin_router)
 app.include_router(catalog_router)
 
 
+@app.get("/health/live")
+async def health_live():
+    """Liveness: confirma que el proceso HTTP sigue respondiendo."""
+    return {"status": "alive"}
+
+
 @app.get("/health")
 async def health():
     checks = {"database": "unavailable", "ollama": "unavailable", "qdrant": "unavailable"}
-    if settings.redis_cache_enabled:
-        checks["redis"] = "unavailable"
     try:
         await run_in_threadpool(_database_health_check)
         checks["database"] = "ok"
@@ -82,11 +86,17 @@ async def health():
                     checks[key] = "ok"
             except httpx.HTTPError:
                 pass
-    if settings.redis_cache_enabled and await ping_cache():
-        checks["redis"] = "ok"
-    if any(value != "ok" for value in checks.values()):
-        raise HTTPException(status_code=503, detail={"status": "degraded"})
-    return {"status": "ok"}
+
+    required_checks_ok = all(checks[key] == "ok" for key in ("database", "ollama", "qdrant"))
+    if settings.redis_cache_enabled:
+        # Redis solo acelera embeddings: su caída activa el bypass a Ollama,
+        # no debe provocar reinicios ni sacar de servicio una API funcional.
+        checks["redis"] = "ok" if await ping_cache() else "degraded"
+
+    if not required_checks_ok:
+        raise HTTPException(status_code=503, detail={"status": "degraded", "checks": checks})
+    status = "degraded" if checks.get("redis") == "degraded" else "ok"
+    return {"status": status, "checks": checks}
 
 
 @app.post("/v1/chat/completions", dependencies=[Depends(require_api_key)])
