@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException, UploadFile
 
-from api.workspace_routes import workspace_upload_knowledge_document
+from api.workspace_routes import (\n    workspace_upload_knowledge_document,\n    workspace_list_knowledge_sources,\n    workspace_delete_knowledge_source,\n)
 
 
 class KnowledgeUploadRouteTests(unittest.IsolatedAsyncioTestCase):
@@ -65,3 +65,70 @@ class KnowledgeUploadRouteTests(unittest.IsolatedAsyncioTestCase):
                 await workspace_upload_knowledge_document("project-a", upload, {"id": "u"})
         self.assertEqual(caught.exception.status_code, 503)
         self.assertTrue(upload.file.closed)
+
+
+    async def test_upload_maps_document_parser_errors_to_422_and_closes_stream(self):
+        from rag.document_loader import DocumentLoadError
+
+        upload = UploadFile(filename="broken.pdf", file=io.BytesIO(b"not a pdf"))
+        with (
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.extract_document", side_effect=DocumentLoadError("PDF inválido")),
+            patch("api.workspace_routes.ingest_text", new=AsyncMock()) as ingest,
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                await workspace_upload_knowledge_document("project-a", upload, {"id": "u"})
+        self.assertEqual(caught.exception.status_code, 422)
+        self.assertEqual(caught.exception.detail, "PDF inválido")
+        self.assertTrue(upload.file.closed)
+        ingest.assert_not_awaited()
+
+    async def test_source_listing_is_project_scoped_and_read_only_for_viewers(self):
+        expected = {"sources": [{"source_id": "id-1", "source": "manual", "chunks": 2, "legacy": False}], "truncated": False}
+        with (
+            patch("api.workspace_routes._project_role") as authorize,
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.list_sources", new=AsyncMock(return_value=expected)) as listing,
+        ):
+            result = await workspace_list_knowledge_sources("project-a", 50, {"id": "viewer"})
+        authorize.assert_called_once_with("viewer", "project-a", ("owner", "admin", "editor", "viewer"))
+        listing.assert_awaited_once_with("project-a", limit=50)
+        self.assertEqual(result["project_id"], "project-a")
+        self.assertEqual(result["sources"], expected["sources"])
+
+    async def test_source_listing_denies_non_members_before_store_access(self):
+        denied = HTTPException(status_code=404, detail="Proyecto no encontrado")
+        with (
+            patch("api.workspace_routes._project_role", side_effect=denied),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.list_sources", new=AsyncMock()) as listing,
+        ):
+            with self.assertRaises(HTTPException):
+                await workspace_list_knowledge_sources("foreign", 100, {"id": "outsider"})
+        listing.assert_not_awaited()
+
+    async def test_source_deletion_requires_editor_before_store_access(self):
+        denied = HTTPException(status_code=403, detail="Permiso insuficiente")
+        with (
+            patch("api.workspace_routes._project_role", side_effect=denied) as authorize,
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.delete_source", new=AsyncMock()) as deletion,
+        ):
+            with self.assertRaises(HTTPException):
+                await workspace_delete_knowledge_source(
+                    "12345678-1234-5678-1234-567812345678", "project-a", {"id": "viewer"}
+                )
+        authorize.assert_called_once_with("viewer", "project-a", ("owner", "admin", "editor"))
+        deletion.assert_not_awaited()
+
+    async def test_source_deletion_uses_exact_project_and_source_id(self):
+        source_id = "12345678-1234-5678-1234-567812345678"
+        with (
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.delete_source", new=AsyncMock()) as deletion,
+        ):
+            result = await workspace_delete_knowledge_source(source_id, "project-a", {"id": "editor"})
+        deletion.assert_awaited_once_with(source_id, "project-a")
+        self.assertEqual(result, {"status": "deleted", "project_id": "project-a", "source_id": source_id})
