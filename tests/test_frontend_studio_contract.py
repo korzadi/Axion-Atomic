@@ -43,3 +43,13 @@ def test_knowledge_workspace_uses_authenticated_project_scoped_ingestion():
     assert "project_id:projectId" in source
     assert "El backend valida permisos" in source
     assert "document.querySelector('[data-view=\"chat\"]')" in source
+
+
+def test_agent_workspace_uses_real_project_scoped_plan_endpoint():
+    source = FRONTEND.read_text(encoding="utf-8")
+    assert "async function renderAgents()" in source
+    assert "if(v==='agents')return renderAgents()" in source
+    assert "fetch(API+'/workspace/agent/tasks'" in source
+    assert "X-CSRF-Token" in source
+    assert "project_id:projectId,goal:text" in source
+    assert "Este plan todavía no se ha ejecutado" in source
