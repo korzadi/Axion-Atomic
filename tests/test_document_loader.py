@@ -117,7 +117,7 @@ def test_document_loader_normalizes_untrusted_paths_without_exposing_directories
     cases = [
         ("../../private/notes.txt", "notes.txt"),
         (r"..\\..\\private\\notes.MD", "notes.MD"),
-        ("/etc/axion/guide.PDF", "guide.PDF"),
+        ("/etc/axion/guide.txt", "guide.txt"),
     ]
     for supplied_name, expected_name in cases:
         _, safe_name = extract_document(supplied_name, b"Contenido")
