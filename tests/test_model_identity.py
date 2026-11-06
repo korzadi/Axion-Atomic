@@ -11,6 +11,9 @@ from api.main import completions
 
 class ModelIdentityTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
+        self.admission_patch = patch("api.workspace_routes._enforce_workspace_limit")
+        self.admission_patch.start()
+        self.addCleanup(self.admission_patch.stop)
         self.request = ChatRequest(
             project_id="project-test",
             messages=[Message(role="user", content="Hola")],
