@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from api.auth import (
