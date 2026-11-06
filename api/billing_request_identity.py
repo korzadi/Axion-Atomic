@@ -86,8 +86,10 @@ def attested_request_payload_sha256(
 
     effective_messages debe ser la lista FINAL construida por el servidor,
     incluyendo system prompt e información RAG. Las identidades de runtime
-    son obligatorias: sin ellas no se obtiene un fingerprint apto para una
-    futura ruta de facturación.
+    son obligatorias. Esta función SOLO las incorpora al hash: no demuestra
+    que sean verdaderas ni verifica firmas/digests. El caller debe obtenerlas
+    de un manifiesto de runtime confiable antes de considerar una ejecución
+    elegible para facturación.
     """
     required = {
         "runtime_model": runtime_model,
