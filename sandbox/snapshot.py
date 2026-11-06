@@ -65,16 +65,18 @@ class Snapshot:
                         if info.st_size > self.max_bytes - total:
                             raise SnapshotTooLarge("El proyecto es demasiado grande para copiarlo al sandbox")
                         copied = 0
-                        with os.fdopen(src_fd, "rb") as src, open(dst, "xb") as target:
-                            src_fd = -1
-                            while True:
-                                chunk = src.read(min(1024 * 1024, self.max_bytes - total - copied + 1))
-                                if not chunk:
-                                    break
-                                copied += len(chunk)
-                                if copied > self.max_bytes - total:
-                                    raise SnapshotTooLarge("El proyecto es demasiado grande para copiarlo al sandbox")
-                                target.write(chunk)
+                        src = os.fdopen(src_fd, "rb")
+                        src_fd = -1
+                        with src:
+                            with open(dst, "xb") as target:
+                                while True:
+                                    chunk = src.read(min(1024 * 1024, self.max_bytes - total - copied + 1))
+                                    if not chunk:
+                                        break
+                                    copied += len(chunk)
+                                    if copied > self.max_bytes - total:
+                                        raise SnapshotTooLarge("El proyecto es demasiado grande para copiarlo al sandbox")
+                                    target.write(chunk)
                         os.chmod(dst, stat.S_IMODE(info.st_mode))
                         total += copied
                     finally:
