@@ -1,4 +1,4 @@
-name: qwen-engineering
+name: axion-atomic
 services:
   api:
     build: .
@@ -27,7 +27,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports: ["127.0.0.1:5433:5432"]
-    volumes: ["qwen_pgdata:/var/lib/postgresql/data"]
+    volumes: ["axion_pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -39,10 +39,10 @@ services:
   qdrant:
     image: qdrant/qdrant:v1.13.2
     ports: ["127.0.0.1:6334:6333"]
-    volumes: ["qwen_qdrant:/qdrant/storage"]
+    volumes: ["axion_qdrant:/qdrant/storage"]
     restart: unless-stopped
     mem_limit: 1g
     cpus: 0.5
 volumes:
-  qwen_pgdata: {name: qwen_engineering_pgdata}
-  qwen_qdrant: {name: qwen_engineering_qdrant}
+  axion_pgdata: {name: qwen_engineering_pgdata}
+  axion_qdrant: {name: qwen_engineering_qdrant}

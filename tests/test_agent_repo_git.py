@@ -86,6 +86,22 @@ class GitTests(unittest.TestCase):
         self.assertNotIn("cambiado1234", self.git.diff())
         with self.assertRaises(AccessDenied): self.git.diff(".env")
 
+    def test_commit_rejects_directories_and_project_root(self):
+        with self.assertRaises(AccessDenied):
+            self.git.propose_commit("todo", ["."], "no")
+        with self.assertRaises(AccessDenied):
+            self.git.propose_commit("todo", ["."], "no")
+
+    def test_untracked_file_is_in_review_diff(self):
+        (self.root / "new.txt").write_text("contenido nuevo\\n")
+        proposal = self.git.propose_commit("añadir archivo", ["new.txt"], "prueba")
+        self.assertIn("+contenido nuevo", proposal.modification)
+
+    def test_commit_rejects_detected_credentials(self):
+        (self.root / "leak.txt").write_text(f'KEY = "{FAKE_AWS}"\\n')
+        with self.assertRaises(AccessDenied):
+            self.git.propose_commit("no filtrar", ["leak.txt"], "prueba")
+
     def test_commit_requires_matching_approval_and_only_listed_paths(self):
         (self.root / "a.txt").write_text("uno\ndos\n"); (self.root / "b.txt").write_text("b\n"); (self.root / "otro.txt").write_text("o\n")
         prop = self.git.propose_commit("agrega dos", ["a.txt", "b.txt"], "prueba")

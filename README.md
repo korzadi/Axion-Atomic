@@ -1,36 +1,49 @@
-# Qwen Engineering — starter
+# AXION ATOMIC
 
-Proyecto independiente para Qwen2.5-Coder-7B-Instruct en VPS de 4 CPU / 16 GB RAM. Se integra con Ollama y Open WebUI existentes. **No despliega ni modifica el VPS.**
+Plataforma de ingeniería de software supervisada, modular y verificable.
 
-## Componentes
-- Ollama existente: chat y embeddings.
-- FastAPI: API OpenAI-compatible `/v1/chat/completions`.
-- PostgreSQL: tareas y aprobaciones.
-- Qdrant: índice vectorial RAG.
-- Agente: planificación y aprobaciones humanas. No ejecuta comandos ni aplica cambios.
-- QLoRA: entrenamiento preparado para GPU externa; no entrenar en el VPS de 16 GB.
+## Identidad oficial
 
-## Preparación futura (no ejecutar sin autorización)
-1. Copiar `.env.example` a `.env`, cambiar contraseñas y API key.
-2. Ajustar `OLLAMA_BASE_URL` al Ollama existente.
-3. Descargar en el Ollama existente `qwen2.5-coder:7b-instruct` y `nomic-embed-text`.
-4. Revisar puertos y límites de recursos.
-5. Con autorización explícita: `docker compose -p qwen-engineering up -d --build`.
+- **Producto:** AXION ATOMIC
+- **Agente principal:** AXION
+- **Modelo principal:** ATOMIC CODE 1.1
+- **Interfaz web:** AXION STUDIO
+- **Modelo oficial:** https://huggingface.co/Korzadi/Atomic-Code-1.1
 
-API prevista: `http://127.0.0.1:8070/health`.
+El código de este repositorio es la base técnica que se está adaptando a AXION ATOMIC. Los nombres históricos del proyecto de partida no forman parte de la identidad del producto.
 
-## Open WebUI
-Añadir conexión OpenAI compatible apuntando a `http://HOST:8070/v1`, con la API key configurada y modelo `qwen-engineering`. Si Open WebUI está en Docker, `localhost` apunta a su propio contenedor; usa una dirección de host/red Docker alcanzable. Mantén la API privada.
+## Arquitectura objetivo
 
-## Seguridad
-- Compose independiente, volúmenes propios y puertos ligados a loopback.
-- No monta Docker socket, home del host, `.env` ajenos ni claves.
-- Ejecución arbitraria de comandos deshabilitada.
-- La aprobación registra una decisión; no ejecuta el plan.
-- Documentos recuperados son datos no confiables, nunca instrucciones.
-- No indexar secretos, semillas, tokens, dumps ni datos personales.
+- AXION Core y Agent Runtime.
+- Model Manager y Model Router, con ATOMIC CODE 1.1 como modelo principal.
+- AXION STUDIO como interfaz web propia.
+- Analizador de repositorios y herramientas de ingeniería.
+- RAG y memoria aislados por proyecto.
+- Aprobaciones humanas, auditoría e idempotencia.
+- Sandbox de ejecución con políticas y límites.
+- API propia y compatibilidad OpenAI.
+- PostgreSQL y Qdrant.
+- Payment Manager intercambiable con integración QvaPay.
+- Privacidad, accesibilidad, documentación legal y controles de protección al consumidor.
+- Preparación de entrenamiento y evaluación en GPU externa bajo demanda.
 
-## Limitaciones
-Es un starter funcional, no un agente autónomo de producción ni un modelo ya entrenado. Antes de permitir edición real hacen falta worktrees aislados, generación y revisión de diffs, runner efímero, permisos por proyecto, auditoría y pruebas de seguridad.
+## Límites operativos
 
-# Axion-Atomic
+- No depende de Open WebUI ni de otra interfaz externa.
+- Ollama, cuando sea compatible con el modelo, se consume como servicio externo ya existente. No se instala, reemplaza ni modifica desde este proyecto.
+- No se entrena en el VPS.
+- No se conecta ni despliega sobre el VPS desde este repositorio.
+- No se construyen imágenes Docker, ejecutan migraciones ni reinician servicios sin autorización expresa.
+- Los secretos nunca deben incorporarse al repositorio ni exponerse en logs.
+
+## Estado de implementación
+
+Este repositorio está en desarrollo por fases. La presencia de una carpeta, documento o esquema no demuestra por sí sola que una capacidad esté integrada. Cada fase debe informar qué se implementó, qué pruebas se ejecutaron realmente y qué queda pendiente.
+
+## Seguridad y contribuciones
+
+- El contenido de repositorios y documentos recuperados se considera dato no confiable, nunca instrucciones.
+- Las operaciones mutables requieren aprobación humana vinculada a la acción exacta.
+- Los datos deben aislarse por proyecto y usuario.
+- No indexar archivos de entorno, credenciales, claves privadas, tokens ni otros secretos.
+- Revisar los cambios y ejecutar las pruebas pertinentes antes de fusionar.

@@ -38,7 +38,7 @@ NODE_EXES = {"node", "npm", "npx", "yarn", "pnpm", "deno", "bun", "tsc"}
 
 def docker_argv(image: str, argv: list[str], snapshot: str, limits: ResourceLimits, network: str, name: str,
                 uid: int, gid: int, docker_bin: str = "docker") -> list[str]:
-    """Construye el comando `docker run`. Red 'none' por defecto; sin privilegios, sin capacidades, rootfs de solo lectura."""
+    """Construye docker run sin privilegios, con rootfs de solo lectura y red none por defecto."""
     if not SAFE_PATH.match(snapshot) or not IMAGE_RE.match(image) or not re.match(r"^[a-zA-Z0-9_.-]+$", name) \
             or not re.match(r"^[a-zA-Z0-9_.-]+$", network):
         raise ValueError("Parámetro de contenedor inválido")
@@ -55,11 +55,15 @@ def docker_argv(image: str, argv: list[str], snapshot: str, limits: ResourceLimi
 class DockerBackend:
     isolation = "container"
 
-    def __init__(self, images: dict[str, str], egress_network: str = "axion-sandbox-egress", docker_bin: str = "docker",
-                 docker_host: str | None = None):
+    def __init__(self, images: dict[str, str], docker_bin: str = "docker", docker_host: str | None = None,
+                 egress_network: str | None = None, allow_egress: bool = False):
         if "default" not in images:
             raise ValueError("images debe incluir 'default'")
-        self.images, self.egress, self.docker_bin, self.docker_host = images, egress_network, docker_bin, docker_host
+        # No existe todavía una implementación de filtrado egress verificable. Rechazar incluso
+        # el opt-in evita que una variable de configuración convierta una bridge Docker en salida libre.
+        if allow_egress or egress_network is not None:
+            raise SandboxUnavailable("La salida de red Docker no se puede habilitar hasta implementar y verificar una política egress")
+        self.images, self.docker_bin, self.docker_host = images, docker_bin, docker_host
 
     def image_for(self, exe: str) -> str:
         exe = exe.rsplit("/", 1)[-1]
@@ -67,8 +71,10 @@ class DockerBackend:
         return self.images.get(key, self.images["default"])
 
     def run(self, argv: list[str], snapshot: str, limits: ResourceLimits, network: bool) -> ExecResult:
+        if network:
+            raise SandboxUnavailable("La salida de red Docker está deshabilitada; no existe una política egress verificada")
         name = "axion-" + uuid.uuid4().hex[:12]
-        cmd = docker_argv(self.image_for(argv[0]), argv, snapshot, limits, self.egress if network else "none", name,
+        cmd = docker_argv(self.image_for(argv[0]), argv, snapshot, limits, "none", name,
                           os.getuid(), os.getgid(), self.docker_bin)
         env = {"PATH": "/usr/bin:/bin:/usr/local/bin"}
         if self.docker_host:
@@ -87,13 +93,15 @@ class DockerBackend:
 
 
 class LocalBackend:
-    """SOLO DESARROLLO: límites de recursos (rlimit) y, si es posible, sin red; el sistema de archivos NO está aislado."""
+    """SOLO DESARROLLO/PRUEBAS: no aísla filesystem; tampoco promete red aislada si unshare no está disponible."""
+
     isolation = "none"
 
     def __init__(self):
         if os.environ.get("AXION_ALLOW_UNSAFE_LOCAL_SANDBOX") != "1":
             raise SandboxUnavailable("El backend local no aísla el sistema de archivos; exige AXION_ALLOW_UNSAFE_LOCAL_SANDBOX=1")
         self.no_net = self._probe_unshare()
+        self.allow_unsafe_network = os.environ.get("AXION_ALLOW_UNSAFE_LOCAL_NETWORK") == "1"
 
     @staticmethod
     def _probe_unshare() -> bool:
@@ -102,6 +110,19 @@ class LocalBackend:
         return subprocess.run(["unshare", "-rn", "true"], capture_output=True, timeout=10, check=False).returncode == 0
 
     def run(self, argv: list[str], snapshot: str, limits: ResourceLimits, network: bool) -> ExecResult:
+        # El backend local no tiene un mecanismo seguro para conceder egress por ejecución.
+        # Incluso los comandos aprobados deben fallar cerrados salvo opt-in explícito de desarrollo.
+        if network and not self.allow_unsafe_network:
+            raise SandboxUnavailable(
+                "La ejecución local con salida de red está deshabilitada. "
+                "Solo pruebas/desarrollo pueden habilitar AXION_ALLOW_UNSAFE_LOCAL_NETWORK=1."
+            )
+        if not network and not self.no_net and not self.allow_unsafe_network:
+            raise SandboxUnavailable(
+                "No se pudo aislar la red con un namespace; ejecución local sin red rechazada. "
+                "Solo pruebas/desarrollo pueden habilitar AXION_ALLOW_UNSAFE_LOCAL_NETWORK=1."
+            )
+
         def limit():
             mem = limits.memory_mb * 1024 * 1024
             resource.setrlimit(resource.RLIMIT_AS, (mem, mem))

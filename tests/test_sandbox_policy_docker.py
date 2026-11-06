@@ -45,7 +45,7 @@ class DockerArgvTests(unittest.TestCase):
             self.assertIn(flag, a)
         self.assertEqual(a[a.index("--network") + 1], "none"); self.assertEqual(a[a.index("--cap-drop") + 1], "ALL")
         self.assertEqual(a[a.index("--user") + 1], "1000:1000"); self.assertEqual(a[a.index("--memory") + 1], a[a.index("--memory-swap") + 1])
-        self.assertEqual(a[-4:], ["python:3.12-slim", "python", "-m", "pytest"][-4:]); self.assertEqual(a[a.index("python:3.12-slim") + 1:], ["python", "-m", "pytest"])
+        self.assertEqual(a[a.index("python:3.12-slim") + 1:], ["python", "-m", "pytest"])
         self.assertNotIn("--privileged", a); self.assertFalse(any("docker.sock" in x for x in a))
 
     def test_only_snapshot_is_mounted(self):
@@ -67,6 +67,18 @@ class DockerArgvTests(unittest.TestCase):
         with mock.patch("os.getuid", return_value=1000), mock.patch("os.getgid", return_value=1000):
             with self.assertRaises(SandboxUnavailable): b.run(["ls"], "/tmp", ResourceLimits(), False)
 
+    def test_refuses_unverified_egress_by_default(self):
+        b = DockerBackend({"default": "x:1"})
+        with mock.patch("os.getuid", return_value=1000), mock.patch("os.getgid", return_value=1000):
+            with self.assertRaises(SandboxUnavailable):
+                b.run(["pip", "install", "x"], "/tmp", ResourceLimits(), True)
+
+    def test_rejects_configuration_that_attempts_to_enable_unverified_egress(self):
+        with self.assertRaises(SandboxUnavailable):
+            DockerBackend({"default": "x:1"}, allow_egress=True)
+        with self.assertRaises(SandboxUnavailable):
+            DockerBackend({"default": "x:1"}, egress_network="axion-sandbox-egress")
+
     def test_refuses_to_run_as_root(self):
         b = DockerBackend({"default": "x:1"})
         with mock.patch("os.getuid", return_value=0):
@@ -76,6 +88,24 @@ class DockerArgvTests(unittest.TestCase):
         import os
         os.environ.pop("AXION_ALLOW_UNSAFE_LOCAL_SANDBOX", None)
         with self.assertRaises(SandboxUnavailable): LocalBackend()
+
+    def test_local_backend_fails_closed_without_network_namespace(self):
+        import os
+        with mock.patch.dict(os.environ, {"AXION_ALLOW_UNSAFE_LOCAL_SANDBOX": "1"}, clear=False), \
+             mock.patch("sandbox.backends.LocalBackend._probe_unshare", return_value=False):
+            os.environ.pop("AXION_ALLOW_UNSAFE_LOCAL_NETWORK", None)
+            backend = LocalBackend()
+            with self.assertRaises(SandboxUnavailable):
+                backend.run(["echo", "unsafe"], "/tmp", ResourceLimits(), False)
+
+    def test_local_backend_fails_closed_for_approved_egress_without_explicit_dev_opt_in(self):
+        import os
+        with mock.patch.dict(os.environ, {"AXION_ALLOW_UNSAFE_LOCAL_SANDBOX": "1"}, clear=False), \
+             mock.patch("sandbox.backends.LocalBackend._probe_unshare", return_value=True):
+            os.environ.pop("AXION_ALLOW_UNSAFE_LOCAL_NETWORK", None)
+            backend = LocalBackend()
+            with self.assertRaises(SandboxUnavailable):
+                backend.run(["pip", "install", "example"], "/tmp", ResourceLimits(), True)
 
 
 if __name__ == "__main__":
