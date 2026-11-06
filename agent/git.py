@@ -5,7 +5,7 @@ import re
 import subprocess
 
 from agent.approval_gate import ActionProposal, ApprovedAction
-from agent.secrets import SENSITIVE_GLOBS, is_sensitive_path, redact
+from agent.secrets import SENSITIVE_GLOBS, find_secrets, is_sensitive_path, redact
 from agent.workspace import AccessDenied, ConflictError, Workspace
 from core.errors import AxionError
 
@@ -125,6 +125,17 @@ class GitManager:
         if not message or len(message) > 500 or "\\0" in message:
             raise ValueError("Mensaje de commit inválido")
         rels = self._paths(paths)
+        for rel in rels:
+            path = self.ws.root / rel
+            if path.is_file():
+                try:
+                    text = path.read_text(encoding="utf-8")
+                except (UnicodeDecodeError, OSError):
+                    continue
+                findings = find_secrets(text)
+                if findings:
+                    kinds = ", ".join(sorted({f.kind for f in findings}))
+                    raise AccessDenied(f"Posible secreto detectado en {rel} ({kinds}); no se permite confirmar")
         shown = self._preview(rels)
         return ActionProposal(self.ws.project_id, "git.commit", f"git commit: {message}", why, tuple(rels),
                               shown, ("Solo se añaden los archivos individuales indicados", "No se incluyen directorios ni rutas sensibles"),
