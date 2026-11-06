@@ -104,7 +104,7 @@ async function oauthRequiresTermsAcceptance() {
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto(baseUrl);
-  await page.locator('[data-open="login"]').click();
+  await page.locator('[data-open="login"]').first().click();
   await page.locator('[data-oauth="google"]').click();
   await page.getByText("Debes aceptar los términos", { exact: false }).waitFor();
   assert.equal(new URL(page.url()).pathname, "/");
