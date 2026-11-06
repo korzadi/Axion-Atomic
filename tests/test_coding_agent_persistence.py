@@ -44,14 +44,27 @@ class CodingAgentPersistenceTests(unittest.IsolatedAsyncioTestCase):
         agent = CodingAgent(chat, {"change": tool}, gate, run_store=RunStore(MetaStore(conn)))
         run = await agent.run("Reparar", project_id="p1", run_id="run-1")
         self.assertEqual(run.status, "awaiting_approval")
-        gate.decide(run.pending[0].proposal_id, True, "reviewer")
-        run = await agent.resume(run)
+        restored_pending = agent.restore("run-1", "p1")
+        self.assertEqual(restored_pending.status, "awaiting_approval")
+        gate.decide(restored_pending.pending[0].proposal_id, True, "reviewer")
+        run = await agent.resume(restored_pending)
 
         self.assertEqual(run.status, "done")
         self.assertEqual(applied, ["src/file.py"])
         restored = agent.restore("run-1", "p1")
         self.assertEqual(restored.status, "done")
         self.assertEqual(restored.final, "Terminado")
+
+        second_answers = iter([
+            '{"tool":"change","args":{"path":"src/file.py"}}',
+            '{"final":"Ya estaba aplicado"}',
+        ])
+        async def second_chat(_messages):
+            return next(second_answers)
+        second_agent = CodingAgent(second_chat, {"change": tool}, gate, run_store=agent.run_store)
+        second_run = await second_agent.run("Revisar cambio", project_id="p1", run_id="run-2")
+        self.assertEqual(second_run.status, "done")
+        self.assertEqual(applied, ["src/file.py"])
 
 
 if __name__ == "__main__":
