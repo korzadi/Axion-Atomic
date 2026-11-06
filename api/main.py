@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 import httpx
 from sqlalchemy import text
 from api.security import require_api_key
@@ -79,13 +79,14 @@ async def task(req: TaskRequest):
 
 
 @app.get("/v1/agent/approvals", dependencies=[Depends(require_api_key)])
-async def approvals():
-    return {"items": list_pending()}
+async def approvals(project_id: str = Query(min_length=1, max_length=200)):
+    return {"items": list_pending(project_id)}
 
 
 @app.post("/v1/agent/approvals/{approval_id}", dependencies=[Depends(require_api_key)])
-async def approve(approval_id: int, req: ApprovalRequest):
+async def approve(approval_id: int, req: ApprovalRequest, project_id: str = Query(min_length=1, max_length=200)):
     try:
-        return decide_approval(approval_id, req.approved, req.reviewer, req.note)
+        # La API key identifica al servicio, no a una persona; nunca aceptar reviewer del cliente.
+        return decide_approval(approval_id, project_id, req.approved, "service-api", req.note)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
