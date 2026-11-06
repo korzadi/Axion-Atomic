@@ -42,12 +42,14 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
             patch("api.workspace_routes.retrieve", new=AsyncMock(return_value="CONTEXTO DEL PROYECTO")) as retrieve,
             patch("api.workspace_routes.chat_with_usage", new=AsyncMock(return_value=result)) as inference,
             patch("api.workspace_routes.persist_shadow_usage_event"),
+            patch("api.workspace_routes._save_chat_history") as save_history,
             patch("api.workspace_routes.settings.chat_model", "atomic-code:16k-8k"),
         ):
             response = await workspace_chat(request, {"id": "user-a"})
 
         authorize.assert_called_once_with("user-a", "project-a", ("owner", "admin", "editor", "viewer"))
         rate_limit.assert_called_once()
+        save_history.assert_called_once()
         retrieve.assert_awaited_once_with("Resume la documentación", project_id="project-a", limit=5)
         messages = inference.await_args.args[0]
         self.assertEqual(messages[0]["role"], "system")
