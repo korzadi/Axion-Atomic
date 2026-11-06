@@ -30,6 +30,33 @@ def test_workspace_limit_uses_hashed_user_and_project_buckets(monkeypatch):
     assert [item[1] for item in calls] == [20, 60]
 
 
+def test_project_limit_bucket_is_shared_by_all_project_members(monkeypatch):
+    buckets = []
+
+    def consume(*, engine, bucket_key, limit, window):
+        buckets.append(bucket_key)
+        return SimpleNamespace(allowed=True, retry_after_seconds=0)
+
+    monkeypatch.setattr(workspace_routes, "consume_rate_limit", consume)
+    monkeypatch.setattr(workspace_routes, "engine", object())
+
+    workspace_routes._enforce_workspace_limit(
+        "user-a", "shared-project", "chat",
+        user_limit=20, project_limit=60, window=timedelta(minutes=1),
+    )
+    first_user_bucket, first_project_bucket = buckets
+
+    buckets.clear()
+    workspace_routes._enforce_workspace_limit(
+        "user-b", "shared-project", "chat",
+        user_limit=20, project_limit=60, window=timedelta(minutes=1),
+    )
+    second_user_bucket, second_project_bucket = buckets
+
+    assert first_user_bucket != second_user_bucket
+    assert first_project_bucket == second_project_bucket
+
+
 def test_workspace_limit_returns_429_and_retry_after(monkeypatch):
     decisions = iter([
         SimpleNamespace(allowed=True, retry_after_seconds=0),
