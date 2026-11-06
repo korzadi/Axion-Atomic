@@ -4,6 +4,7 @@ import secrets
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -71,17 +72,17 @@ def _enforce_rate_limit(request: Request, *, namespace: str, limit: int, window:
 @router.post("/register", status_code=202)
 async def register(req: RegisterRequest, request: Request):
     _require_auth_feature()
-    _enforce_rate_limit(request, namespace="auth:register:ip", limit=10, window=timedelta(minutes=10))
+    await run_in_threadpool(_enforce_rate_limit, request, namespace="auth:register:ip", limit=10, window=timedelta(minutes=10))
     if req.terms_accepted is not True:
         raise HTTPException(status_code=400, detail="Debes aceptar los términos y la política de privacidad.")
     email = req.email.strip().casefold()
-    _enforce_rate_limit(request, namespace="auth:register:account", subject=email,
+    await run_in_threadpool(_enforce_rate_limit, request, namespace="auth:register:account", subject=email,
                         limit=5, window=timedelta(hours=1))
     if not email_delivery_configured(settings) or not settings.oauth_public_base_url:
         raise HTTPException(status_code=503, detail="El registro por correo no está disponible temporalmente.")
     user_id = None
     try:
-        user_id = create_user(req.email, req.password, req.display_name, terms_accepted_at=datetime.now(timezone.utc))
+        user_id = await run_in_threadpool(create_user, req.email, req.password, req.display_name, terms_accepted_at=datetime.now(timezone.utc))
     except IntegrityError:
         # No revelar si una dirección ya está registrada.
         pass
@@ -89,8 +90,8 @@ async def register(req: RegisterRequest, request: Request):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if user_id:
         try:
-            issued = issue_email_verification_token(engine=engine, user_id=user_id)
-            send_verification_email(settings=settings, recipient=email, token=issued.token)
+            issued = await run_in_threadpool(issue_email_verification_token, engine=engine, user_id=user_id)
+            await run_in_threadpool(send_verification_email, settings=settings, recipient=email, token=issued.token)
         except Exception:
             raise HTTPException(status_code=503, detail="No se pudo enviar el correo. Solicita un nuevo envío más tarde.") from None
     return {"status": "pending_verification",
@@ -100,9 +101,9 @@ async def register(req: RegisterRequest, request: Request):
 @router.post("/login")
 async def login(req: LoginRequest, request: Request, response: Response):
     _require_auth_feature()
-    _enforce_rate_limit(request, namespace="auth:login:ip", limit=30, window=timedelta(minutes=1))
-    _enforce_rate_limit(request, namespace="auth:login:account", subject=req.email.strip().casefold(), limit=10, window=timedelta(minutes=5))
-    user, token, csrf = authenticate(req.email, req.password, request.headers.get("user-agent"))
+    await run_in_threadpool(_enforce_rate_limit, request, namespace="auth:login:ip", limit=30, window=timedelta(minutes=1))
+    await run_in_threadpool(_enforce_rate_limit, request, namespace="auth:login:account", subject=req.email.strip().casefold(), limit=10, window=timedelta(minutes=5))
+    user, token, csrf = await run_in_threadpool(authenticate, req.email, req.password, request.headers.get("user-agent"))
     response.set_cookie(
         key=COOKIE_NAME, value=token, max_age=SESSION_MAX_AGE, httponly=True,
         secure=settings.auth_cookie_secure, samesite="lax", path="/",
@@ -125,10 +126,10 @@ async def oauth_start(provider: str, request: Request, terms_accepted: bool = Fa
     _require_auth_feature()
     if provider not in ("google", "github"):
         raise HTTPException(status_code=404, detail="Proveedor no admitido")
-    _enforce_rate_limit(request, namespace="auth:oauth:start:" + provider,
+    await run_in_threadpool(_enforce_rate_limit, request, namespace="auth:oauth:start:" + provider,
                         limit=10, window=timedelta(minutes=10))
     try:
-        destination, oauth_state = begin(engine, provider, settings, terms_accepted=terms_accepted)
+        destination, oauth_state = await run_in_threadpool(begin, engine, provider, settings, terms_accepted=terms_accepted)
         result = RedirectResponse(destination, status_code=302)
         result.set_cookie(key="axion_oauth_state", value=oauth_state, max_age=600,
                           httponly=True, secure=settings.auth_cookie_secure,
@@ -153,8 +154,8 @@ async def oauth_callback(provider: str, code: str | None = None,
         state_data = consume_state(engine, provider, state)
         if state_data["terms_accepted"] is not True:
             raise ValueError("Consentimiento legal no registrado")
-        profile = provider_profile(provider, code, state_data["nonce"], settings)
-        user = resolve_user(engine, provider, profile, terms_accepted=state_data["terms_accepted"])
+        profile = await run_in_threadpool(provider_profile, provider, code, state_data["nonce"], settings)
+        user = await run_in_threadpool(resolve_user, engine, provider, profile, terms_accepted=state_data["terms_accepted"])
     except Exception:
         # Nunca mostrar ni registrar códigos, tokens ni respuestas del proveedor.
         result = RedirectResponse("/?oauth_error=failed", status_code=303)
