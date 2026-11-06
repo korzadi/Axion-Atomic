@@ -239,7 +239,7 @@ async def delete_source(source_id: str, project_id: str) -> None:
 async def list_sources(project_id: str, limit: int = 100) -> dict:
     """Lista metadatos de fuentes sin devolver contenido ni vectores."""
     project_filter = _project_filter(project_id)
-    if not isinstance(limit, int) or not 1 <= limit <= 100:
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
         raise ValueError("limit debe estar entre 1 y 100")
     grouped = {}
     offset = None

@@ -169,10 +169,12 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["sources"][0]["legacy"])
 
     async def test_list_sources_rejects_invalid_limit_before_qdrant(self):
-        with patch.object(service.client, "scroll") as scroll:
-            with self.assertRaises(ValueError):
-                await service.list_sources("project-a", limit=101)
-        scroll.assert_not_called()
+        for invalid_limit in (True, False, 0, 101, 1.5, "10"):
+            with self.subTest(limit=invalid_limit):
+                with patch.object(service.client, "scroll") as scroll:
+                    with self.assertRaises(ValueError):
+                        await service.list_sources("project-a", limit=invalid_limit)
+                scroll.assert_not_called()
 
 
     async def test_replace_source_publishes_new_chunks_then_retires_old_ids(self):
