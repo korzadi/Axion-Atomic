@@ -3,14 +3,15 @@ from typing import Literal
 
 
 class Message(BaseModel):
-    role: Literal["system", "user", "assistant"]
-    content: str
+    # El system prompt es propiedad del servidor; nunca aceptar mensajes system del cliente.
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=20000)
 
 
 class ChatRequest(BaseModel):
-    model: str = "qwen-engineering"
+    model: str = "atomic-code:16k-8k"
     project_id: str = Field(min_length=1, max_length=200)
-    messages: list[Message]
+    messages: list[Message] = Field(min_length=1, max_length=100)
     temperature: float = Field(0.2, ge=0, le=2)
     max_tokens: int = Field(2048, ge=1, le=8192)
     stream: bool = False
