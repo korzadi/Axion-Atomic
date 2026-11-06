@@ -57,7 +57,7 @@ def _account(quota: int = 20):
     return user_id, project_id
 
 
-def _reserve(user_id, project_id, *, key, amount, request_id=None, digest=None, purchased_fallback_allowed=False):
+def _reserve(user_id, project_id, *, key, amount, request_id=None, digest=None, purchased_fallback_allowed=False, policy_version="test-v1"):
     return reserve_credits(
         engine=engine,
         user_id=user_id,
@@ -66,7 +66,7 @@ def _reserve(user_id, project_id, *, key, amount, request_id=None, digest=None, 
         idempotency_key=key,
         payload_sha256=digest or ("a" * 64),
         required_credits=amount,
-        policy_version="test-v1",
+        policy_version=policy_version,
         purchased_fallback_allowed=purchased_fallback_allowed,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
     )
@@ -119,6 +119,15 @@ def test_same_idempotency_key_rejects_changed_request_or_reservation_amount():
         _reserve(user_id, project_id, key="idem-binding", amount=9, request_id=request_id)
     with pytest.raises(IdempotencyConflict):
         _reserve(user_id, project_id, key="idem-binding", amount=8, request_id=str(uuid.uuid4()))
+    with pytest.raises(IdempotencyConflict):
+        _reserve(user_id, project_id, key="idem-binding", amount=8,
+                 request_id=request_id, policy_version="test-v2")
+    other_project = str(uuid.uuid4())
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO projects (id, name) VALUES (:id, 'Other project')"),
+                     {"id": other_project})
+    with pytest.raises(IdempotencyConflict):
+        _reserve(user_id, other_project, key="idem-binding", amount=8, request_id=request_id)
 
 
 def test_same_idempotency_key_with_different_payload_is_rejected():
