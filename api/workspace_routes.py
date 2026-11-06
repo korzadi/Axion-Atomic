@@ -202,7 +202,7 @@ async def workspace_ingest(req: IngestRequest, user=Depends(_csrf_user)):
 
 @router.post("/agent/tasks")
 async def workspace_task(req: TaskRequest, user=Depends(_csrf_user)):
-    _project_role(user, req.project_id, ("owner", "admin", "editor"))
+    await run_in_threadpool(_project_role, user, req.project_id, ("owner", "admin", "editor"))
     plan = await create_plan(req.goal)
     approval_id = await run_in_threadpool(create_approval, req.project_id, req.goal, plan)
     return {"status": "awaiting_approval", "approval_id": approval_id, "project_id": req.project_id, "plan": plan}
@@ -226,7 +226,7 @@ async def workspace_run_detail(
     user=Depends(_enabled_user),
 ):
     """Devuelve el snapshot de una ejecución solo dentro del proyecto autorizado."""
-    _project_role(user, project_id, ("owner", "admin", "editor", "viewer"))
+    await run_in_threadpool(_project_role, user, project_id, ("owner", "admin", "editor", "viewer"))
     result = await run_in_threadpool(_get_run, run_id, project_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Ejecución inexistente o fuera del proyecto autorizado")
@@ -270,7 +270,7 @@ async def workspace_approve(
     project_id: str = Query(min_length=1, max_length=200),
     user=Depends(_csrf_user),
 ):
-    _project_role(user, project_id, ("owner", "admin"))
+    await run_in_threadpool(_project_role, user, project_id, ("owner", "admin"))
     new_state = "approved" if req.approved else "rejected"
     try:
         changed = await run_in_threadpool(_decide_action_approval, approval_id, project_id, user["id"], new_state, req.note)
