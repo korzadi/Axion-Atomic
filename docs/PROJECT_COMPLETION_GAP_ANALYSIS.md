@@ -33,7 +33,7 @@
 No existe todavía autenticación real de usuarios ni RBAC conectado a las rutas. Una API key global no constituye identidad de usuario. El cliente puede enviar un `project_id`; la API aún no demuestra pertenencia/autorización del usuario a ese proyecto. Hasta implementar y probar usuarios, sesiones, membresías y roles, no exponer endpoints de chat, ingestión ni agente a clientes no confiables.
 
 ### 2. Agente y API
-La API actual usa el planner y el almacén de aprobaciones legado. El nuevo `CodingAgent`, `RunStore` y runtime persistente no están conectados a las rutas HTTP. Las aprobaciones antiguas registran intención y no ejecutan herramientas. Falta diseñar endpoints de runs, acciones, aprobación/rechazo, expiración, restauración y reconciliación, todos limitados por usuario/proyecto. No afirmar ejecución real desde la API.
+La API incluye rutas `/workspace/*` con sesión y roles por proyecto. El endpoint de tareas aún usa el planner y almacén de aprobaciones legado (solo registra intención; no ejecuta herramientas). El listado/decisión de aprobaciones del workspace ya opera sobre `action_approvals` y sincroniza el estado de `agent_run_actions` en una transacción. Sin embargo, el `CodingAgent`, `RunStore` y runtime persistente todavía no están conectados a las rutas HTTP para iniciar, restaurar, reanudar o reconciliar ejecuciones. Falta construir esa capa y probar el ciclo completo; no afirmar ejecución real desde la API.
 
 ### 3. AXION STUDIO
 No se ha encontrado una aplicación frontend propia completa en las rutas inspeccionadas. Falta crear interfaz con registro/login, proyectos, chat, carga de conocimiento, estado de agente, vista previa de cambios, aprobación explícita, logs, consumo, facturación y controles de privacidad/accesibilidad.
@@ -57,7 +57,7 @@ Faltan CI obligatorio, lint/type checks, cobertura, escaneo de dependencias/SAST
 
 1. Inventario final de esquema/migraciones y tests; corregir inconsistencias entre tablas legacy y stores nuevos.
 2. Autenticación segura, sesiones, membresías, RBAC y pruebas de aislamiento.
-3. Conectar el runtime persistente a la API detrás de autorización; mantener las herramientas mutables deshabilitadas hasta validar sandbox y approvals.
+3. Conectar inicio/restauración/reanudación de `CodingAgent` y `RunStore` a la API detrás de autorización; completar el ciclo de approvals persistentes y mantener herramientas mutables deshabilitadas hasta validar sandbox.
 4. Crear AXION STUDIO y flujos de usuario/proyecto.
 5. Completar Payment Manager/QvaPay en modo de pruebas y ledger.
 6. Completar privacidad, accesibilidad, seguridad, CI y observabilidad.
