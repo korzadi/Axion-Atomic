@@ -11,6 +11,7 @@ from api.billing_policy import InsufficientCredits
 from api.billing_reservations import (
     IdempotencyConflict,
     mark_reservation_unknown,
+    reconcile_confirmed_no_execution,
     reserve_credits,
     settle_reservation,
 )
@@ -256,3 +257,58 @@ def test_unknown_provider_result_keeps_credits_reserved():
     assert row.state == "unknown"
     assert row.reserved_credits == 6
     assert row.consumed_credits == 0
+
+
+
+def test_unknown_reservation_requires_audited_confirmation_before_release():
+    user_id, project_id = _account(quota=10)
+    reservation = _reserve(user_id, project_id, key="reconcile-no-execution", amount=6)
+    mark_reservation_unknown(
+        engine=engine, user_id=user_id, reservation_id=reservation.reservation_id,
+    )
+
+    result = reconcile_confirmed_no_execution(
+        engine=engine, user_id=user_id, reservation_id=reservation.reservation_id,
+        actor_user_id=user_id, reason="Proveedor confirmó por escrito que no ejecutó la solicitud.",
+        idempotency_key="admin-reconcile-001",
+    )
+    assert result.state == "released"
+    repeated = reconcile_confirmed_no_execution(
+        engine=engine, user_id=user_id, reservation_id=reservation.reservation_id,
+        actor_user_id=user_id, reason="Proveedor confirmó por escrito que no ejecutó la solicitud.",
+        idempotency_key="admin-reconcile-001",
+    )
+    assert repeated.idempotent is True
+
+    with engine.connect() as conn:
+        row = conn.execute(text("""
+            SELECT q.reserved_credits, q.consumed_credits, r.state
+            FROM billing_quota_periods q
+            JOIN billing_usage_reservations r ON r.user_id=q.user_id
+            WHERE q.user_id=:user_id
+        """), {"user_id": user_id}).one()
+        audit_count = conn.execute(text("""
+            SELECT count(*) FROM billing_reservation_reconciliations
+            WHERE reservation_id=CAST(:id AS UUID)
+        """), {"id": reservation.reservation_id}).scalar_one()
+        release_count = conn.execute(text("""
+            SELECT count(*) FROM billing_credit_ledger
+            WHERE reservation_id=CAST(:id AS UUID) AND event_type='release'
+        """), {"id": reservation.reservation_id}).scalar_one()
+    assert row.state == "released"
+    assert row.reserved_credits == 0
+    assert row.consumed_credits == 0
+    assert audit_count == 1
+    assert release_count == 1
+
+
+def test_held_reservation_cannot_be_released_by_reconciliation():
+    user_id, project_id = _account(quota=10)
+    reservation = _reserve(user_id, project_id, key="reconcile-held", amount=4)
+    from api.billing_reservations import ReservationStateError
+    with pytest.raises(ReservationStateError):
+        reconcile_confirmed_no_execution(
+            engine=engine, user_id=user_id, reservation_id=reservation.reservation_id,
+            actor_user_id=user_id, reason="No ejecución confirmada por proveedor.",
+            idempotency_key="admin-reconcile-held",
+        )
