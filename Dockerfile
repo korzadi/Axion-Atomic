@@ -11,6 +11,8 @@ COPY rag ./rag
 COPY sandbox ./sandbox
 COPY audit ./audit
 COPY migrations ./migrations
+# AXION STUDIO es HTML/CSS/JS estático y se sirve desde FastAPI.
+COPY frontend ./frontend
 USER appuser
 EXPOSE 8000
 # Las migraciones son una operación administrativa explícita; nunca se ejecutan
