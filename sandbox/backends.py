@@ -109,6 +109,13 @@ class LocalBackend:
         return subprocess.run(["unshare", "-rn", "true"], capture_output=True, timeout=10, check=False).returncode == 0
 
     def run(self, argv: list[str], snapshot: str, limits: ResourceLimits, network: bool) -> ExecResult:
+        # El backend local no tiene un mecanismo seguro para conceder egress por ejecución.
+        # Incluso los comandos aprobados deben fallar cerrados salvo opt-in explícito de desarrollo.
+        if network and not self.allow_unsafe_network:
+            raise SandboxUnavailable(
+                "La ejecución local con salida de red está deshabilitada. "
+                "Solo pruebas/desarrollo pueden habilitar AXION_ALLOW_UNSAFE_LOCAL_NETWORK=1."
+            )
         if not network and not self.no_net and not self.allow_unsafe_network:
             raise SandboxUnavailable(
                 "No se pudo aislar la red con un namespace; ejecución local sin red rechazada. "
