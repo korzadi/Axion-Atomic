@@ -97,5 +97,28 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(call_threads[0], loop_thread)
 
 
+    async def test_qdrant_collection_failure_returns_safe_store_error(self):
+        with patch.object(service, "ensure_collection", side_effect=RuntimeError("private endpoint")):
+            with self.assertRaises(service.KnowledgeStoreUnavailable) as caught:
+                await service.ingest_text("Texto seguro", "manual", "project-a")
+        self.assertEqual(str(caught.exception), "El almacén de conocimiento no está disponible")
+        self.assertNotIn("private endpoint", str(caught.exception))
+
+    async def test_embedding_failure_returns_safe_embedding_error_before_upsert(self):
+        with patch.object(service, "ensure_collection"), patch.object(service, "embed", AsyncMock(side_effect=RuntimeError("private model endpoint"))), patch.object(service.client, "upsert") as store:
+            with self.assertRaises(service.EmbeddingServiceUnavailable) as caught:
+                await service.ingest_text("Texto seguro", "manual", "project-a")
+        self.assertEqual(str(caught.exception), "El servicio de embeddings no está disponible")
+        self.assertNotIn("private model endpoint", str(caught.exception))
+        store.assert_not_called()
+
+    async def test_qdrant_upsert_failure_returns_safe_store_error(self):
+        with patch.object(service, "ensure_collection"), patch.object(service, "embed", AsyncMock(return_value=[0.1, 0.2, 0.3, 0.4])), patch.object(service.client, "upsert", side_effect=RuntimeError("private qdrant endpoint")):
+            with self.assertRaises(service.KnowledgeStoreUnavailable) as caught:
+                await service.ingest_text("Texto seguro", "manual", "project-a")
+        self.assertEqual(str(caught.exception), "El almacén de conocimiento no está disponible")
+        self.assertNotIn("private qdrant endpoint", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
