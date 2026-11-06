@@ -16,7 +16,7 @@ def _now():
 
 
 class RunStore:
-    """Almacena snapshots y evita volver a aplicar la misma acción dentro de una ejecución.
+    """Almacena snapshots y evita volver a aplicar la misma acción dentro de un proyecto.
 
     Una acción que quedó en estado 'running' tras una interrupción no se reejecuta
     automáticamente: requiere reconciliación humana porque el efecto externo podría
@@ -39,7 +39,7 @@ class RunStore:
         now = self.clock()
         pending = [
             {"proposal_id": str(p.proposal_id), "tool": p.tool, "args": p.args,
-             "action_hash": p.action_hash, "summary": p.summary}
+             "action_hash": p.action_hash, "summary": p.summary, "action_run_id": p.action_run_id or run.id}
             for p in run.pending
         ]
         changed = self.meta.execute(
@@ -79,7 +79,7 @@ class RunStore:
             (uuid.uuid4().hex, run_id, project_id, tool, action_hash,
              json.dumps(args, sort_keys=True, ensure_ascii=False), str(proposal_id), summary, now, now),
         )
-        row = self.get_action(run_id, action_hash)
+        row = self.get_project_action(project_id, action_hash)
         expected_args = json.dumps(args, sort_keys=True, ensure_ascii=False)
         if row["tool"] != tool or row["args_json"] != expected_args:
             raise RunStoreError("Conflicto de idempotencia: el hash coincide con otra carga útil")
