@@ -136,7 +136,48 @@ async def workspace_approvals(
             ),
             {"project_id": project_id},
         ).mappings().all()
-    return {"items": [dict(row) for row in rows]}
+    with engine.connect() as conn:
+        plan_rows = conn.execute(
+            text(
+                "SELECT id, project_id, goal, plan_json, status, created_at "
+                "FROM approvals WHERE project_id=:project_id AND status='pending' "
+                "ORDER BY created_at"
+            ),
+            {"project_id": project_id},
+        ).mappings().all()
+    return {
+        "items": [dict(row) for row in rows],
+        "plan_items": [dict(row) for row in plan_rows],
+    }
+
+
+@router.post("/agent/plan-approvals/{approval_id}")
+async def workspace_decide_plan_approval(
+    approval_id: int,
+    req: ApprovalRequest,
+    project_id: str = Query(min_length=1, max_length=200),
+    user=Depends(_csrf_user),
+):
+    """Decide una aprobación de plan legado; no ejecuta herramientas."""
+    _project_role(user, project_id, ("owner", "admin"))
+    status = "approved" if req.approved else "rejected"
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                "UPDATE approvals SET status=:status, reviewer=:reviewer, reviewer_note=:note, decided_at=now() "
+                "WHERE id=:approval_id AND project_id=:project_id AND status='pending' RETURNING id"
+            ),
+            {
+                "status": status,
+                "reviewer": user["id"],
+                "note": req.note,
+                "approval_id": approval_id,
+                "project_id": project_id,
+            },
+        ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Aprobación de plan inexistente o ya resuelta")
+    return {"id": approval_id, "project_id": project_id, "status": status, "execution": "not_executed"}
 
 
 @router.post("/agent/approvals/{approval_id}")
