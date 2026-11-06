@@ -297,16 +297,7 @@ Shadow Mode no crea registros persistentes en PostgreSQL, saldos, créditos, res
 - Ningún pago, cobro, crédito o migración activado por este documento.
 
 **Estado de salida:** diseño técnico actualizado con las decisiones iniciales autorizadas; implementación económica aún no iniciada.
-## 11. Criterios de aceptación de Fase 2
 
-- Diagrama lógico de entidades y relaciones aprobado.
-- Semántica exacta de estados e idempotencia documentada.
-- Fórmula de reservas y conciliación definida para éxito, fallo, parcial y resultado desconocido.
-- Reglas de prioridad/expiración de créditos decididas.
-- Ventanas de cuota y zona horaria decididas.
-- Modelo de administración global definido y separado de roles de proyecto.
-- Contrato QvaPay alineado con el documento de integración, sin secretos.
-- Plan de pruebas y migraciones PostgreSQL definido.
-- Ningún pago, cobro, crédito o migración activado por este documento.
+## 12. Diseño separado de persistencia Shadow Mode
 
-**Estado de salida:** diseño inicial preparado para revisión; implementación económica aún no iniciada.
+La propuesta para persistir eventos de inferencia sin facturar se mantiene en `docs/SHADOW_USAGE_POSTGRESQL_DESIGN.md`. Este diseño de facturación no autoriza crear la migración 006 ni activar cuotas, reservas, ledger o cobros. Primero deben pasar las pruebas de contrato y el job PostgreSQL de CI.
