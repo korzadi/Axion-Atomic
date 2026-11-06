@@ -56,6 +56,26 @@ class Engine:
         return conn
 
 
+class CursorCloseFailure(Cursor):
+    def close(self):
+        self.closed = True
+        raise RuntimeError("cursor close failure")
+
+
+class ConnectionWithFailingCursorClose(Connection):
+    def cursor(self):
+        cur = CursorCloseFailure(self)
+        self.cursors.append(cur)
+        return cur
+
+
+class EngineWithFailingCursorClose(Engine):
+    def raw_connection(self):
+        conn = ConnectionWithFailingCursorClose()
+        self.connections.append(conn)
+        return conn
+
+
 class SqlAlchemyMetaStoreTests(unittest.TestCase):
     def test_connection_is_released_after_each_operation(self):
         engine = Engine()
@@ -87,6 +107,18 @@ class SqlAlchemyMetaStoreTests(unittest.TestCase):
         self.assertEqual(conn.rollbacks, 0)
         self.assertTrue(conn.closed)
         self.assertTrue(conn.cursors[0].closed)
+
+    def test_connection_is_released_even_if_cursor_close_fails(self):
+        engine = EngineWithFailingCursorClose()
+        store = SqlAlchemyMetaStore(engine)
+
+        with self.assertRaisesRegex(RuntimeError, "cursor close failure"):
+            store.execute("UPDATE items SET state = ?", ("done",))
+
+        conn = engine.connections[0]
+        self.assertTrue(conn.cursors[0].closed)
+        self.assertTrue(conn.closed)
+        self.assertEqual(conn.commits, 1)
 
     def test_failure_rolls_back_and_releases_connection(self):
         engine = Engine((True,))
