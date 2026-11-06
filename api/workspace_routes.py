@@ -1,6 +1,7 @@
 """API de trabajo multiusuario; cada petición valida sesión y membresía."""
 import json
 import logging
+import uuid
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query
 from sqlalchemy import text
 from api.database import engine
@@ -42,6 +43,7 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
     _project_role(user, req.project_id, ("owner", "admin", "editor", "viewer"))
     if req.stream:
         raise HTTPException(status_code=400, detail="Streaming no está implementado")
+    request_id = str(uuid.uuid4())
     user_text = "\n".join(m.content for m in req.messages if m.role == "user")[-12000:]
     try:
         context = await retrieve(user_text, project_id=req.project_id, limit=5)
@@ -62,6 +64,7 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
     try:
         logger.info(json.dumps({
             "event": "inference_usage_shadow",
+            "request_id": request_id,
             "user_id": str(user["id"]),
             "project_id": req.project_id,
             "requested_model": result.requested_model,
