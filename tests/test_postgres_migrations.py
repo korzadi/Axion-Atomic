@@ -104,6 +104,23 @@ def test_inference_usage_event_schema_is_durable_and_nullable():
     assert columns["prompt_tokens"]["nullable"] is True
     assert columns["output_tokens"]["nullable"] is True
 
+    primary_key = inspector.get_pk_constraint("inference_usage_events")
+    assert primary_key["constrained_columns"] == ["request_id"]
+
+    foreign_keys = inspector.get_foreign_keys("inference_usage_events")
+    assert any(
+        item.get("referred_table") == "users"
+        and item.get("constrained_columns") == ["user_id"]
+        and item.get("options", {}).get("ondelete") == "RESTRICT"
+        for item in foreign_keys
+    )
+    assert any(
+        item.get("referred_table") == "projects"
+        and item.get("constrained_columns") == ["project_id"]
+        and item.get("options", {}).get("ondelete") == "RESTRICT"
+        for item in foreign_keys
+    )
+
     indexes = {item["name"] for item in inspector.get_indexes("inference_usage_events")}
     assert {
         "idx_inference_usage_user_observed",
