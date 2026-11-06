@@ -48,6 +48,9 @@ El código de este repositorio es la base técnica que se está adaptando a AXIO
 El alcance de medición de tokens, cuotas, costes por modelo, créditos, suscripciones, infraestructura, administración y rentabilidad está incorporado al roadmap del proyecto. Sus valores comerciales son propuestas configurables, no planes activos ni costes reales verificados.
 
 - [Auditoría, diseño y roadmap de tokens, créditos y economía](docs/COMMERCIAL_TOKENS_CREDITS_ECONOMICS_ROADMAP.md)
+- [Diseño técnico de facturación y créditos](docs/COMMERCIAL_BILLING_TECHNICAL_DESIGN.md)
+- [Implementación de medición Shadow Mode](docs/SHADOW_USAGE_IMPLEMENTATION.md)
+- [Diseño de persistencia PostgreSQL para Shadow Mode](docs/SHADOW_USAGE_POSTGRESQL_DESIGN.md)
 - La Fase 1 contiene la auditoría inicial de los módulos inspeccionados y las brechas verificadas.
 - No habilitar cobros, ventas ni límites comerciales hasta completar las fases de diseño, implementación, seguridad y pruebas.
 
