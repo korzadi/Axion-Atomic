@@ -42,4 +42,4 @@ def test_knowledge_workspace_uses_authenticated_project_scoped_ingestion():
     assert "X-CSRF-Token" in source
     assert "project_id:projectId" in source
     assert "El backend valida permisos" in source
-    assert "document.querySelector('[data-view=\\\"chat\\\"]')" in source
+    assert "document.querySelector('[data-view=\"chat\"]')" in source
