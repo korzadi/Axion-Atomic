@@ -11,6 +11,7 @@ from typing import Callable
 from agent.git import GitManager
 from agent.toolset import build_tools
 from agent.workspace import PathViolation, Workspace
+from sandbox.backends import DockerBackend
 
 
 _PROJECT_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
@@ -61,7 +62,7 @@ def build_project_toolset(
     git = GitManager(workspace)
     sandbox = None
     if backend is not None:
-        if getattr(backend, "isolation", None) != "container":
+        if not isinstance(backend, DockerBackend):
             raise PathViolation("El runtime de proyecto exige un backend sandbox aislado por contenedor")
         from sandbox.executor import SandboxExecutor
         sandbox = SandboxExecutor(
