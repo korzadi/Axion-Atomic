@@ -18,6 +18,7 @@ _INSERT_USAGE = text("""
         :prompt_tokens, :output_tokens, :total_duration_ns, :load_duration_ns,
         :prompt_eval_duration_ns, :eval_duration_ns, :usage_source, :done
     )
+    ON CONFLICT (request_id) DO NOTHING
 """)
 
 
