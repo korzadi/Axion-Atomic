@@ -21,6 +21,8 @@ def enforce_role(user, project_id, allowed):
 class WorkspaceRoleHttpTests(unittest.TestCase):
     def setUp(self):
         self.role = "viewer"
+        self.admission_patch = patch("api.workspace_routes._enforce_workspace_limit")
+        self.admission_patch.start()
         self.client = TestClient(app)
         app.dependency_overrides[_csrf_user] = lambda: {
             "id": "user-test",
@@ -31,6 +33,7 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
 
     def tearDown(self):
         app.dependency_overrides.clear()
+        self.admission_patch.stop()
 
     def _post(self, path, payload):
         return self.client.post(path, json=payload)
