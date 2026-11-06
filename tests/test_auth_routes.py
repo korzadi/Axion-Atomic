@@ -50,6 +50,17 @@ class AuthRouteGateTests(unittest.TestCase):
             ))
         self.assertEqual(limiter.call_count, 2)
 
+    def test_oauth_callback_rejects_mismatched_browser_state_without_server_error(self):
+        import asyncio
+        from api.auth_routes import oauth_callback
+        with patch("api.auth_routes.settings.auth_enabled", True):
+            response = asyncio.run(oauth_callback(
+                "google", code="authorization-code", state="provider-state",
+                browser_state="different-browser-state",
+            ))
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("oauth_error=cancelled", response.headers["location"])
+
     def test_login_enforces_ip_and_account_rate_limits(self):
         from unittest.mock import Mock
         from fastapi import Request, Response

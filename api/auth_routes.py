@@ -160,7 +160,6 @@ async def oauth_callback(provider: str, code: str | None = None,
         result = RedirectResponse("/?oauth_error=failed", status_code=303)
         result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
         return result
-    import secrets
     from datetime import datetime, timezone
     from api.auth import _digest
     now = datetime.now(timezone.utc)
