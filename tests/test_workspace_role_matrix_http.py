@@ -1,11 +1,12 @@
 """Pruebas HTTP de permisos por rol para las rutas principales de workspace."""
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from api.main import app
+from api.ollama import InferenceResult
 from api.workspace_routes import _csrf_user
 
 
@@ -36,14 +37,23 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
         with (
             patch("api.workspace_routes._project_role", side_effect=enforce_role),
             patch("api.workspace_routes.retrieve", return_value=""),
-            patch("api.workspace_routes.chat", return_value="respuesta") as chat,
+            patch("api.workspace_routes.chat_with_usage", new_callable=AsyncMock, return_value=InferenceResult(
+                content="respuesta", requested_model="atomic-code", returned_model="atomic-code",
+                done=True, prompt_eval_count=3, eval_count=2, total_duration_ns=10,
+                load_duration_ns=None, prompt_eval_duration_ns=None, eval_duration_ns=None,
+                usage_source="ollama_response",
+            )) as chat,
         ):
-            response = self._post("/workspace/chat/completions", {
-                "project_id": "project-a",
-                "messages": [{"role": "user", "content": "hola"}],
-            })
+            with self.assertLogs("axion.usage.shadow", level="INFO") as usage_logs:
+                response = self._post("/workspace/chat/completions", {
+                    "project_id": "project-a",
+                    "messages": [{"role": "user", "content": "hola"}],
+                })
             self.assertEqual(response.status_code, 200)
-            chat.assert_called_once()
+            self.assertEqual(response.json()["choices"][0]["message"]["content"], "respuesta")
+            chat.assert_awaited_once()
+            self.assertIn('"event":"inference_usage_shadow"', usage_logs.output[0])
+            self.assertNotIn("hola", usage_logs.output[0])
 
             denied_ingest = self._post("/workspace/knowledge/ingest", {
                 "project_id": "project-a",
@@ -253,7 +263,12 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
         with (
             patch("api.workspace_routes._project_role", side_effect=enforce_role),
             patch("api.workspace_routes.retrieve", return_value="") as retrieve_mock,
-            patch("api.workspace_routes.chat", return_value="respuesta"),
+            patch("api.workspace_routes.chat_with_usage", new_callable=AsyncMock, return_value=InferenceResult(
+                content="respuesta", requested_model="atomic-code", returned_model="atomic-code",
+                done=True, prompt_eval_count=3, eval_count=2, total_duration_ns=10,
+                load_duration_ns=None, prompt_eval_duration_ns=None, eval_duration_ns=None,
+                usage_source="ollama_response",
+            )),
         ):
             response = self._post("/workspace/chat/completions", {
                 "project_id": "project-a",
