@@ -14,7 +14,7 @@ from api.config import settings
 from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest
 from api.ollama import chat_with_usage
 from api.usage_events import persist_shadow_usage_event
-from rag.service import EmbeddingServiceUnavailable, KnowledgeStoreUnavailable, SensitiveContentError, delete_source, ingest_text, retrieve
+from rag.service import EmbeddingServiceUnavailable, KnowledgeStoreUnavailable, SensitiveContentError, delete_source, ingest_text, list_sources, retrieve
 from agent.planner import create_plan
 from agent.approvals import create_approval
 from agent.project_runtime import ProjectAgentRuntime
@@ -349,6 +349,26 @@ async def workspace_ingest(req: IngestRequest, user=Depends(_csrf_user)):
     except (KnowledgeStoreUnavailable, EmbeddingServiceUnavailable) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     return {"status": "indexed", "project_id": req.project_id, "source_id": source_id, "chunks": count}
+
+
+@router.get("/knowledge/sources")
+async def workspace_list_knowledge_sources(
+    project_id: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=100, ge=1, le=100),
+    user=Depends(_enabled_user),
+):
+    await run_in_threadpool(_project_role, user, project_id, ("owner", "admin", "editor", "viewer"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], project_id, "knowledge_manage",
+        user_limit=60, project_limit=180, window=timedelta(minutes=1),
+    )
+    try:
+        result = await list_sources(project_id, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except KnowledgeStoreUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    return {"project_id": project_id, **result}
 
 
 @router.delete("/knowledge/sources/{source_id}")

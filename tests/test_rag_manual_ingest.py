@@ -146,5 +146,34 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("private qdrant endpoint", str(caught.exception))
 
 
+    async def test_list_sources_groups_fragments_and_never_returns_document_text(self):
+        from types import SimpleNamespace
+        pages = [
+            ([SimpleNamespace(payload={"project_id": "project-a", "source_id": "id-1", "source": "manual", "chunk": 0}),
+              SimpleNamespace(payload={"project_id": "project-a", "source_id": "id-1", "source": "manual", "chunk": 1}),
+              SimpleNamespace(payload={"project_id": "project-b", "source_id": "id-2", "source": "private", "text": "secret"})], None)
+        ]
+        with patch.object(service, "ensure_collection"), patch.object(service.client, "scroll", return_value=pages[0]) as scroll:
+            result = await service.list_sources("project-a")
+        self.assertEqual(result["sources"], [{"source_id": "id-1", "source": "manual", "chunks": 2, "legacy": False}])
+        self.assertFalse(result["truncated"])
+        self.assertNotIn("secret", str(result))
+        self.assertEqual(scroll.call_args.kwargs["with_vectors"], False)
+
+    async def test_list_sources_marks_legacy_documents_without_delete_id(self):
+        from types import SimpleNamespace
+        page = ([SimpleNamespace(payload={"project_id": "project-a", "source": "old-upload", "chunk": 0})], None)
+        with patch.object(service, "ensure_collection"), patch.object(service.client, "scroll", return_value=page):
+            result = await service.list_sources("project-a")
+        self.assertEqual(result["sources"][0]["source_id"], None)
+        self.assertTrue(result["sources"][0]["legacy"])
+
+    async def test_list_sources_rejects_invalid_limit_before_qdrant(self):
+        with patch.object(service.client, "scroll") as scroll:
+            with self.assertRaises(ValueError):
+                await service.list_sources("project-a", limit=101)
+        scroll.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

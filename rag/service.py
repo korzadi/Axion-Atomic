@@ -148,6 +148,60 @@ async def delete_source(source_id: str, project_id: str) -> None:
         raise KnowledgeStoreUnavailable("El almacén de conocimiento no está disponible") from None
 
 
+async def list_sources(project_id: str, limit: int = 100) -> dict:
+    """Lista metadatos de fuentes sin devolver contenido ni vectores."""
+    project_filter = _project_filter(project_id)
+    if not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ValueError("limit debe estar entre 1 y 100")
+    grouped = {}
+    offset = None
+    scanned = 0
+    scan_cap = 5000
+    try:
+        await asyncio.to_thread(ensure_collection)
+        while scanned < scan_cap and len(grouped) <= limit:
+            page_size = min(256, scan_cap - scanned)
+            points, next_offset = await asyncio.to_thread(
+                client.scroll,
+                collection_name=settings.qdrant_collection,
+                scroll_filter=project_filter,
+                limit=page_size,
+                offset=offset,
+                with_payload=["project_id", "source_id", "source", "chunk"],
+                with_vectors=False,
+            )
+            for point in points:
+                payload = point.payload or {}
+                if payload.get("project_id") != project_id:
+                    continue
+                raw_id = payload.get("source_id")
+                source_id = str(raw_id) if raw_id else None
+                # Los registros antiguos sin source_id se agrupan como legado
+                # por nombre de origen y se identifican como no administrables.
+                key = source_id or "legacy:" + str(payload.get("source", "unknown"))
+                item = grouped.setdefault(key, {
+                    "source_id": source_id,
+                    "source": str(payload.get("source", "unknown"))[:MAX_MANUAL_SOURCE_CHARS],
+                    "chunks": 0,
+                    "legacy": source_id is None,
+                })
+                item["chunks"] += 1
+            scanned += len(points)
+            if next_offset is None or not points:
+                offset = None
+                break
+            offset = next_offset
+        truncated = offset is not None or len(grouped) > limit
+    except Exception:
+        logger.error("RAG source listing failed; knowledge store is unavailable")
+        raise KnowledgeStoreUnavailable("El almacén de conocimiento no está disponible") from None
+    sources = sorted(
+        grouped.values(),
+        key=lambda item: (item["source"].casefold(), item["source_id"] or ""),
+    )[:limit]
+    return {"sources": sources, "truncated": truncated}
+
+
 async def retrieve(query: str, project_id: str, limit: int = 5):
     project_filter = _project_filter(project_id)
     if not query.strip():

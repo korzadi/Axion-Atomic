@@ -8,6 +8,7 @@ from api.workspace_routes import (
     workspace_approve,
     workspace_chat,
     workspace_ingest,
+    workspace_list_knowledge_sources,
     workspace_delete_knowledge_source,
     workspace_task,
 )
@@ -261,6 +262,18 @@ class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 await workspace_delete_knowledge_source(source_id, project_id="project-1", user={"id": "user-1"})
         self.assertEqual(raised.exception.status_code, 503)
         delete.assert_awaited_once_with(source_id, "project-1")
+
+
+    async def test_knowledge_source_list_requires_project_membership(self):
+        denied = HTTPException(status_code=404, detail="Proyecto no encontrado")
+        with (
+            patch("api.workspace_routes._project_role", side_effect=denied),
+            patch("api.workspace_routes.list_sources", new=AsyncMock()) as listing,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_list_knowledge_sources(project_id="foreign-project", user={"id": "user-a"})
+        self.assertEqual(raised.exception.status_code, 404)
+        listing.assert_not_awaited()
 
 
 if __name__ == "__main__":
