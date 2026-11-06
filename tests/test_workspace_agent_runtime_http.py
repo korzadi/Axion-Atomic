@@ -23,7 +23,7 @@ class WorkspaceAgentRuntimeHttpTests(unittest.IsolatedAsyncioTestCase):
     async def test_start_calls_persistent_runtime_and_returns_safe_action_summary(self):
         run = self._run("awaiting_approval")
         runtime = SimpleNamespace(start=AsyncMock(return_value=run))
-        with patch("api.workspace_routes._agent_runtime", return_value=runtime):
+        with patch("api.workspace_routes._enforce_workspace_limit"), patch("api.workspace_routes._agent_runtime", return_value=runtime):
             result = await workspace_agent_start(
                 TaskRequest(project_id="project-a", goal="Revisar proyecto"),
                 user={"id": "user-a"},
@@ -43,7 +43,7 @@ class WorkspaceAgentRuntimeHttpTests(unittest.IsolatedAsyncioTestCase):
     async def test_resume_is_scoped_to_user_project_and_run(self):
         run = self._run("done")
         runtime = SimpleNamespace(resume=AsyncMock(return_value=run))
-        with patch("api.workspace_routes._agent_runtime", return_value=runtime):
+        with patch("api.workspace_routes._enforce_workspace_limit"), patch("api.workspace_routes._agent_runtime", return_value=runtime):
             result = await workspace_agent_resume(
                 "run-123", project_id="project-a", user={"id": "user-a"}
             )
@@ -55,7 +55,7 @@ class WorkspaceAgentRuntimeHttpTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_invalid_goal_is_returned_as_422(self):
         runtime = SimpleNamespace(start=AsyncMock(side_effect=ValueError("goal es obligatorio")))
-        with patch("api.workspace_routes._agent_runtime", return_value=runtime):
+        with patch("api.workspace_routes._enforce_workspace_limit"), patch("api.workspace_routes._agent_runtime", return_value=runtime):
             with self.assertRaises(HTTPException) as raised:
                 await workspace_agent_start(
                     TaskRequest(project_id="project-a", goal="valid goal"),
@@ -65,7 +65,7 @@ class WorkspaceAgentRuntimeHttpTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_unavailable_workspace_fails_closed(self):
         runtime = SimpleNamespace(start=AsyncMock(side_effect=OSError("private path")))
-        with patch("api.workspace_routes._agent_runtime", return_value=runtime):
+        with patch("api.workspace_routes._enforce_workspace_limit"), patch("api.workspace_routes._agent_runtime", return_value=runtime):
             with self.assertRaises(HTTPException) as raised:
                 await workspace_agent_start(
                     TaskRequest(project_id="project-a", goal="valid goal"),
