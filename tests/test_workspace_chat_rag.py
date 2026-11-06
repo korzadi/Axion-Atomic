@@ -8,6 +8,11 @@ from api.schemas import ChatRequest, Message
 from api.workspace_routes import workspace_chat
 
 
+async def _run_in_threadpool(func, *args, **kwargs):
+    """Ejecuta el callback síncrono para que las pruebas no omitan autorización."""
+    return func(*args, **kwargs)
+
+
 class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
     def _result(self):
         return SimpleNamespace(
@@ -24,14 +29,16 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
             done=True,
         )
 
-    async def test_chat_retrieves_context_scoped_to_project_before_inference(self):
+    async def test_chat_authorizes_project_before_retrieval_and_inference(self):
         request = ChatRequest(
             project_id="project-a",
             messages=[Message(role="user", content="Resume la documentación")],
         )
         result = self._result()
         with (
-            patch("api.workspace_routes.run_in_threadpool", new=AsyncMock()) as threadpool,
+            patch("api.workspace_routes.run_in_threadpool", side_effect=_run_in_threadpool),
+            patch("api.workspace_routes._project_role") as authorize,
+            patch("api.workspace_routes._enforce_workspace_limit") as rate_limit,
             patch("api.workspace_routes.retrieve", new=AsyncMock(return_value="CONTEXTO DEL PROYECTO")) as retrieve,
             patch("api.workspace_routes.chat_with_usage", new=AsyncMock(return_value=result)) as inference,
             patch("api.workspace_routes.persist_shadow_usage_event"),
@@ -39,6 +46,8 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
         ):
             response = await workspace_chat(request, {"id": "user-a"})
 
+        authorize.assert_called_once_with("user-a", "project-a", ("owner", "admin", "editor", "viewer"))
+        rate_limit.assert_called_once()
         retrieve.assert_awaited_once_with("Resume la documentación", project_id="project-a", limit=5)
         messages = inference.await_args.args[0]
         self.assertEqual(messages[0]["role"], "system")
@@ -47,7 +56,28 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(messages[1], {"role": "user", "content": "Resume la documentación"})
         self.assertEqual(response["choices"][0]["message"]["content"], "Respuesta de prueba")
         self.assertEqual(response["model"], "atomic-code")
-        self.assertTrue(threadpool.await_count >= 2)
+        
+    async def test_chat_denies_non_member_before_rag_or_inference(self):
+        request = ChatRequest(
+            project_id="project-private",
+            messages=[Message(role="user", content="Consulta privada")],
+        )
+        with (
+            patch("api.workspace_routes.run_in_threadpool", side_effect=_run_in_threadpool),
+            patch(
+                "api.workspace_routes._project_role",
+                side_effect=HTTPException(status_code=403, detail="forbidden"),
+            ) as authorize,
+            patch("api.workspace_routes.retrieve", new=AsyncMock()) as retrieve,
+            patch("api.workspace_routes.chat_with_usage", new=AsyncMock()) as inference,
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                await workspace_chat(request, {"id": "user-outsider"})
+
+        self.assertEqual(caught.exception.status_code, 403)
+        authorize.assert_called_once()
+        retrieve.assert_not_awaited()
+        inference.assert_not_awaited()
 
     async def test_chat_fails_closed_when_knowledge_store_is_unavailable(self):
         from rag.service import KnowledgeStoreUnavailable
@@ -57,7 +87,9 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
             messages=[Message(role="user", content="Consulta")],
         )
         with (
-            patch("api.workspace_routes.run_in_threadpool", new=AsyncMock()),
+            patch("api.workspace_routes.run_in_threadpool", side_effect=_run_in_threadpool),
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
             patch(
                 "api.workspace_routes.retrieve",
                 new=AsyncMock(side_effect=KnowledgeStoreUnavailable("knowledge unavailable")),
@@ -80,7 +112,9 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
         result = self._result()
         result.returned_model = "another-model"
         with (
-            patch("api.workspace_routes.run_in_threadpool", new=AsyncMock()),
+            patch("api.workspace_routes.run_in_threadpool", side_effect=_run_in_threadpool),
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
             patch("api.workspace_routes.retrieve", new=AsyncMock(return_value="")),
             patch("api.workspace_routes.chat_with_usage", new=AsyncMock(return_value=result)),
             patch("api.workspace_routes.persist_shadow_usage_event"),
