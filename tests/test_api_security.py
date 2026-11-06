@@ -31,7 +31,7 @@ class ApiKeyTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_valid_key_requires_constant_time_comparison(self):
         secret = "x" * 40
-        with patch.object(settings, "api_key", secret):
+        with patch.object(settings, "legacy_api_enabled", True), patch.object(settings, "api_key", secret):
             await require_api_key(authorization=None, x_api_key=secret)
             with self.assertRaises(HTTPException) as raised:
                 await require_api_key(authorization=None, x_api_key="wrong")
