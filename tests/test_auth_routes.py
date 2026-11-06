@@ -40,7 +40,9 @@ class AuthRouteGateTests(unittest.TestCase):
         request.client.host = "198.51.100.10"
         with patch("api.auth_routes.settings.auth_enabled", True), \
              patch("api.auth_routes._enforce_rate_limit") as limiter, \
-             patch("api.auth_routes.create_user"):
+             patch("api.auth_routes.email_delivery_configured", return_value=True), \
+             patch("api.auth_routes.settings.oauth_public_base_url", "https://axion.example"), \
+             patch("api.auth_routes.create_user", return_value=None):
             import asyncio
             asyncio.run(register(
                 RegisterRequest(email="new@example.com", password="StrongPassword123!", display_name="New"),
