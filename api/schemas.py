@@ -47,3 +47,15 @@ class LoginRequest(BaseModel):
 
 class ProjectCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=120)
+
+class EmailTokenRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=256)
+
+
+class PasswordResetRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=256)
+    new_password: str = Field(min_length=12, max_length=1024)
+
+
+class EmailAddressRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=320)
