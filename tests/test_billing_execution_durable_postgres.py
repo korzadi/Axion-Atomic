@@ -170,9 +170,15 @@ def test_recovery_worker_settles_completed_execution_without_second_inference():
         with pytest.raises(RuntimeError, match="settlement outage"):
             _execute(user_id, project_id, request_id, inference)
 
+    with engine.connect() as conn:
+        target_reservation_id = conn.execute(text("""
+            SELECT id FROM billing_usage_reservations WHERE user_id=:user_id
+        """), {"user_id": user_id}).scalar_one()
+
     cipher = AesGcmResultCipher(TestKeyProvider())
     batch = recover_completed_billing_executions(
         engine=engine, cipher=cipher, limit=10,
+        reservation_id=str(target_reservation_id),
     )
     assert batch.examined == 1
     assert batch.settled == 1
@@ -181,6 +187,7 @@ def test_recovery_worker_settles_completed_execution_without_second_inference():
 
     repeated = recover_completed_billing_executions(
         engine=engine, cipher=cipher, limit=10,
+        reservation_id=str(target_reservation_id),
     )
     assert repeated.examined == 0
     assert repeated.settled == 0
