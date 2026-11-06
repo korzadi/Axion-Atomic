@@ -6,7 +6,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY api ./api
 COPY agent ./agent
+COPY core ./core
 COPY rag ./rag
+COPY sandbox ./sandbox
+COPY audit ./audit
 COPY migrations ./migrations
 USER appuser
 EXPOSE 8000
