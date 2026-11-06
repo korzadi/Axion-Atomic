@@ -18,6 +18,7 @@ La migración 005 define las tablas de identidad y membresía. El módulo `api/a
 - No se ha implementado bootstrap seguro para asignar owner a proyectos ya existentes.
 - Los endpoints legacy siguen protegidos por API key global, no por identidad y membresía. No deben exponerse a usuarios finales hasta reemplazar esa dependencia por sesión + autorización de proyecto.
 - Las rutas `/v1/chat/completions`, `/v1/knowledge/ingest` y `/v1/agent/*` todavía no llaman `authorize_project`; el aislamiento de `project_id` en RAG no sustituye autorización. Mantenerlas solo para uso interno de servicio.
+- Las consultas y decisiones de aprobaciones ahora exigen `project_id` y filtran por él; se eliminó `reviewer` del cuerpo y la API registra `service-api`. Esto evita suplantar nombres de revisores y reduce errores de cruce, pero NO es autorización multiusuario: cualquier poseedor de la API key global aún puede operar sobre cualquier `project_id`.
 - Se añadieron pruebas unitarias para el cierre por defecto y validación de esquemas, pero no se han ejecutado pruebas ni migraciones.
 
-El módulo es una capa de servicio inicial, no una autenticación lista para producción. El cambio de estado a `active` debe ocurrir únicamente después de validar un token de verificación de un solo uso, con expiración y almacenamiento seguro de su hash.
+El módulo es una capa de servicio inicial, no una autenticación lista para producción. Las rutas de aprobación siguen siendo internas y no deben exponerse a clientes finales. El cambio de estado a `active` debe ocurrir únicamente después de validar un token de verificación de un solo uso, con expiración y almacenamiento seguro de su hash.
