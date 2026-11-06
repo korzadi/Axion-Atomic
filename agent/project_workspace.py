@@ -3,6 +3,7 @@
 El identificador procede de la capa de autorización, nunca de una ruta enviada
 por el cliente. Esta fábrica no crea directorios ni concede autorización.
 """
+import os
 import re
 import stat
 from pathlib import Path
@@ -18,27 +19,40 @@ _PROJECT_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
 def project_workspace(root: str | Path, project_id: str) -> Workspace:
-    """Devuelve el workspace existente de un proyecto sin seguir symlinks.
+    """Resuelve un workspace real, hijo directo y con permisos estrictamente privados.
 
     El llamador debe autenticar al usuario y verificar su membresía antes de
-    invocar esta función. El directorio esperado es <root>/<project_id>.
+    invocar esta función. No cambia permisos de directorios existentes: si el
+    workspace permite acceso a grupo/otros, falla de forma cerrada.
     """
     if not isinstance(project_id, str) or not _PROJECT_ID.fullmatch(project_id):
         raise PathViolation("Identificador de proyecto inválido")
 
     base = Path(root).resolve(strict=True)
-    if not base.is_dir():
-        raise PathViolation("La raíz de workspaces no es un directorio")
-
-    candidate = base / project_id
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
     try:
-        info = candidate.lstat()
-    except FileNotFoundError:
-        raise PathViolation("El workspace del proyecto no existe") from None
-    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
-        raise PathViolation("El workspace debe ser un directorio real, no un symlink")
+        root_fd = os.open(base, flags)
+    except OSError as exc:
+        raise PathViolation("La raíz de workspaces no es un directorio seguro") from exc
+    try:
+        try:
+            child_fd = os.open(project_id, flags, dir_fd=root_fd)
+        except FileNotFoundError:
+            raise PathViolation("El workspace del proyecto no existe") from None
+        except OSError as exc:
+            raise PathViolation("El workspace debe ser un directorio real, no un symlink") from exc
+        try:
+            info = os.fstat(child_fd)
+            if not stat.S_ISDIR(info.st_mode):
+                raise PathViolation("El workspace debe ser un directorio")
+            if stat.S_IMODE(info.st_mode) & 0o077:
+                raise PathViolation("El workspace debe tener permisos privados (700 o más restrictivos)")
+        finally:
+            os.close(child_fd)
+    finally:
+        os.close(root_fd)
 
-    resolved = candidate.resolve(strict=True)
+    resolved = (base / project_id).resolve(strict=True)
     if resolved.parent != base:
         raise PathViolation("El workspace sale de la raíz autorizada")
     return Workspace(resolved, project_id)

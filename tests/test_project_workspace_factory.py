@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,13 +10,17 @@ from sandbox.backends import DockerBackend
 
 
 class ProjectWorkspaceFactoryTests(unittest.TestCase):
-    def test_binds_only_the_requested_existing_project_directory(self):
+    def _private_dir(self, path: Path) -> None:
+        path.mkdir(mode=0o700)
+        path.chmod(0o700)
+
+    def test_binds_only_the_requested_existing_private_project_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             first = root / "project_A"
             second = root / "project_B"
-            first.mkdir()
-            second.mkdir()
+            self._private_dir(first)
+            self._private_dir(second)
             (first / "marker.txt").write_text("A", encoding="utf-8")
             (second / "marker.txt").write_text("B", encoding="utf-8")
 
@@ -42,20 +47,38 @@ class ProjectWorkspaceFactoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "workspaces"
             outside = Path(tmp) / "outside"
-            root.mkdir()
-            outside.mkdir()
+            self._private_dir(root)
+            self._private_dir(outside)
             (outside / "secret.txt").write_text("not for this project", encoding="utf-8")
             (root / "project_A").symlink_to(outside, target_is_directory=True)
 
             with self.assertRaises(PathViolation):
                 project_workspace(root, "project_A")
 
+    def test_rejects_group_or_world_accessible_workspace_without_chmod(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workspace_dir = root / "project_A"
+            workspace_dir.mkdir(mode=0o755)
+            workspace_dir.chmod(0o755)
+            with self.assertRaisesRegex(PathViolation, "permisos privados"):
+                project_workspace(root, "project_A")
+            self.assertEqual(workspace_dir.stat().st_mode & 0o777, 0o755)
+
+    def test_accepts_more_restrictive_permissions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workspace_dir = root / "project_A"
+            self._private_dir(workspace_dir)
+            workspace_dir.chmod(0o500)
+            self.assertEqual(project_workspace(root, "project_A").root, workspace_dir)
+
     def test_toolset_is_bound_to_one_project_workspace(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             for project_id, marker in (("project_A", "A"), ("project_B", "B")):
                 directory = root / project_id
-                directory.mkdir()
+                self._private_dir(directory)
                 (directory / "marker.txt").write_text(marker, encoding="utf-8")
 
             workspace_a, tools_a = build_project_toolset(root, "project_A")
@@ -72,7 +95,7 @@ class ProjectWorkspaceFactoryTests(unittest.TestCase):
             isolation = "none"
 
         with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "project_A").mkdir()
+            self._private_dir(Path(tmp) / "project_A")
             with self.assertRaisesRegex(PathViolation, "contenedor"):
                 build_project_toolset(tmp, "project_A", backend=LocalLikeBackend())
 
@@ -80,7 +103,7 @@ class ProjectWorkspaceFactoryTests(unittest.TestCase):
         backend = object.__new__(DockerBackend)
 
         with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "project_A").mkdir()
+            self._private_dir(Path(tmp) / "project_A")
             with patch("sandbox.executor.SandboxExecutor") as executor:
                 workspace, tools = build_project_toolset(
                     tmp, "project_A", backend=backend
