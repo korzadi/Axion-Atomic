@@ -103,6 +103,10 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
             # Incluso un handler de logging defectuoso debe quedar aislado.
             pass
 
+    # Fail closed: nunca devolver como ATOMIC CODE una respuesta de otro modelo.
+    if result.requested_model != settings.chat_model or result.returned_model != settings.chat_model:
+        raise HTTPException(status_code=503, detail="El modelo ejecutado no coincide con el modelo autorizado")
+
     return {
         "id": "axion-atomic-local", "object": "chat.completion", "created": 0,
         "model": req.model,
