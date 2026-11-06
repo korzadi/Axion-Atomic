@@ -328,3 +328,8 @@ La implementación inicial de Shadow Mode se publicó en `main`:
 ## 17. Diseño de persistencia Shadow Mode (6 de noviembre de 2026)
 
 Se publicó `docs/SHADOW_USAGE_POSTGRESQL_DESIGN.md` como propuesta técnica para almacenar observaciones de inferencia en PostgreSQL. Define una tabla append-only con identidad individual, atribución opcional al proyecto, request_id idempotente, contadores y duraciones de Ollama, permisos de solo inserción/lectura y pruebas PostgreSQL requeridas. No crea migraciones ni tablas y no activa facturación. El siguiente paso es cerrar CI y validar el contrato en PostgreSQL efímero de CI antes de crear la migración 006.
+
+
+## 18. CI con PostgreSQL efímero
+
+Se añadió un job independiente `postgres-migrations` a `.github/workflows/ci.yml`. Usa PostgreSQL 16 efímero, aplica las cinco migraciones versionadas dos veces para verificar idempotencia y ejecuta `tests/test_postgres_migrations.py` para comprobar tablas, relaciones, restricciones e índices del esquema actual. El job todavía debe completar satisfactoriamente en GitHub Actions. Esta verificación no crea ni prueba aún la tabla de telemetría `inference_usage_events` y no implica cambios en bases de datos reales.
