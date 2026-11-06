@@ -79,7 +79,15 @@ La inspección estática de `Dockerfile`, `compose.yaml` y `sandbox/backends.py`
 
 ## Endurecimiento adicional: salida de red del sandbox
 
-- `DockerBackend` ahora rechaza por defecto cualquier ejecución solicitada con red. La existencia de una red llamada `axion-sandbox-egress` no demuestra que tenga filtrado de salida; habilitarla requiere una política egress real, verificada y una decisión explícita de configuración.
+- `DockerBackend` rechaza toda ejecución solicitada con red. Se eliminó el opt-in `allow_egress`; también rechaza configuraciones que intenten proporcionar una red egress. No existe un mecanismo para habilitar salida de red hasta implementar y verificar una política real.
 - `LocalBackend` ya no interpreta silenciosamente la ausencia de `unshare` o de permisos para crear namespaces como si la red estuviera aislada. Si no puede crear el namespace de red y no existe una excepción explícita reservada a pruebas/desarrollo, rechaza la ejecución.
 - Las pruebas locales que necesitan red declaran ahora de forma explícita `AXION_ALLOW_UNSAFE_LOCAL_NETWORK=1`. Esa excepción no debe configurarse en producción.
 - Este cambio es de fail-closed; no habilita red ni conecta el runtime HTTP. El backend Docker continúa sin estar configurado en Compose y no se ejecutó ningún contenedor real.
+
+
+### Bloqueo reforzado de egress Docker
+
+- La configuración ya no permite habilitar egress mediante un booleano ni mediante el nombre de una red Docker.
+- Cualquier solicitud de ejecución Docker con `network=True` falla cerrada antes de invocar el daemon.
+- Se añadieron pruebas para rechazar tanto la ejecución con red como los intentos de configurar `allow_egress` o una red egress.
+- Esto no demuestra aislamiento de Docker en tiempo real: el daemon, los montajes y los límites siguen pendientes de integración en un entorno desechable.
