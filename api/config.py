@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     google_oauth_client_secret: str | None = None
     github_oauth_client_id: str | None = None
     github_oauth_client_secret: str | None = None
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_starttls: bool = True
+    smtp_ssl: bool = False
+    email_from: str | None = None
 
 
 settings = Settings()
