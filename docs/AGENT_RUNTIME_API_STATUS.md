@@ -45,3 +45,12 @@ No se debe adaptar `MetaStore` creando una conexión DB-API global tomada del po
 - Estas pruebas se añadieron, pero no se han ejecutado en este entorno. El adaptador no equivale a una validación de integración contra PostgreSQL real.
 
 El adaptador no autentica ni autoriza usuarios, no determina el directorio de trabajo, no crea un sandbox y no habilita endpoints HTTP. La conexión del runtime a la API sigue bloqueada hasta completar y probar el aislamiento de workspace, el backend Docker y el ciclo de aprobación/reconciliación.
+
+## Revisión adicional de confinamiento de rutas
+
+- Se inspeccionó `agent/workspace.py`: las rutas absolutas y los destinos resueltos fuera de la raíz del proyecto se rechazan; los symlinks que apuntan dentro del proyecto se resuelven al destino.
+- Se añadió `tests/test_workspace_path_confinement.py` para cubrir traversal, symlinks externos en lectura/escritura y symlinks internos.
+- La prueba es una regresión de la política existente; todavía no se ha ejecutado.
+- **Riesgo residual importante:** la comprobación usa resolución de rutas seguida de operaciones de filesystem separadas. Un proceso local concurrente que pueda modificar el árbol del workspace podría intentar una carrera TOCTOU (cambiar symlinks/componentes entre validación y uso). Estas pruebas no eliminan ni demuestran ausencia de esa carrera.
+- Antes de exponer herramientas de escritura a usuarios, sustituir las operaciones sensibles por acceso basado en descriptores de directorio (`openat`/equivalentes con `O_NOFOLLOW`), o ejecutar el workspace dentro de un volumen aislado cuya estructura no pueda modificar otro usuario/proceso; añadir pruebas de carrera en Linux.
+- La configuración y el despliegue del backend Docker siguen sin verificarse; no se debe interpretar la existencia de `DockerBackend` como prueba de que la API lo usa correctamente.
