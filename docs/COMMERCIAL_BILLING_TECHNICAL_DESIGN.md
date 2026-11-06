@@ -196,6 +196,57 @@ La carpeta `migrations/rollback/` contiene actualmente:
 
 El migrador `api/migrate.py` confirma checksum, lock consultivo PostgreSQL y transacción por migración. El lock se libera en `finally`; el archivo de migración aplicado no se debe editar. No se ejecutó el migrador ni ningún script down.
 
+## 8.2 Contrato de inferencia y modo de observación
+
+La lectura de `api/ollama.py`, `api/workspace_routes.py`, `api/schemas.py` y `api/main.py` confirma:
+
+- `chat()` devuelve únicamente `message.content` y descarta metadatos de uso de Ollama.
+- La ruta autenticada `/workspace/chat/completions` compone un system prompt del servidor con contexto RAG antes de llamar a Ollama.
+- El esquema del cliente solo admite mensajes `user/assistant`; el cliente no puede suministrar el system prompt.
+- El campo `model` del request no selecciona el motor. El adaptador usa `settings.chat_model`; la respuesta actual informa el modelo configurado, no verifica el campo `model` devuelto por Ollama.
+- La API heredada `/v1/chat/completions` usa una API key compartida, no identifica un usuario económico y queda excluida de billing individual mientras no exista identidad individual verificable.
+- Streaming no está implementado y debe permanecer deshabilitado.
+
+### Resultado tipado propuesto
+
+El adaptador debe evolucionar de devolver un string a devolver un objeto inmutable equivalente a:
+
+```python
+InferenceResult(
+    content: str,
+    requested_model: str,
+    returned_model: str | None,
+    done: bool | None,
+    prompt_eval_count: int | None,
+    eval_count: int | None,
+    total_duration_ns: int | None,
+    load_duration_ns: int | None,
+    prompt_eval_duration_ns: int | None,
+    eval_duration_ns: int | None,
+    usage_source: Literal["ollama_response", "estimated", "unavailable"],
+)
+```
+
+Validaciones obligatorias: contadores enteros no negativos; no convertir campos ausentes en cero; registrar requested_model y returned_model por separado; duración en unidad explícita; no registrar prompt ni respuesta en telemetría económica. El endpoint seguirá devolviendo el mismo contrato público de chat, añadiendo solo metadatos no sensibles si se aprueba expresamente.
+
+### Qué cuenta como input
+
+El input facturable debe corresponder al prompt que realmente recibe el motor, incluyendo system prompt de AXION, historial enviado, contexto RAG y cualquier mensaje/herramienta incorporado antes de la inferencia. La fuente primaria es `prompt_eval_count` de Ollama; no se deben sumar manualmente las longitudes de mensajes porque eso duplicaría/estimaría tokens. El output primario es `eval_count`.
+
+### Primera fase de código: shadow mode
+
+La primera implementación de medición debe operar sin alterar el comportamiento económico:
+
+1. Obtener el resultado tipado del adaptador.
+2. Continuar devolviendo `content` como hoy.
+3. Registrar en telemetría solo identidad autenticada, proyecto, modelo solicitado/devuelto, contadores disponibles, fuente, duración, estado y correlation/request ID.
+4. No crear saldo, reservar cuota, bloquear peticiones, cobrar, vender créditos ni aplicar límites.
+5. Si falla la escritura de telemetría, no convertir una inferencia exitosa en error para el usuario; registrar el fallo de forma segura y no filtrar datos.
+6. Mantener la ruta heredada `/v1` fuera de la telemetría individual hasta resolver identidad.
+7. Añadir pruebas unitarias para payloads Ollama completos, campos ausentes, tipos inválidos, fallo HTTP, timeout y compatibilidad del contrato público.
+
+La salida de shadow mode será un inventario de precisión real del contador y volumen de uso. Solo después de verificarlo se diseñarán reservas y cuotas activas. La telemetría de shadow mode no es un libro contable y no debe usarse para cobrar.
+
 ## 9. Orden recomendado de construcción
 
 1. Contratos y adaptador de inferencia tipado con metadatos de uso (sin facturar).
