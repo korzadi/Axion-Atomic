@@ -36,7 +36,7 @@ async function newPage(role = "owner") {
     status: 200, contentType: "application/json", body: JSON.stringify({ models: [], checkout_enabled: false })
   }));
   await page.goto(baseUrl);
-  await page.locator('[data-open="login"]').click();
+  await page.locator('[data-open="login"]').first().click();
   await page.locator("#email").fill(user.email);
   await page.locator("#password").fill("correct-horse-battery-1");
   await page.locator("#submitAuth").click();
