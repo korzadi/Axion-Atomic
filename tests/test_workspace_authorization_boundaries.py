@@ -271,7 +271,7 @@ class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
             patch("api.workspace_routes.list_sources", new=AsyncMock()) as listing,
         ):
             with self.assertRaises(HTTPException) as raised:
-                await workspace_list_knowledge_sources(project_id="foreign-project", user={"id": "user-a"})
+                await workspace_list_knowledge_sources(project_id="foreign-project", limit=100, user={"id": "user-a"})
         self.assertEqual(raised.exception.status_code, 404)
         listing.assert_not_awaited()
 
