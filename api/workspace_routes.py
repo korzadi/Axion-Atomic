@@ -2,6 +2,7 @@
 import json
 import logging
 import uuid
+from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query
 from sqlalchemy import text
 from api.database import engine
@@ -63,7 +64,8 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
     # Shadow mode: persiste medición técnica, pero no crea cargos, reservas ni saldos.
     # La persistencia best-effort no debe interrumpir una inferencia ya completada.
     try:
-        persist_shadow_usage_event(
+        await run_in_threadpool(
+            persist_shadow_usage_event,
             request_id=request_id,
             user_id=user["id"],
             project_id=req.project_id,
