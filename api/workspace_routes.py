@@ -14,7 +14,7 @@ from api.config import settings
 from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest
 from api.ollama import chat_with_usage
 from api.usage_events import persist_shadow_usage_event
-from rag.service import EmbeddingServiceUnavailable, KnowledgeStoreUnavailable, SensitiveContentError, delete_source, ingest_text, list_sources, retrieve
+from rag.service import EmbeddingServiceUnavailable, KnowledgeStoreUnavailable, SensitiveContentError, delete_source, ingest_text, list_sources, replace_source, retrieve
 from agent.planner import create_plan
 from agent.approvals import create_approval
 from agent.project_runtime import ProjectAgentRuntime
@@ -349,6 +349,28 @@ async def workspace_ingest(req: IngestRequest, user=Depends(_csrf_user)):
     except (KnowledgeStoreUnavailable, EmbeddingServiceUnavailable) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     return {"status": "indexed", "project_id": req.project_id, "source_id": source_id, "chunks": count}
+
+
+@router.put("/knowledge/sources/{source_id}")
+async def workspace_replace_knowledge_source(
+    source_id: str,
+    req: IngestRequest,
+    user=Depends(_csrf_user),
+):
+    await run_in_threadpool(_project_role, user, req.project_id, ("owner", "admin", "editor"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], req.project_id, "knowledge_manage",
+        user_limit=10, project_limit=30, window=timedelta(hours=1),
+    )
+    try:
+        count = await replace_source(source_id, req.text, req.source, req.project_id)
+    except SensitiveContentError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=404 if "No se encontró" in str(exc) else 422, detail=str(exc)) from None
+    except (KnowledgeStoreUnavailable, EmbeddingServiceUnavailable) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    return {"status": "reindexed", "project_id": req.project_id, "source_id": str(uuid.UUID(source_id)), "chunks": count}
 
 
 @router.get("/knowledge/sources")

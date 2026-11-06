@@ -123,6 +123,94 @@ async def ingest_text(text, source, project_id: str, source_id: str | None = Non
     return len(points)
 
 
+async def replace_source(source_id: str, text: str, source: str, project_id: str) -> int:
+    """Reindexa una fuente conservando su ID; publica la nueva versión antes de retirar la anterior."""
+    validate_manual_ingest(text, source, project_id)
+    try:
+        normalized_source_id = str(uuid.UUID(source_id))
+    except (ValueError, TypeError, AttributeError):
+        raise ValueError("source_id debe ser un UUID válido") from None
+    project_filter = models.Filter(
+        must=_project_filter(project_id).must + [
+            models.FieldCondition(key="source_id", match=models.MatchValue(value=normalized_source_id))
+        ]
+    )
+    try:
+        await asyncio.to_thread(ensure_collection)
+        old_ids = []
+        offset = None
+        while True:
+            points, next_offset = await asyncio.to_thread(
+                client.scroll,
+                collection_name=settings.qdrant_collection,
+                scroll_filter=project_filter,
+                limit=256,
+                offset=offset,
+                with_payload=["project_id", "source_id"],
+                with_vectors=False,
+            )
+            old_ids.extend(point.id for point in points if (point.payload or {}).get("project_id") == project_id and (point.payload or {}).get("source_id") == normalized_source_id)
+            if next_offset is None or not points:
+                break
+            offset = next_offset
+            if len(old_ids) > 10000:
+                raise KnowledgeStoreUnavailable("La fuente supera el límite seguro de reindexación")
+        if not old_ids:
+            raise ValueError("No se encontró la fuente en este proyecto")
+    except ValueError:
+        raise
+    except KnowledgeStoreUnavailable:
+        raise
+    except Exception:
+        logger.error("RAG source replacement failed while reading existing chunks")
+        raise KnowledgeStoreUnavailable("El almacén de conocimiento no está disponible") from None
+
+    new_points = []
+    for index, chunk in enumerate(chunk_text(text)):
+        try:
+            vector = await embed(chunk)
+        except Exception:
+            logger.error("RAG source replacement failed; embedding service is unavailable")
+            raise EmbeddingServiceUnavailable("El servicio de embeddings no está disponible") from None
+        new_points.append(models.PointStruct(
+            id=str(uuid.uuid4()),
+            vector=vector,
+            payload={"text": chunk, "source": source, "source_id": normalized_source_id, "project_id": project_id, "chunk": index},
+        ))
+    try:
+        await asyncio.to_thread(
+            client.upsert,
+            collection_name=settings.qdrant_collection,
+            points=new_points,
+            wait=True,
+        )
+    except Exception:
+        logger.error("RAG source replacement failed while publishing new chunks")
+        raise KnowledgeStoreUnavailable("El almacén de conocimiento no está disponible") from None
+    try:
+        await asyncio.to_thread(
+            client.delete,
+            collection_name=settings.qdrant_collection,
+            points_selector=models.PointIdsList(points=old_ids),
+            wait=True,
+        )
+    except Exception:
+        # La versión previa permanece intacta si no se logra limpiar; se intenta
+        # retirar la nueva para evitar duplicados visibles.
+        try:
+            await asyncio.to_thread(
+                client.delete,
+                collection_name=settings.qdrant_collection,
+                points_selector=models.PointIdsList(points=[point.id for point in new_points]),
+                wait=True,
+            )
+        except Exception:
+            logger.error("RAG source replacement rollback failed; manual reconciliation required")
+        logger.error("RAG source replacement failed while retiring previous chunks")
+        raise KnowledgeStoreUnavailable("No se pudo completar la sustitución de la fuente") from None
+    return len(new_points)
+
+
 async def delete_source(source_id: str, project_id: str) -> None:
     """Elimina todos los fragmentos de una fuente, siempre dentro del proyecto indicado."""
     project_filter = _project_filter(project_id)

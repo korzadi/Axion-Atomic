@@ -9,6 +9,7 @@ from api.workspace_routes import (
     workspace_chat,
     workspace_ingest,
     workspace_list_knowledge_sources,
+    workspace_replace_knowledge_source,
     workspace_delete_knowledge_source,
     workspace_task,
 )
@@ -274,6 +275,21 @@ class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 await workspace_list_knowledge_sources(project_id="foreign-project", limit=100, user={"id": "user-a"})
         self.assertEqual(raised.exception.status_code, 404)
         listing.assert_not_awaited()
+
+
+    async def test_knowledge_source_replace_requires_editor_and_maps_store_errors(self):
+        from rag.service import KnowledgeStoreUnavailable
+        request = IngestRequest(project_id="project-1", text="contenido actualizado")
+        denied = HTTPException(status_code=403, detail="forbidden")
+        with patch("api.workspace_routes._project_role", side_effect=denied), patch("api.workspace_routes.replace_source", new=AsyncMock()) as replace:
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_replace_knowledge_source("12345678-1234-5678-1234-567812345678", request, user={"id": "user-a"})
+        self.assertEqual(raised.exception.status_code, 403)
+        replace.assert_not_awaited()
+        with patch("api.workspace_routes._project_role", return_value="editor"), patch("api.workspace_routes.replace_source", new=AsyncMock(side_effect=KnowledgeStoreUnavailable("El almacén de conocimiento no está disponible"))):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_replace_knowledge_source("12345678-1234-5678-1234-567812345678", request, user={"id": "user-a"})
+        self.assertEqual(raised.exception.status_code, 503)
 
 
 if __name__ == "__main__":

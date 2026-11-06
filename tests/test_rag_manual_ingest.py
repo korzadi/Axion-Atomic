@@ -175,5 +175,40 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
         scroll.assert_not_called()
 
 
+    async def test_replace_source_publishes_new_chunks_then_retires_old_ids(self):
+        from types import SimpleNamespace
+        source_id = "12345678-1234-5678-1234-567812345678"
+        old = SimpleNamespace(id="old-point", payload={"project_id": "project-a", "source_id": source_id})
+        calls = []
+        def scroll(**kwargs):
+            return ([old], None)
+        def upsert(**kwargs):
+            calls.append(("upsert", kwargs))
+        def delete(**kwargs):
+            calls.append(("delete", kwargs))
+        with patch.object(service, "ensure_collection"), patch.object(service.client, "scroll", side_effect=scroll), patch.object(service, "embed", AsyncMock(return_value=[0.1, 0.2, 0.3, 0.4])), patch.object(service.client, "upsert", side_effect=upsert), patch.object(service.client, "delete", side_effect=delete):
+            count = await service.replace_source(source_id, "Nuevo contenido válido", "manual-v2", "project-a")
+        self.assertEqual(count, 1)
+        self.assertEqual([call[0] for call in calls], ["upsert", "delete"])
+        self.assertEqual(calls[1][1]["points_selector"].points, ["old-point"])
+
+    async def test_replace_source_keeps_old_chunks_when_embedding_fails(self):
+        from types import SimpleNamespace
+        source_id = "12345678-1234-5678-1234-567812345678"
+        old = SimpleNamespace(id="old-point", payload={"project_id": "project-a", "source_id": source_id})
+        with patch.object(service, "ensure_collection"), patch.object(service.client, "scroll", return_value=([old], None)), patch.object(service, "embed", AsyncMock(side_effect=RuntimeError("private embed endpoint"))), patch.object(service.client, "upsert") as upsert, patch.object(service.client, "delete") as delete:
+            with self.assertRaises(service.EmbeddingServiceUnavailable):
+                await service.replace_source(source_id, "Nuevo contenido válido", "manual-v2", "project-a")
+        upsert.assert_not_called()
+        delete.assert_not_called()
+
+    async def test_replace_source_refuses_source_from_another_project(self):
+        source_id = "12345678-1234-5678-1234-567812345678"
+        with patch.object(service, "ensure_collection"), patch.object(service.client, "scroll", return_value=([], None)), patch.object(service.client, "upsert") as upsert:
+            with self.assertRaisesRegex(ValueError, "No se encontró"):
+                await service.replace_source(source_id, "Nuevo contenido válido", "manual-v2", "project-a")
+        upsert.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
