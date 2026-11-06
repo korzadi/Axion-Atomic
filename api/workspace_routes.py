@@ -300,7 +300,10 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
             ],
         )
     except Exception:
-        logger.warning("No se pudo persistir el historial de chat")
+        try:
+            logger.warning("No se pudo persistir el historial de chat")
+        except Exception:
+            pass
         raise HTTPException(status_code=503, detail="No se pudo guardar el historial de la conversación") from None
 
     return {
