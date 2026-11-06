@@ -36,6 +36,13 @@ El código de este repositorio es la base técnica que se está adaptando a AXIO
 - No se construyen imágenes Docker, ejecutan migraciones ni reinician servicios sin autorización expresa.
 - Los secretos nunca deben incorporarse al repositorio ni exponerse en logs.
 
+## Workspaces y aislamiento por proyecto
+
+- La creación web de proyectos provisiona un directorio hijo exclusivo bajo `WORKSPACE_ROOT` (por defecto `/workspace`) y aplica permisos `0700`.
+- La resolución del workspace rechaza enlaces simbólicos, rutas fuera de la raíz y directorios con permisos de grupo u otros; no corrige permisos de directorios existentes automáticamente.
+- En Compose, `./workspace` se monta en `/workspace` y la API se ejecuta como UID `10001` (`appuser`). Por ello, el directorio del host debe existir y ser escribible por ese UID antes de habilitar la creación de proyectos. No se cambia su propietario ni se ejecutan `chown` automáticamente.
+- Si la raíz no está disponible o no permite escritura, la creación falla de forma cerrada; no se crea una raíz alternativa.
+
 ## Estado de implementación
 
 Este repositorio está en desarrollo por fases. La presencia de una carpeta, documento o esquema no demuestra por sí sola que una capacidad esté integrada. Cada fase debe informar qué se implementó, qué pruebas se ejecutaron realmente y qué queda pendiente.
