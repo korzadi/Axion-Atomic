@@ -169,8 +169,34 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch("api.workspace_routes._save_chat_history") as save_history,
         ):
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(HTTPException) as caught:
                 await workspace_chat(request, {"id": "user-a"})
 
+        self.assertEqual(caught.exception.status_code, 503)
+        self.assertEqual(caught.exception.detail, "El servicio de inferencia no está disponible")
+        save_history.assert_not_called()
+
+    async def test_chat_rejects_incomplete_inference_without_persisting_history(self):
+        request = ChatRequest(
+            project_id="project-a",
+            messages=[Message(role="user", content="Respuesta parcial")],
+        )
+        result = self._result()
+        result.done = False
+        with (
+            patch("api.workspace_routes.run_in_threadpool", side_effect=_run_in_threadpool),
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.retrieve", new=AsyncMock(return_value="")),
+            patch("api.workspace_routes.chat_with_usage", new=AsyncMock(return_value=result)),
+            patch("api.workspace_routes.persist_shadow_usage_event"),
+            patch("api.workspace_routes._save_chat_history") as save_history,
+            patch("api.workspace_routes.settings.chat_model", "atomic-code:16k-8k"),
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                await workspace_chat(request, {"id": "user-a"})
+
+        self.assertEqual(caught.exception.status_code, 503)
+        self.assertEqual(caught.exception.detail, "La inferencia no terminó correctamente")
         save_history.assert_not_called()
 
