@@ -144,6 +144,19 @@ Una tabla económica de auditoría debe guardar actor, acción, entidad, identif
 
 La operación de conciliación es idempotente mediante UNIQUE(request_id, settlement_kind) y transición condicional desde estados permitidos. Dos workers pueden competir, pero solo uno puede cerrar la petición.
 
+## 4.1 Cota de reserva previa para ATOMIC CODE (prototipo no conectado)
+
+Se añadió `api/billing_budget.py` como cálculo puro y verificable de una cota previa. Para el runtime fijado `atomic-code:16k-8k`, la política reconoce únicamente el contrato de tokenizer Qwen byte-fallback. La cantidad de bytes UTF-8 del contenido completo es una cota superior conservadora de tokens de contenido para ese contrato; se suman 32 tokens por mensaje y 256 de overhead fijo de plantilla como margen explícito y versionado.
+
+La función recibe la lista FINAL que se enviaría a Ollama, después de incorporar instrucciones del sistema, historial y RAG. Reserva también el máximo `num_predict` solicitado. Rechaza antes de inferencia si la cota input + output supera `num_ctx`, si el runtime no coincide exactamente o si el contrato de tokenizer no está soportado. La reserva en créditos aplica los ponderadores versionados a ambas cotas.
+
+**Límites y condición de activación:**
+- Es una cota conservadora para el contrato Qwen byte-fallback, no un tokenizer ejecutable ni una medición de uso real.
+- La identificación del tag Ollama no demuestra por sí sola que su contenido no haya sido sustituido. Antes de activar cobro hay que verificar el digest/Modelfile/tokenizer del artefacto desplegado y fijar ese digest en el catálogo de modelo.
+- Los 32 tokens por mensaje y 256 de plantilla son márgenes de seguridad configurables; deben contrastarse con la plantilla real del artefacto. No disminuirlos sin evidencia y pruebas.
+- El valor devuelto todavía NO se pasa a `reserve_credits`, no se crea reserva y no se llama desde la ruta HTTP. Shadow Usage sigue sin cargos.
+- La siguiente integración deberá calcular esta cota sobre los mensajes finales, persistir la reserva de forma atómica y solo después llamar a Ollama. Cualquier error o incertidumbre antes de la inferencia debe impedir la llamada.
+
 ## 5. Concurrencia y límites
 
 - PostgreSQL es autoridad: `SELECT ... FOR UPDATE` sobre filas de cuota/lotes y actualizaciones condicionales con saldo suficiente.
