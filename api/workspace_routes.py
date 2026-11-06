@@ -182,7 +182,7 @@ def _get_chat_history(user_id: str, project_id: str):
 
 
 def _bound_chat_history(messages: list[dict], *, max_messages: int = 100, max_chars: int = 40000):
-    if not isinstance(messages, list):
+    if not isinstance(messages, list) or len(messages) > max_messages:
         raise ValueError("Historial de chat fuera de los límites")
     bounded = []
     for message in messages:
