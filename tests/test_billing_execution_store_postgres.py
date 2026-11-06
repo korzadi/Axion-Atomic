@@ -12,12 +12,13 @@ engine = create_engine(DATABASE_URL, future=True, pool_pre_ping=True)
 
 from api.billing_execution_store import (
     ExecutionAlreadyClaimed,
+    ExecutionStoreError,
     claim_execution,
     load_encrypted_result,
     mark_execution_unknown,
     persist_encrypted_result,
 )
-from api.billing_reservations import reserve_credits
+from api.billing_reservations import mark_reservation_unknown, reserve_credits
 
 
 def _reservation(engine):
@@ -78,3 +79,10 @@ def test_started_execution_can_be_marked_unknown_and_never_reclaimed():
     assert repeated.claimed is False
     assert repeated.state == "unknown"
     assert load_encrypted_result(engine=engine, user_id=user_id, reservation_id=reservation_id) is None
+
+
+def test_unknown_reservation_cannot_claim_first_execution():
+    user_id, reservation_id = _reservation(engine)
+    mark_reservation_unknown(engine=engine, user_id=user_id, reservation_id=reservation_id)
+    with pytest.raises(ExecutionStoreError, match="held"):
+        claim_execution(engine=engine, user_id=user_id, reservation_id=reservation_id)
