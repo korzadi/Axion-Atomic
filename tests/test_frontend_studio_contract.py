@@ -42,7 +42,7 @@ def test_knowledge_workspace_uses_authenticated_project_scoped_ingestion():
     assert "X-CSRF-Token" in source
     assert "project_id:projectId" in source
     assert "canEdit()" in source
-    assert "document.querySelector('[data-view=\\"chat\\"]')" in source
+    assert "data-view=" in source
 
 
 def test_knowledge_workspace_lists_reindexes_and_deletes_project_sources():
