@@ -110,7 +110,8 @@ if(data.truncated)listNotice.textContent+=' Hay más registros que el límite de
 }catch(error){listNotice.textContent=error.message;}
 finally{refresh.disabled=!project.value;}
 }
-content.addEventListener('input',()=>{count.textContent=content.value.length+' / 100000 caracteres';updateSubmit();});\nfileInput.addEventListener('change',updateSubmit);
+content.addEventListener('input',()=>{count.textContent=content.value.length+' / 100000 caracteres';updateSubmit();});
+fileInput.addEventListener('change',updateSubmit);
 project.addEventListener('change',()=>{updateSubmit();loadSources();});
 refresh.addEventListener('click',loadSources);
 $('#knowledgeOpenChat').onclick=()=>document.querySelector('[data-view="chat"]').click();
