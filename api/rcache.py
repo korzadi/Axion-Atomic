@@ -7,6 +7,7 @@ opcional: cualquier fallo de caché degrada a la llamada normal a Ollama.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import math
@@ -17,10 +18,13 @@ logger = logging.getLogger("axion.rcache")
 _client = None
 
 
-def _cache_key(model: str, dimension: int, text: str) -> str:
-    digest = hashlib.sha256(
-        (model + "\0" + str(dimension) + "\0" + text).encode("utf-8")
-    ).hexdigest()
+def _cache_key(model: str, dimension: int, text: str) -> str | None:
+    # HMAC evita que una clave Redis revele prompts cortos por ataque de diccionario.
+    secret = settings.api_key
+    if not secret:
+        return None
+    message = (model + "\0" + str(dimension) + "\0" + text).encode("utf-8")
+    digest = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
     return "axion:rcache:embedding:v1:" + digest
 
 
@@ -48,7 +52,10 @@ async def get_embedding(model: str, dimension: int, text: str) -> list[float] | 
         client = await _redis_client()
         if client is None:
             return None
-        raw = await client.get(_cache_key(model, dimension, text))
+        key = _cache_key(model, dimension, text)
+        if key is None:
+            return None
+        raw = await client.get(key)
         if raw is None:
             return None
         value = json.loads(raw)
@@ -71,8 +78,11 @@ async def set_embedding(model: str, dimension: int, text: str, vector: list[floa
         if client is None:
             return
         ttl = max(60, min(int(settings.redis_embedding_cache_ttl_seconds), 86400))
+        key = _cache_key(model, dimension, text)
+        if key is None:
+            return
         await client.set(
-            _cache_key(model, dimension, text),
+            key,
             json.dumps(vector, separators=(",", ":"), allow_nan=False),
             ex=ttl,
         )
