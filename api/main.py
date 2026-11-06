@@ -47,7 +47,6 @@ async def health():
             except httpx.HTTPError:
                 pass
     if any(value != "ok" for value in checks.values()):
-        # No revelar al cliente público qué dependencia interna está caída.
         raise HTTPException(status_code=503, detail={"status": "degraded"})
     return {"status": "ok"}
 
@@ -106,14 +105,11 @@ async def approvals(project_id: str = Query(min_length=1, max_length=200)):
 @app.post("/v1/agent/approvals/{approval_id}", dependencies=[Depends(require_api_key)])
 async def approve(approval_id: int, req: ApprovalRequest, project_id: str = Query(min_length=1, max_length=200)):
     try:
-        # La API key identifica al servicio, no a una persona; nunca aceptar reviewer del cliente.
         return decide_approval(approval_id, project_id, req.approved, "service-api", req.note)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
 
 
-# AXION STUDIO es una SPA estática sin proceso de build. Se monta al final para
-# que /auth, /workspace, /health y /v1 conserven prioridad sobre el fallback web.
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 if FRONTEND_DIR.is_dir():
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="axion-studio")
