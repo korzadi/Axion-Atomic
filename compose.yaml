@@ -7,11 +7,17 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
       QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379/0
+      REDIS_CACHE_ENABLED: "true"
+      OLLAMA_MAX_CONCURRENT: ${OLLAMA_MAX_CONCURRENT:-1}
+      OLLAMA_MAX_WAITING: ${OLLAMA_MAX_WAITING:-8}
+      OLLAMA_QUEUE_TIMEOUT_SECONDS: ${OLLAMA_QUEUE_TIMEOUT_SECONDS:-20}
     ports: ["127.0.0.1:8070:8000"]
     extra_hosts: ["host.docker.internal:host-gateway"]
     depends_on:
       postgres: {condition: service_healthy}
       qdrant: {condition: service_started}
+      redis: {condition: service_healthy}
     volumes: ["./workspace:/workspace", "./knowledge:/knowledge:ro"]
     read_only: true
     tmpfs: ["/tmp:size=128m,noexec,nosuid"]
@@ -43,6 +49,18 @@ services:
     restart: unless-stopped
     mem_limit: 1g
     cpus: 0.5
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "192mb", "--maxmemory-policy", "allkeys-lru"]
+    expose: ["6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.25
 volumes:
   axion_pgdata: {name: qwen_engineering_pgdata}
   axion_qdrant: {name: qwen_engineering_qdrant}
