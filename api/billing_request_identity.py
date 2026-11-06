@@ -67,3 +67,57 @@ def request_payload_sha256(
     except (TypeError, ValueError) as exc:
         raise ValueError("Payload no serializable de forma canónica") from exc
     return hashlib.sha256(canonical).hexdigest()
+
+
+def attested_request_payload_sha256(
+    *,
+    project_id: str,
+    public_model: str,
+    runtime_model: str,
+    model_digest: str,
+    template_sha256: str,
+    tokenizer_id: str,
+    effective_messages: list[dict],
+    temperature: float,
+    max_tokens: int,
+    policy_version: str,
+) -> str:
+    """Fingerprint estricto de la inferencia efectiva y su identidad de runtime.
+
+    effective_messages debe ser la lista FINAL construida por el servidor,
+    incluyendo system prompt e información RAG. Las identidades de runtime
+    son obligatorias: sin ellas no se obtiene un fingerprint apto para una
+    futura ruta de facturación.
+    """
+    required = {
+        "runtime_model": runtime_model,
+        "model_digest": model_digest,
+        "template_sha256": template_sha256,
+        "tokenizer_id": tokenizer_id,
+    }
+    for name, value in required.items():
+        if not isinstance(value, str) or not value.strip() or len(value) > 512:
+            raise ValueError(f"{name} requiere una identidad verificada")
+    if not isinstance(effective_messages, list) or not effective_messages:
+        raise ValueError("effective_messages debe contener el prompt final del servidor")
+
+    base = request_payload_sha256(
+        project_id=project_id,
+        model=public_model,
+        messages=effective_messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        policy_version=policy_version,
+    )
+    attestation = {
+        "base_payload_sha256": base,
+        "runtime_model": runtime_model,
+        "model_digest": model_digest,
+        "template_sha256": template_sha256,
+        "tokenizer_id": tokenizer_id,
+    }
+    canonical = json.dumps(
+        attestation, ensure_ascii=False, sort_keys=True,
+        separators=(",", ":"), allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
