@@ -21,7 +21,16 @@ class RagQdrantIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.embed_patch = patch.object(service, "embed", new=AsyncMock(return_value=self.embedding))
         self.embed_patch.start()
 
+        # Qdrant local mode binds its in-memory database to one thread.
+        # Keep calls synchronous in this test while still exercising real Qdrant.
+        async def run_in_test_thread(function, *args, **kwargs):
+            return function(*args, **kwargs)
+
+        self.thread_patch = patch.object(service.asyncio, "to_thread", new=run_in_test_thread)
+        self.thread_patch.start()
+
     async def asyncTearDown(self):
+        self.thread_patch.stop()
         self.embed_patch.stop()
         service.client = self.client_ref
         service.settings.qdrant_collection = self.collection_ref
