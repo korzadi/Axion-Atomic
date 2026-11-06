@@ -56,6 +56,8 @@ class OllamaClientTests(unittest.IsolatedAsyncioTestCase):
             ollama.httpx, "AsyncClient", FakeAsyncClient
         ):
             settings.embed_model = "nomic-embed-text"
+            settings.embed_dimension = 2
+            settings.ollama_request_timeout_seconds = 120
             settings.ollama_base_url = "http://ollama:11434"
             result = await ollama.embed("texto de prueba")
 
