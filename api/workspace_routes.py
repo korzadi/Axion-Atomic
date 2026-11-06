@@ -164,6 +164,57 @@ def _decide_action_approval(approval_id: str, project_id: str, user_id: str, sta
     return True
 
 
+def _get_chat_history(user_id: str, project_id: str):
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT messages, updated_at FROM workspace_chat_history "
+                 "WHERE user_id=:user_id AND project_id=:project_id"),
+            {"user_id": user_id, "project_id": project_id},
+        ).mappings().first()
+    if row is None:
+        return {"messages": [], "updated_at": None}
+    messages = row["messages"]
+    if isinstance(messages, str):
+        messages = json.loads(messages)
+    if not isinstance(messages, list) or len(messages) > 100:
+        raise ValueError("Historial de chat inválido")
+    return {"messages": messages, "updated_at": row["updated_at"]}
+
+
+def _save_chat_history(user_id: str, project_id: str, messages: list[dict]):
+    if not isinstance(messages, list) or len(messages) > 100:
+        raise ValueError("Historial de chat fuera de los límites")
+    payload = json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
+    with engine.begin() as conn:
+        row = conn.execute(
+            text("""
+                INSERT INTO workspace_chat_history(user_id, project_id, messages, updated_at)
+                VALUES (:user_id, :project_id, CAST(:messages AS JSONB), now())
+                ON CONFLICT (user_id, project_id) DO UPDATE
+                SET messages=EXCLUDED.messages, updated_at=now()
+                RETURNING updated_at
+            """),
+            {"user_id": user_id, "project_id": project_id, "messages": payload},
+        ).first()
+    return row.updated_at
+
+
+@router.get("/chat/history")
+async def workspace_chat_history(
+    project_id: str = Query(min_length=1, max_length=200),
+    user=Depends(_enabled_user),
+):
+    await run_in_threadpool(_project_role, user, project_id, ("owner", "admin", "editor", "viewer"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], project_id, "chat_history",
+        user_limit=60, project_limit=120, window=timedelta(minutes=1),
+    )
+    try:
+        return await run_in_threadpool(_get_chat_history, user["id"], project_id)
+    except (ValueError, json.JSONDecodeError):
+        raise HTTPException(status_code=500, detail="El historial de chat almacenado no es válido") from None
+
+
 @router.post("/chat/completions")
 async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
     await run_in_threadpool(_project_role, user, req.project_id, ("owner", "admin", "editor", "viewer"))
@@ -237,6 +288,20 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
     # Fail closed: nunca devolver como ATOMIC CODE una respuesta de otro modelo.
     if result.requested_model != settings.chat_model or result.returned_model != settings.chat_model:
         raise HTTPException(status_code=503, detail="El modelo ejecutado no coincide con el modelo autorizado")
+
+    # El historial es privado por usuario y proyecto; solo se guarda tras una inferencia validada.
+    try:
+        await run_in_threadpool(
+            _save_chat_history,
+            user["id"],
+            req.project_id,
+            [message.model_dump() for message in req.messages] + [
+                {"role": "assistant", "content": result.content}
+            ],
+        )
+    except Exception:
+        logger.warning("No se pudo persistir el historial de chat")
+        raise HTTPException(status_code=503, detail="No se pudo guardar el historial de la conversación") from None
 
     return {
         "id": f"chatcmpl-{request_id}", "object": "chat.completion", "created": 0,

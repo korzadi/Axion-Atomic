@@ -21,7 +21,7 @@ def test_all_expected_migrations_are_registered():
         versions = conn.execute(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).scalars().all()
-    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016", "017", "018", "019"]
+    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016", "017", "018", "019", "020"]
 
 
 def test_core_postgresql_tables_exist():
@@ -58,6 +58,7 @@ def test_core_postgresql_tables_exist():
         "payment_order_events",
         "global_role_assignments",
         "global_admin_audit_events",
+        "workspace_chat_history",
     }
     assert expected <= tables
 
@@ -276,3 +277,25 @@ def test_billing_execution_results_are_ciphertext_only_and_recoverable():
     assert "idx_billing_execution_recovery_due" in recovery_indexes
     assert "recovery_requires_review" in recovery_columns
     assert "idx_billing_execution_recovery_review" in recovery_indexes
+
+
+def test_workspace_chat_history_is_private_and_bounded():
+    inspector = inspect(engine)
+    columns = {item["name"] for item in inspector.get_columns("workspace_chat_history")}
+    assert {"user_id", "project_id", "messages", "updated_at"} <= columns
+    primary = inspector.get_pk_constraint("workspace_chat_history")
+    assert set(primary["constrained_columns"]) == {"user_id", "project_id"}
+    foreign_keys = inspector.get_foreign_keys("workspace_chat_history")
+    assert any(item.get("referred_table") == "users" and item.get("options", {}).get("ondelete") == "CASCADE" for item in foreign_keys)
+    assert any(item.get("referred_table") == "projects" and item.get("options", {}).get("ondelete") == "CASCADE" for item in foreign_keys)
+    indexes = {item["name"] for item in inspector.get_indexes("workspace_chat_history")}
+    assert "idx_workspace_chat_history_project_updated" in indexes
+    with engine.connect() as conn:
+        definitions = conn.execute(text("""
+            SELECT pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE conrelid = 'workspace_chat_history'::regclass
+        """)).scalars().all()
+    joined = " ".join(definitions)
+    assert "jsonb_typeof" in joined
+    assert "jsonb_array_length" in joined
