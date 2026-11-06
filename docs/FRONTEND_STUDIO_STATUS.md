@@ -59,6 +59,18 @@
 5. Completar los gates de facturación y pagos sin habilitar cobros prematuramente.
 6. Validar build e instalación en un entorno autorizado antes de cualquier despliegue.
 
+
+## Validación CI — 6 de noviembre de 2026
+
+La ejecución de GitHub Actions del commit `94b1d864c20db560af5007b77c3cb85e380bf791` terminó con resultado **success** (run [42291872701](https://github.com/korzadi/Axion-Atomic/actions/runs/42291872701)):
+
+- Python: **592 passed, 8 skipped**, 3 warnings.
+- AXION STUDIO browser E2E: **3 escenarios aprobados**.
+- PostgreSQL: migraciones aplicadas, idempotencia verificada y comprobaciones de esquema/transacciones aprobadas.
+- Esta CI usa un doble del protocolo Qdrant para pruebas automatizadas; **no demuestra conectividad con el clúster remoto real**.
+- La conexión Qdrant Cloud, autenticación OAuth con proveedores reales y despliegue empaquetado siguen pendientes de validación en entorno de pruebas autorizado.
+
+
 ## Estado operativo
 
 Los cambios de código se guardan en el repositorio. No se ha accedido al VPS, construido o reiniciado Docker, aplicado migraciones, cambiado variables de entorno, alterado servicios ni modificado datos.
