@@ -105,8 +105,12 @@ class CodingAgentPersistenceTests(unittest.IsolatedAsyncioTestCase):
         tool = Tool("change", "cambio persistente", {"path": ("str", True)},
                     propose=lambda args: (proposal, lambda approval: applied.append(args["path"]) or "ok"))
 
+        answers = iter([
+            '{"tool":"change","args":{"path":"src/file.py"}}',
+            '{"final":"Cambio aplicado"}',
+        ])
         async def chat(_messages):
-            return '{"tool":"change","args":{"path":"src/file.py"}}'
+            return next(answers)
 
         agent = CodingAgent(chat, {"change": tool}, gate, run_store=store)
         run = await agent.run("Corregir", project_id="p1", run_id="db-run-1")
@@ -123,14 +127,15 @@ class CodingAgentPersistenceTests(unittest.IsolatedAsyncioTestCase):
         restored = agent.restore("db-run-1", "p1")
         completed = await agent.resume(restored)
 
-        self.assertEqual(completed.status, "awaiting_approval")
+        self.assertEqual(completed.status, "done")
+        self.assertEqual(completed.final, "Cambio aplicado")
         self.assertEqual(applied, ["src/file.py"])
         self.assertEqual(gate.status(pending.proposal_id)[0], "used")
         self.assertEqual(store.get_project_action("p1", pending.action_hash)["state"], "applied")
 
         # Una restauración posterior no vuelve a ejecutar la acción ya aplicada.
         terminal = agent.restore("db-run-1", "p1")
-        self.assertEqual(terminal.status, "awaiting_approval")
+        self.assertEqual(terminal.status, "done")
         self.assertEqual(applied, ["src/file.py"])
 
     async def test_restore_marks_interrupted_running_action_for_reconciliation(self):
