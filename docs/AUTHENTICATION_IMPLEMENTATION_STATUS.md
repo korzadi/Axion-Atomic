@@ -11,11 +11,13 @@ La migración 005 define las tablas de identidad y membresía. El módulo `api/a
 
 ## Limitaciones todavía abiertas
 
-- No se han conectado endpoints HTTP de registro/login/logout/me.
+- Se añadieron rutas HTTP `/auth/register`, `/auth/login`, `/auth/me` y `/auth/logout`, con cookies HttpOnly/Secure configurable, SameSite=Lax y CSRF en logout.
+- Las rutas están bloqueadas por defecto mediante `AUTH_ENABLED=false`; no habilitarlas hasta incorporar rate limiting distribuido, envío/verificación de email y pruebas de integración.
 - No se ha implementado verificación de email, recuperación de contraseña ni MFA.
-- No existe rate limiting distribuido ni protección antiabuso completa.
+- No existe rate limiting distribuido ni protección antiabuso completa; por eso la autenticación HTTP permanece desactivada.
 - No se ha implementado bootstrap seguro para asignar owner a proyectos ya existentes.
 - Los endpoints legacy siguen protegidos por API key global, no por identidad y membresía. No deben exponerse a usuarios finales hasta reemplazar esa dependencia por sesión + autorización de proyecto.
-- No se han ejecutado pruebas ni migraciones.
+- Las rutas `/v1/chat/completions`, `/v1/knowledge/ingest` y `/v1/agent/*` todavía no llaman `authorize_project`; el aislamiento de `project_id` en RAG no sustituye autorización. Mantenerlas solo para uso interno de servicio.
+- Se añadieron pruebas unitarias para el cierre por defecto y validación de esquemas, pero no se han ejecutado pruebas ni migraciones.
 
 El módulo es una capa de servicio inicial, no una autenticación lista para producción. El cambio de estado a `active` debe ocurrir únicamente después de validar un token de verificación de un solo uso, con expiración y almacenamiento seguro de su hash.
