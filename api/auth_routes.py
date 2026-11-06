@@ -7,7 +7,8 @@ from api.auth import (
     require_csrf, revoke_session,
 )
 from api.config import settings
-from api.schemas import LoginRequest, RegisterRequest
+from api.schemas import LoginRequest, RegisterRequest, ProjectCreateRequest
+from api.projects import create_owned_project, list_user_projects
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 SESSION_MAX_AGE = 12 * 60 * 60
@@ -79,3 +80,17 @@ async def logout(
     response.delete_cookie(COOKIE_NAME, path="/", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
     response.delete_cookie(CSRF_COOKIE, path="/", secure=settings.auth_cookie_secure, httponly=False, samesite="lax")
     return {"status": "logged_out"}
+
+
+@router.get("/projects")
+async def projects(user=Depends(_authenticated_user)):
+    return {"items": list_user_projects(user["id"])}
+
+
+@router.post("/projects", status_code=201)
+async def create_project(req: ProjectCreateRequest, user=Depends(_csrf_guard)):
+    try:
+        project = create_owned_project(user["id"], req.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"project": project}
