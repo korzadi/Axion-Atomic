@@ -96,3 +96,11 @@ def test_zero_token_result_is_valid_but_does_not_invent_usage():
 def test_model_enablement_requires_literal_true():
     with pytest.raises(PermissionError):
         calculate_inference_charge(_result(), _policy(enabled="true"))
+
+
+
+def test_returned_model_must_match_rate_policy():
+    with pytest.raises(ValueError):
+        calculate_inference_charge(
+            _result(returned_model="different-model"), _policy()
+        )
