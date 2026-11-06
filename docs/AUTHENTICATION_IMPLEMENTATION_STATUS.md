@@ -1,52 +1,44 @@
-# Estado de autenticación multiusuario
+# Estado de autenticación multiusuario — AXION ATOMIC
 
-La migración 005 define las tablas de identidad y membresía. El módulo `api/auth.py` añade primitives de servicio:
+**Estado de código:** primitives y rutas principales implementadas en `main`; CI #339 completado correctamente.  
+**Estado operativo:** autenticación pública continúa cerrada por defecto (`AUTH_ENABLED=false`). El CI no demuestra que SMTP, OAuth, HTTPS, cookies o el dominio estén configurados en el entorno de despliegue.
 
-- Hash Argon2id con parámetros explícitos.
-- Creación de cuentas con email normalizado en estado `pending_verification`; no pueden iniciar sesión hasta completar una verificación real.
-- Login con token de sesión aleatorio, guardando solo SHA-256 del token.
-- Sesiones con vencimiento de 12 horas, revocación y comprobación de usuario activo.
-- Token CSRF vinculado a la sesión.
-- Comprobación de roles por proyecto con respuesta 404 para proyectos ajenos.
+## Implementado en el repositorio
 
-## Limitaciones todavía abiertas
+- Contraseñas con Argon2id y sesiones aleatorias; solo se almacena el hash de la sesión.
+- Cookies de sesión HttpOnly/Secure según configuración y protección CSRF para operaciones autenticadas.
+- Registro con estado `pending_verification`; exige aceptación explícita de términos y privacidad y guarda `terms_accepted_at`.
+- Verificación de correo mediante token aleatorio de un solo uso, hash SHA-256 persistido y caducidad de 30 minutos.
+- Reenvío de verificación con respuesta genérica para reducir enumeración de cuentas.
+- Recuperación de contraseña con token de un solo uso, hash persistido, caducidad de 30 minutos y revocación de sesiones anteriores al cambiar la contraseña.
+- Rate limiting persistente en PostgreSQL para registro, login, OAuth, verificación, reenvío y recuperación; los fallos del almacén cierran la operación.
+- OAuth Google y GitHub con state de un solo uso ligado al proveedor y al navegador, nonce para Google, validación de correo verificado y consentimiento legal explícito.
+- Rutas de usuario y proyectos protegidas por sesión; las mutaciones autenticadas aplican CSRF y las operaciones de proyecto verifican pertenencia/rol.
+- Pruebas unitarias y de integración PostgreSQL para autenticación, OAuth, verificación, recuperación, límites y migraciones.
 
-- Se añadieron rutas `/auth/register`, `/auth/login`, `/auth/me`, `/auth/logout` y `/auth/projects` (listado/creación). La creación de proyecto y asignación de `owner` se realiza en una transacción.
-- Se añadieron rutas `/workspace/*` para chat, ingestión, tareas y aprobaciones; validan sesión, CSRF en POST y rol/membresía de proyecto. `viewer` solo accede al chat; `editor` o superior puede ingerir y crear tareas; solo `owner/admin` decide aprobaciones.
-- La migración define `pending_verification` también como estado predeterminado de base de datos.
-- Las rutas están bloqueadas por defecto mediante `AUTH_ENABLED=false`; no habilitarlas hasta incorporar rate limiting distribuido, envío/verificación de email y pruebas de integración.
-- No se ha implementado verificación de email, recuperación de contraseña ni MFA.
-- No existe rate limiting distribuido ni protección antiabuso completa; por eso la autenticación HTTP permanece desactivada.
-- La creación de proyectos nuevos asigna un `owner` de forma transaccional. No se ha implementado bootstrap seguro para asignar owner a proyectos ya existentes.
-- Los endpoints legacy siguen protegidos por API key global, no por identidad y membresía. No deben exponerse a usuarios finales hasta reemplazar esa dependencia por sesión + autorización de proyecto.
-- Las rutas `/v1/chat/completions`, `/v1/knowledge/ingest` y `/v1/agent/*` todavía no llaman `authorize_project`; el aislamiento de `project_id` en RAG no sustituye autorización. Mantenerlas solo para uso interno de servicio.
-- Las rutas autenticadas `/workspace/agent/approvals` devuelven por separado `items` (aprobaciones de acciones) y `plan_items` (aprobaciones legacy de planes). La decisión de plan usa el usuario de sesión como revisor y filtra simultáneamente por id, project_id y estado pendiente; únicamente owner/admin pueden decidir. Aprobar un plan solo registra la decisión y devuelve `execution=not_executed`. La aprobación de una acción también permanece sin ejecutar desde HTTP: no se debe confundir la decisión con la ejecución posterior del runtime. Los endpoints legacy con API key global no equivalen a autorización multiusuario.
-- Se añadieron pruebas unitarias para el cierre por defecto, validación de esquemas, creación/listado de proyectos y alcance de aprobaciones. No se han ejecutado pruebas ni migraciones.
+## Migraciones relevantes
 
-El módulo es una capa de servicio inicial, no una autenticación lista para producción. Las rutas de aprobación del workspace están protegidas por sesión, CSRF en POST y membresía de proyecto, pero siguen desactivadas mientras `AUTH_ENABLED=false`; no habilitarlas a usuarios finales hasta cerrar las limitaciones anteriores. El cambio de estado a `active` debe ocurrir únicamente después de validar un token de verificación de un solo uso, con expiración y almacenamiento seguro de su hash.
+- `011_email_verification_tokens.sql`
+- `012_password_reset_tokens.sql`
+- `013_auth_rate_limits.sql`
+- `014_oauth_identities.sql`
+- `015_legal_terms_acceptance.sql`
 
+El workflow CI #339 (run `42255282471`, commit `fc4e719c5c682b1138150bf48596319e8dab833a`) terminó con `success`: tanto `python-tests` como `postgres-migrations` pasaron, incluida la verificación de idempotencia de migraciones.
 
-## Verificación de correo: primitives añadidas
+## Pendiente antes de habilitar usuarios públicos
 
-La migración 011 añade almacenamiento de tokens de verificación con SHA-256, expiración e índice que permite un solo token abierto por usuario. `api/email_verification.py` emite tokens aleatorios de 30 minutos, invalida los anteriores y consume el token en una transacción que activa exclusivamente cuentas `pending_verification`. El token en claro solo se devuelve al adaptador que deberá enviarlo por correo; nunca se almacena en PostgreSQL.
+1. Configurar SMTP real y probar entrega, enlaces, rebotes y reputación del remitente.
+2. Configurar credenciales OAuth Google/GitHub y probar callbacks con los dominios HTTPS definitivos.
+3. Ejecutar pruebas end-to-end en un entorno de staging con cookies Secure, CSRF, proxy de confianza y sesiones.
+4. Completar y verificar el rol administrativo global, MFA para operaciones económicas y procedimientos de suspensión/recuperación administrativa.
+5. Revisar límites antiabuso con tráfico realista y limpieza programada de buckets expirados.
+6. Revisar frontend de verificación/recuperación y confirmar que los tokens del fragmento URL se envían solo en el cuerpo POST, sin telemetría ni logs.
+7. Realizar revisión de seguridad y privacidad antes de cambiar `AUTH_ENABLED`.
 
-Pruebas PostgreSQL cubren activación, un solo uso, invalidación de tokens anteriores, expiración y cuentas deshabilitadas. Esto todavía NO completa el flujo público: falta proveedor de correo transaccional, endpoint de verificación con respuesta segura, límites antiabuso distribuidos, recuperación de contraseña y pruebas end-to-end. `AUTH_ENABLED` permanece desactivado.
+## Restricciones
 
-
-## Estado real del endpoint de verificación
-
-La primitiva `api/email_verification.py` y la migración 011 están implementadas y probadas. Sin embargo, la ruta HTTP `POST /auth/verify-email` NO está conectada en `api/auth_routes.py` en esta revisión. La documentación anterior afirmaba que el endpoint ya existía; esa afirmación era incorrecta y queda corregida aquí. No considerar disponible la verificación pública hasta implementar y probar la ruta, el envío transaccional del correo y el rate limiting distribuido.
-
-
-## Recuperación de contraseña: base transaccional
-
-La migración 012 añade almacenamiento separado para tokens de recuperación. El módulo api/password_reset.py emite tokens aleatorios de 30 minutos únicamente para cuentas activas, guarda solo SHA-256 e invalida tokens anteriores. La confirmación valida la nueva contraseña con Argon2id, consume el token una sola vez, actualiza la contraseña y revoca todas las sesiones existentes en una misma transacción. Las direcciones inexistentes o cuentas no activas producen el mismo resultado vacío en la primitiva de emisión para que la capa HTTP pueda responder sin revelar si existe una cuenta.
-
-Esta entrega es una primitiva de servicio y esquema, NO un flujo público: todavía faltan endpoint, correo transaccional, rate limiting distribuido, notificación posterior al cambio y pruebas end-to-end. AUTH_ENABLED sigue desactivado.
-
-
-## Rate limiting distribuido: primitiva PostgreSQL
-
-La migración 013 crea buckets con clave SHA-256, ventana fija y expiración. `api/rate_limit.py` realiza incrementos atómicos mediante UPSERT y solo permite hasta el límite configurado; devuelve el tiempo restante de bloqueo y ofrece limpieza por lotes acotados. No depende de memoria local y no almacena el identificador original en claro.
-
-Esta entrega todavía NO aplica límites automáticamente a rutas HTTP. Antes de habilitar autenticación deben conectarse límites por IP y por cuenta a registro, login, verificación y recuperación; configurar límites operativos, proxy de confianza y limpieza periódica; y ejecutar pruebas de concurrencia real con varias instancias. No activar `AUTH_ENABLED` todavía.
+- No activar `AUTH_ENABLED` por el mero hecho de que CI esté verde.
+- No introducir credenciales SMTP/OAuth en Git ni en logs.
+- No habilitar facturación ni pagos a través de esta documentación.
+- No desplegar ni aplicar migraciones al VPS sin autorización específica.
