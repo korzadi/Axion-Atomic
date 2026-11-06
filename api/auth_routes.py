@@ -1,5 +1,6 @@
 """Rutas de sesión web. Permanecen cerradas por defecto hasta habilitar controles antiabuso."""
 from datetime import timedelta
+import secrets
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
