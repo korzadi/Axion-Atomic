@@ -1,7 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException
+import httpx
+from sqlalchemy import text
 from api.security import require_api_key
 from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest
 from api.ollama import chat
+from api.config import settings
+from api.database import engine
 from rag.service import ingest_text, retrieve
 from agent.planner import create_plan
 from agent.approvals import create_approval, decide_approval, list_pending
@@ -11,7 +15,27 @@ app = FastAPI(title="Axion Atomic API", version="0.2.0")
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    checks = {"database": "unavailable", "ollama": "unavailable", "qdrant": "unavailable"}
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception:
+        pass
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        for key, url in (
+            ("ollama", settings.ollama_base_url.rstrip("/") + "/api/tags"),
+            ("qdrant", settings.qdrant_url.rstrip("/") + "/healthz"),
+        ):
+            try:
+                response = await client.get(url)
+                if response.is_success:
+                    checks[key] = "ok"
+            except httpx.HTTPError:
+                pass
+    if any(value != "ok" for value in checks.values()):
+        raise HTTPException(status_code=503, detail={"status": "degraded", "checks": checks})
+    return {"status": "ok", "checks": checks}
 
 
 @app.post("/v1/chat/completions", dependencies=[Depends(require_api_key)])
