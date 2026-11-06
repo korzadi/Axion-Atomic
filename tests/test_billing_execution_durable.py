@@ -8,6 +8,7 @@ import pytest
 from api.billing_budget import InferenceBudget
 from api.billing_execution_store import ExecutionClaim, EncryptedExecutionResult
 from api.billing_reservations import ReservationResult, SettlementResult
+from api.billing_policy import UsageUnavailable
 from api.billing_execution_durable import (
     DurableExecutionRecoveryRequired,
     execute_durable_reserved_inference,
@@ -114,7 +115,7 @@ def test_recovered_envelope_must_match_reserved_policy_snapshot():
         patch("api.billing_execution_durable.claim_execution", return_value=ExecutionClaim(stored.execution_id, "completed", False)),
         patch("api.billing_execution_durable.load_encrypted_result", return_value=stored),
     ):
-        with pytest.raises(Exception, match="política del resultado cifrado"):
+        with pytest.raises(UsageUnavailable, match="política del resultado cifrado"):
             call(inference_call=inference, deserialize_result=lambda _: mismatched)
     inference.assert_not_awaited()
 
@@ -136,6 +137,6 @@ def test_recovered_envelope_must_match_saved_credit_calculation():
         patch("api.billing_execution_durable.claim_execution", return_value=ExecutionClaim(stored.execution_id, "completed", False)),
         patch("api.billing_execution_durable.load_encrypted_result", return_value=stored),
     ):
-        with pytest.raises(Exception, match="créditos guardados"):
+        with pytest.raises(UsageUnavailable, match="créditos guardados"):
             call(inference_call=inference, deserialize_result=lambda _: mismatched)
     inference.assert_not_awaited()
