@@ -1,9 +1,10 @@
 """File Manager: acceso confinado a un directorio de proyecto. Lectura libre (con redacción de secretos),
 escritura solo mediante propuestas que requieren una aprobación ligada al hash exacto del cambio."""
 import difflib
+import errno
 import hashlib
 import os
-import tempfile
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
@@ -56,7 +57,7 @@ def _sha(data: bytes) -> str:
 
 
 def _relative_parts(rel: str) -> list[str]:
-    if not isinstance(rel, str) or not rel or "\\0" in rel or "\\\\" in rel:
+    if not isinstance(rel, str) or not rel or "\0" in rel or "\\" in rel:
         raise PathViolation("Ruta relativa inválida")
     if rel.startswith("/") or (len(rel) > 1 and rel[1] == ":"):
         raise PathViolation("Se requieren rutas relativas al proyecto")
@@ -82,6 +83,10 @@ def _open_parent(root: Path, rel: str, create: bool = False) -> tuple[int, str]:
                     raise
                 os.mkdir(part, 0o700, dir_fd=fd)
                 next_fd = os.open(part, flags, dir_fd=fd)
+            except OSError as exc:
+                if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+                    raise PathViolation("No se permiten symlinks ni componentes que no sean directorios") from None
+                raise
             os.close(fd)
             fd = next_fd
         return fd, parts[-1]
@@ -94,10 +99,15 @@ def _read_regular(root: Path, rel: str, limit: int | None = None) -> bytes:
     parent_fd, leaf = _open_parent(root, rel)
     try:
         flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0)
-        fd = os.open(leaf, flags, dir_fd=parent_fd)
+        try:
+            fd = os.open(leaf, flags, dir_fd=parent_fd)
+        except OSError as exc:
+            if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+                raise PathViolation("No se permiten symlinks ni archivos especiales") from None
+            raise
         try:
             st = os.fstat(fd)
-            if not __import__("stat").S_ISREG(st.st_mode):
+            if not stat.S_ISREG(st.st_mode):
                 raise AccessDenied("Solo se permiten archivos regulares")
             chunks, total = [], 0
             while True:
@@ -278,7 +288,7 @@ class Workspace:
         try:
             try:
                 existing = os.stat(leaf, dir_fd=parent_fd, follow_symlinks=False)
-                if not __import__("stat").S_ISREG(existing.st_mode):
+                if not stat.S_ISREG(existing.st_mode):
                     raise AccessDenied("El destino dejó de ser un archivo regular")
                 mode = existing.st_mode & 0o777
             except FileNotFoundError:
