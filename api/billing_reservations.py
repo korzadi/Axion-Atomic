@@ -238,12 +238,15 @@ def settle_reservation(
             return SettlementResult(reservation_uuid, "review", None)
 
         allocations = conn.execute(text("""
-            SELECT id, source, quota_period_id, credit_lot_id, allocated_credits
-            FROM billing_reservation_allocations
-            WHERE reservation_id=CAST(:id AS UUID)
-            ORDER BY CASE source WHEN 'daily_free' THEN 0 WHEN 'subscription' THEN 1 ELSE 2 END,
-                     id
-            FOR UPDATE
+            SELECT a.id, a.source, a.quota_period_id, a.credit_lot_id, a.allocated_credits
+            FROM billing_reservation_allocations a
+            LEFT JOIN billing_quota_periods q ON q.id=a.quota_period_id
+            LEFT JOIN billing_credit_lots l ON l.id=a.credit_lot_id
+            WHERE a.reservation_id=CAST(:id AS UUID)
+            ORDER BY CASE a.source WHEN 'daily_free' THEN 0 WHEN 'subscription' THEN 1 ELSE 2 END,
+                     CASE WHEN a.source='purchased' THEN l.expires_at ELSE q.period_end END NULLS LAST,
+                     l.created_at NULLS LAST, a.id
+            FOR UPDATE OF a
         """), {"id": reservation_uuid}).mappings().all()
 
         remaining = actual_credits
