@@ -47,6 +47,24 @@ def _csrf_guard(
     return user
 
 
+def _create_oauth_session(user_id: str):
+    from api.auth import _digest
+    now = datetime.now(timezone.utc)
+    session, csrf = secrets.token_urlsafe(48), secrets.token_urlsafe(32)
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO user_sessions(id,user_id,token_hash,csrf_hash,created_at,expires_at,last_seen_at)
+            VALUES(:id,:user_id,:token_hash,:csrf_hash,:now,:expires,:now)
+        """), {
+            "id": secrets.token_urlsafe(24), "user_id": user_id,
+            "token_hash": _digest(session), "csrf_hash": _digest(csrf),
+            "now": now, "expires": now + timedelta(seconds=SESSION_MAX_AGE),
+        })
+        conn.execute(text("UPDATE users SET last_login_at=:now WHERE id=:id"),
+                     {"now": now, "id": user_id})
+    return session, csrf
+
+
 
 def _enforce_rate_limit(request: Request, *, namespace: str, limit: int, window: timedelta, subject: str | None = None):
     # No confiar en X-Forwarded-For: solo usar la IP del socket hasta configurar
@@ -161,19 +179,7 @@ async def oauth_callback(provider: str, code: str | None = None,
         result = RedirectResponse("/?oauth_error=failed", status_code=303)
         result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
         return result
-    from datetime import datetime, timezone
-    from api.auth import _digest
-    now = datetime.now(timezone.utc)
-    session, csrf = secrets.token_urlsafe(48), secrets.token_urlsafe(32)
-    with engine.begin() as conn:
-        conn.execute(text("""
-            INSERT INTO user_sessions(id,user_id,token_hash,csrf_hash,created_at,expires_at,last_seen_at)
-            VALUES(:id,:user_id,:token_hash,:csrf_hash,:now,:expires,:now)
-        """), {"id": secrets.token_urlsafe(24), "user_id": user["id"],
-               "token_hash": _digest(session), "csrf_hash": _digest(csrf),
-               "now": now, "expires": now + timedelta(seconds=SESSION_MAX_AGE)})
-        conn.execute(text("UPDATE users SET last_login_at=:now WHERE id=:id"),
-                     {"now": now, "id": user["id"]})
+    session, csrf = await run_in_threadpool(_create_oauth_session, user["id"])
     result = RedirectResponse("/?oauth=success", status_code=303)
     result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
     result.set_cookie(key=COOKIE_NAME, value=session, max_age=SESSION_MAX_AGE,
@@ -197,7 +203,7 @@ async def logout(
     user=Depends(_csrf_guard),
     axion_session: str | None = Cookie(default=None, alias=COOKIE_NAME),
 ):
-    revoke_session(axion_session)
+    await run_in_threadpool(revoke_session, axion_session)
     response.delete_cookie(COOKIE_NAME, path="/", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
     response.delete_cookie(CSRF_COOKIE, path="/", secure=settings.auth_cookie_secure, httponly=False, samesite="lax")
     return {"status": "logged_out"}
@@ -205,13 +211,13 @@ async def logout(
 
 @router.get("/projects")
 async def projects(user=Depends(_authenticated_user)):
-    return {"items": list_user_projects(user["id"])}
+    return {"items": await run_in_threadpool(list_user_projects, user["id"])}
 
 
 @router.post("/projects", status_code=201)
 async def create_project(req: ProjectCreateRequest, user=Depends(_csrf_guard)):
     try:
-        project = create_owned_project_with_workspace(user["id"], req.name)
+        project = await run_in_threadpool(create_owned_project_with_workspace, user["id"], req.name)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except OSError as exc:
