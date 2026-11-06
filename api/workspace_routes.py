@@ -181,9 +181,28 @@ def _get_chat_history(user_id: str, project_id: str):
     return {"messages": messages, "updated_at": row["updated_at"]}
 
 
-def _save_chat_history(user_id: str, project_id: str, messages: list[dict]):
-    if not isinstance(messages, list) or len(messages) > 100:
+def _bound_chat_history(messages: list[dict], *, max_messages: int = 100, max_chars: int = 40000):
+    if not isinstance(messages, list):
         raise ValueError("Historial de chat fuera de los límites")
+    bounded = []
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") not in ("user", "assistant"):
+            raise ValueError("Mensaje de historial inválido")
+        content = message.get("content")
+        if not isinstance(content, str):
+            raise ValueError("Contenido de historial inválido")
+        bounded.append({"role": message["role"], "content": content})
+    if any(len(message["content"]) > max_chars for message in bounded):
+        raise ValueError("Un mensaje supera el límite de caracteres del historial")
+    total_chars = sum(len(message["content"]) for message in bounded)
+    while len(bounded) > max_messages or total_chars > max_chars:
+        removed = bounded.pop(0)
+        total_chars -= len(removed["content"])
+    return bounded
+
+
+def _save_chat_history(user_id: str, project_id: str, messages: list[dict]):
+    messages = _bound_chat_history(messages)
     payload = json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
     with engine.begin() as conn:
         row = conn.execute(
