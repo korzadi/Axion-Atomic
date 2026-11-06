@@ -6,8 +6,13 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY api ./api
 COPY agent ./agent
+COPY core ./core
 COPY rag ./rag
+COPY sandbox ./sandbox
+COPY audit ./audit
 COPY migrations ./migrations
 USER appuser
 EXPOSE 8000
-CMD ["sh", "-c", "python -m api.migrate && exec uvicorn api.main:app --host 0.0.0.0 --port 8000"]
+# Las migraciones son una operación administrativa explícita; nunca se ejecutan
+# automáticamente al iniciar o reiniciar el contenedor.
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

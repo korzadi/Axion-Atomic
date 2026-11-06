@@ -1,4 +1,5 @@
 """API de trabajo multiusuario; cada petición valida sesión y membresía."""
+import json
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query
 from sqlalchemy import text
 from api.database import engine
@@ -71,6 +72,54 @@ async def workspace_task(req: TaskRequest, user=Depends(_csrf_user)):
     return {"status": "awaiting_approval", "approval_id": approval_id, "project_id": req.project_id, "plan": plan}
 
 
+@router.get("/agent/runs")
+async def workspace_runs(
+    project_id: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=20, ge=1, le=100),
+    user=Depends(_enabled_user),
+):
+    """Lista ejecuciones persistidas exclusivamente del proyecto autorizado."""
+    _project_role(user, project_id, ("owner", "admin", "editor", "viewer"))
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT id, goal, status, final, error, steps, created_at, updated_at "
+                "FROM agent_runs WHERE project_id=:project_id "
+                "ORDER BY updated_at DESC LIMIT :limit"
+            ),
+            {"project_id": project_id, "limit": limit},
+        ).mappings().all()
+    return {"items": [dict(row) for row in rows]}
+
+
+@router.get("/agent/runs/{run_id}")
+async def workspace_run_detail(
+    run_id: str,
+    project_id: str = Query(min_length=1, max_length=200),
+    user=Depends(_enabled_user),
+):
+    """Devuelve el snapshot de una ejecución solo dentro del proyecto autorizado."""
+    _project_role(user, project_id, ("owner", "admin", "editor", "viewer"))
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT id, project_id, goal, status, final, error, messages, pending_actions, "
+                "steps, parse_failures, created_at, updated_at "
+                "FROM agent_runs WHERE id=:run_id AND project_id=:project_id"
+            ),
+            {"run_id": run_id, "project_id": project_id},
+        ).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Ejecución inexistente o fuera del proyecto autorizado")
+    result = dict(row)
+    for field in ("messages", "pending_actions"):
+        try:
+            result[field] = json.loads(result[field])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=500, detail="Snapshot de ejecución inválido") from None
+    return result
+
+
 @router.get("/agent/approvals")
 async def workspace_approvals(
     project_id: str = Query(min_length=1, max_length=200),
@@ -87,7 +136,48 @@ async def workspace_approvals(
             ),
             {"project_id": project_id},
         ).mappings().all()
-    return {"items": [dict(row) for row in rows]}
+    with engine.connect() as conn:
+        plan_rows = conn.execute(
+            text(
+                "SELECT id, project_id, goal, plan_json, status, created_at "
+                "FROM approvals WHERE project_id=:project_id AND status='pending' "
+                "ORDER BY created_at"
+            ),
+            {"project_id": project_id},
+        ).mappings().all()
+    return {
+        "items": [dict(row) for row in rows],
+        "plan_items": [dict(row) for row in plan_rows],
+    }
+
+
+@router.post("/agent/plan-approvals/{approval_id}")
+async def workspace_decide_plan_approval(
+    approval_id: int,
+    req: ApprovalRequest,
+    project_id: str = Query(min_length=1, max_length=200),
+    user=Depends(_csrf_user),
+):
+    """Decide una aprobación de plan legado; no ejecuta herramientas."""
+    _project_role(user, project_id, ("owner", "admin"))
+    status = "approved" if req.approved else "rejected"
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                "UPDATE approvals SET status=:status, reviewer=:reviewer, reviewer_note=:note, decided_at=now() "
+                "WHERE id=:approval_id AND project_id=:project_id AND status='pending' RETURNING id"
+            ),
+            {
+                "status": status,
+                "reviewer": user["id"],
+                "note": req.note,
+                "approval_id": approval_id,
+                "project_id": project_id,
+            },
+        ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Aprobación de plan inexistente o ya resuelta")
+    return {"id": approval_id, "project_id": project_id, "status": status, "execution": "not_executed"}
 
 
 @router.post("/agent/approvals/{approval_id}")
