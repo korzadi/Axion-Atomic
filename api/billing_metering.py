@@ -41,6 +41,8 @@ def calculate_inference_charge(result, policy: ModelRatePolicy) -> InferenceChar
         raise ValueError("La política del modelo requiere nombre y versión")
     if result.requested_model != policy.model_name:
         raise ValueError("El modelo solicitado no coincide con la política de precios")
+    if result.returned_model != policy.model_name:
+        raise ValueError("Ollama devolvió un modelo distinto al autorizado por la política")
     if result.done is not True:
         raise UsageUnavailable("La inferencia no confirmó un resultado final")
     if result.usage_source != "ollama_response":
