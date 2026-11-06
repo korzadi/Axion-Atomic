@@ -10,7 +10,7 @@ from api.config import settings
 from api.ollama import embed
 from rag.chunking import chunk_text
 
-client = QdrantClient(url=settings.qdrant_url)
+client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
 logger = logging.getLogger(__name__)
 _collection_lock = threading.Lock()
 _collection_checked_at = 0.0
