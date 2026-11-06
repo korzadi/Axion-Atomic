@@ -54,7 +54,7 @@ def create_user(email: str, password: str, display_name: str) -> str:
     with engine.begin() as conn:
         conn.execute(text("""
             INSERT INTO users (id, email, email_normalized, password_hash, display_name, status, created_at, updated_at)
-            VALUES (:id, :email, :normalized, :password_hash, :name, 'active', :now, :now)
+            VALUES (:id, :email, :normalized, :password_hash, :name, 'pending_verification', :now, :now)
         """), {
             "id": user_id, "email": email.strip(), "normalized": normalized,
             "password_hash": hash_password(password), "name": display_name.strip(), "now": now,
