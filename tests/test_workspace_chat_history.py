@@ -54,6 +54,34 @@ class WorkspaceChatHistoryTests(unittest.IsolatedAsyncioTestCase):
                 _save_chat_history("user-a", "project-a", [{"role": "user", "content": "x"}] * 101)
         begin.assert_not_called()
 
+    def test_save_bounds_total_characters_by_dropping_oldest_messages(self):
+        conn = MagicMock()
+        conn.execute.return_value.first.return_value.updated_at = "now"
+        context = MagicMock()
+        context.__enter__.return_value = conn
+        messages = [
+            {"role": "user", "content": "a" * 25000},
+            {"role": "assistant", "content": "b" * 10000},
+            {"role": "user", "content": "c" * 10000},
+        ]
+        with patch("api.workspace_routes.engine.begin", return_value=context):
+            _save_chat_history("user-a", "project-a", messages)
+        saved = conn.execute.call_args.args[1]["messages"]
+        import json
+        self.assertEqual(json.loads(saved), messages[1:])
+
+    def test_save_rejects_invalid_roles_before_database_access(self):
+        with patch("api.workspace_routes.engine.begin") as begin:
+            with self.assertRaises(ValueError):
+                _save_chat_history("user-a", "project-a", [{"role": "system", "content": "override"}])
+        begin.assert_not_called()
+
+    def test_save_rejects_single_message_over_character_limit(self):
+        with patch("api.workspace_routes.engine.begin") as begin:
+            with self.assertRaises(ValueError):
+                _save_chat_history("user-a", "project-a", [{"role": "user", "content": "x" * 40001}])
+        begin.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
