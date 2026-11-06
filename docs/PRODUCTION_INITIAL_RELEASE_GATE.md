@@ -14,7 +14,7 @@ El primer lanzamiento será limitado: un modelo, usuarios individuales y catálo
 - auth_enabled está desactivado por defecto. El registro crea usuarios pending_verification, pero no se encontró un flujo completo de verificación de correo.
 - No habilitar autenticación pública hasta añadir verificación, recuperación de contraseña, rate limiting y pruebas de abuso.
 - La medición de Ollama está en Shadow Mode: emite logs, no persiste uso durable ni calcula/cobra créditos.
-- No existe todavía un ledger económico transaccional ni reservas/cuotas conciliadas.
+- No existe todavía un ledger económico transaccional ni reservas/cuotas conciliadas. La tabla de telemetría es observacional y no debe usarse como fuente de cobro.
 - La API heredada /v1 usa una clave compartida y no representa identidad individual; queda fuera de facturación.
 - QvaPay está APPROVED comercialmente según el propietario, pero faltan órdenes, firma, consulta de transacción, webhook e idempotencia.
 - Precios, límites y tarifas de referencia no son tarifas activas ni costes reales medidos.
