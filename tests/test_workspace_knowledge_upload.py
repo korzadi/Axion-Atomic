@@ -37,3 +37,31 @@ class KnowledgeUploadRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["chunks"], 1)
         self.assertEqual(ingest.await_args.args[:3], ("hello", "notes.txt", "project-a"))
         self.assertEqual(ingest.await_args.kwargs["source_id"], result["source_id"])
+
+    async def test_upload_rejects_oversized_file_and_closes_stream(self):
+        upload = UploadFile(filename="large.txt", file=io.BytesIO(b"x" * (5 * 1024 * 1024 + 1)))
+        with (
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.ingest_text", new=AsyncMock()) as ingest,
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                await workspace_upload_knowledge_document("project-a", upload, {"id": "u"})
+        self.assertEqual(caught.exception.status_code, 422)
+        self.assertTrue(upload.file.closed)
+        ingest.assert_not_awaited()
+
+    async def test_upload_maps_embedding_outage_to_503_and_closes_stream(self):
+        from rag.service import EmbeddingServiceUnavailable
+
+        upload = UploadFile(filename="notes.txt", file=io.BytesIO(b"hello"))
+        with (
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.extract_document", return_value=("hello", "notes.txt")),
+            patch("api.workspace_routes.ingest_text", new=AsyncMock(side_effect=EmbeddingServiceUnavailable("embedding unavailable"))),
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                await workspace_upload_knowledge_document("project-a", upload, {"id": "u"})
+        self.assertEqual(caught.exception.status_code, 503)
+        self.assertTrue(upload.file.closed)
