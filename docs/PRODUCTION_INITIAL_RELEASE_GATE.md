@@ -93,3 +93,8 @@ El primer lanzamiento será limitado: un modelo, usuarios individuales y catálo
 Solo etiquetar como **producción inicial lista para cobro** cuando A–E estén implementados, probados y documentados, con CI verde, restauración probada, QvaPay sandbox y revisión de seguridad. Un documento, una migración creada o un endpoint presente no equivalen a una capacidad lista.
 
 **Regla operativa:** el trabajo de repositorio no despliega el VPS. No ejecutar builds, migraciones reales, reinicios, cambios de red/puertos/volúmenes ni pagos reales sin autorización específica.
+
+
+### Serialización y huella canónica de solicitudes (implementación auxiliar)
+
+Se añadieron `api/billing_result_codec.py` y `api/billing_request_fingerprint.py`. El codec serializa de forma determinista el resultado estructurado de Ollama, valida el esquema/contadores y limita el payload a 2 MiB antes del cifrado; no guarda plaintext en PostgreSQL. La huella SHA-256 enlaza identidad, proyecto, modelo público, mensajes finales, temperatura, máximo de salida y versión de política, evitando que una clave idempotente se reutilice para otro contenido o parámetros. Ambos módulos tienen pruebas unitarias. Aún deben conectarse al endpoint HTTP y al orquestador durable; la autenticación sigue deshabilitada y no se aceptan solicitudes facturables.
