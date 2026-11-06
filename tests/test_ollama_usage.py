@@ -1,6 +1,8 @@
+import httpx
 import pytest
+from unittest.mock import AsyncMock
 
-from api.ollama import parse_chat_response
+from api.ollama import chat, chat_with_usage, parse_chat_response
 
 
 def test_parse_complete_ollama_usage():
@@ -65,3 +67,85 @@ def test_requested_and_returned_models_are_kept_separate():
     )
     assert result.requested_model == "configured-model"
     assert result.returned_model == "different-model:latest"
+
+
+@pytest.mark.asyncio
+async def test_chat_with_usage_sends_non_streaming_request_and_parses_response(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "model": "atomic-code:actual",
+                "message": {"role": "assistant", "content": "respuesta"},
+                "done": True,
+                "prompt_eval_count": 9,
+                "eval_count": 4,
+                "total_duration": 100,
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            captured["timeout"] = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+        async def post(self, url, json):
+            captured["url"] = url
+            captured["payload"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr("api.ollama.httpx.AsyncClient", FakeAsyncClient)
+    result = await chat_with_usage(
+        [{"role": "user", "content": "hola"}],
+        temperature=0.3,
+        max_tokens=64,
+    )
+
+    assert result.content == "respuesta"
+    assert result.prompt_eval_count == 9
+    assert result.eval_count == 4
+    assert result.returned_model == "atomic-code:actual"
+    assert captured["payload"]["stream"] is False
+    assert captured["payload"]["messages"] == [{"role": "user", "content": "hola"}]
+    assert captured["payload"]["options"]["temperature"] == 0.3
+    assert captured["payload"]["options"]["num_predict"] == 64
+    assert captured["url"].endswith("/api/chat")
+
+
+@pytest.mark.asyncio
+async def test_chat_with_usage_propagates_transport_timeout(monkeypatch):
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+        async def post(self, url, json):
+            raise httpx.ReadTimeout("timeout")
+
+    monkeypatch.setattr("api.ollama.httpx.AsyncClient", FakeAsyncClient)
+    with pytest.raises(httpx.TimeoutException):
+        await chat_with_usage([{"role": "user", "content": "hola"}])
+
+
+@pytest.mark.asyncio
+async def test_legacy_chat_wrapper_still_returns_only_text(monkeypatch):
+    mocked = AsyncMock(return_value=type("Result", (), {"content": "solo texto"})())
+    monkeypatch.setattr("api.ollama.chat_with_usage", mocked)
+
+    result = await chat([{"role": "user", "content": "hola"}])
+
+    assert result == "solo texto"
+    mocked.assert_awaited_once()
