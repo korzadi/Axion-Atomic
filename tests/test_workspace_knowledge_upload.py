@@ -175,3 +175,64 @@ class KnowledgeUploadRouteTests(unittest.IsolatedAsyncioTestCase):
                 await workspace_delete_knowledge_source("not-a-uuid", "project-a", {"id": "editor"})
         self.assertEqual(caught.exception.status_code, 422)
         deletion.assert_awaited_once_with("not-a-uuid", "project-a")
+
+
+    async def test_source_reindex_requires_editor_before_store_access(self):
+        from api.schemas import IngestRequest
+        from api.workspace_routes import workspace_replace_knowledge_source
+
+        denied = HTTPException(status_code=403, detail="Permiso insuficiente")
+        with (
+            patch("api.workspace_routes._project_role", side_effect=denied) as authorize,
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.replace_source", new=AsyncMock()) as replace,
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                await workspace_replace_knowledge_source(
+                    "12345678-1234-5678-1234-567812345678",
+                    IngestRequest(project_id="project-a", text="texto", source="manual"),
+                    {"id": "viewer"},
+                )
+        self.assertEqual(caught.exception.status_code, 403)
+        authorize.assert_called_once()
+        replace.assert_not_awaited()
+
+    async def test_source_reindex_uses_exact_project_and_source_id(self):
+        from api.schemas import IngestRequest
+        from api.workspace_routes import workspace_replace_knowledge_source
+
+        source_id = "12345678-1234-5678-1234-567812345678"
+        request = IngestRequest(project_id="project-a", text="contenido nuevo", source="manual-v2")
+        with (
+            patch("api.workspace_routes._project_role") as authorize,
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.replace_source", new=AsyncMock(return_value=3)) as replace,
+        ):
+            result = await workspace_replace_knowledge_source(source_id, request, {"id": "editor"})
+        authorize.assert_called_once_with({"id": "editor"}, "project-a", ("owner", "admin", "editor"))
+        replace.assert_awaited_once_with(source_id, "contenido nuevo", "manual-v2", "project-a")
+        self.assertEqual(result, {"status": "reindexed", "project_id": "project-a", "source_id": source_id, "chunks": 3})
+
+    async def test_source_reindex_maps_missing_source_and_store_outage(self):
+        from api.schemas import IngestRequest
+        from api.workspace_routes import workspace_replace_knowledge_source
+        from rag.service import KnowledgeStoreUnavailable
+
+        request = IngestRequest(project_id="project-a", text="contenido nuevo", source="manual")
+        with (
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.replace_source", new=AsyncMock(side_effect=ValueError("No se encontró la fuente"))),
+        ):
+            with self.assertRaises(HTTPException) as missing:
+                await workspace_replace_knowledge_source("12345678-1234-5678-1234-567812345678", request, {"id": "editor"})
+        self.assertEqual(missing.exception.status_code, 404)
+
+        with (
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.replace_source", new=AsyncMock(side_effect=KnowledgeStoreUnavailable("safe unavailable"))),
+        ):
+            with self.assertRaises(HTTPException) as unavailable:
+                await workspace_replace_knowledge_source("12345678-1234-5678-1234-567812345678", request, {"id": "editor"})
+        self.assertEqual(unavailable.exception.status_code, 503)
