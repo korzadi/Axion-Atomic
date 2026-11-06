@@ -17,6 +17,8 @@ from api.projects import list_user_projects
 from api.database import engine
 from api.rate_limit import consume_rate_limit, rate_limit_key
 from api.oauth import begin, consume_state, configured, provider_profile, resolve_user
+from api.email_delivery import email_delivery_configured, send_verification_email
+from api.email_verification import issue_email_verification_token
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 SESSION_MAX_AGE = 12 * 60 * 60
@@ -69,17 +71,27 @@ def _enforce_rate_limit(request: Request, *, namespace: str, limit: int, window:
 async def register(req: RegisterRequest, request: Request):
     _require_auth_feature()
     _enforce_rate_limit(request, namespace="auth:register:ip", limit=10, window=timedelta(minutes=10))
+    email = req.email.strip().casefold()
+    _enforce_rate_limit(request, namespace="auth:register:account", subject=email,
+                        limit=5, window=timedelta(hours=1))
+    if not email_delivery_configured(settings) or not settings.oauth_public_base_url:
+        raise HTTPException(status_code=503, detail="El registro por correo no está disponible temporalmente.")
+    user_id = None
     try:
-        create_user(req.email, req.password, req.display_name)
+        user_id = create_user(req.email, req.password, req.display_name)
     except IntegrityError:
         # No revelar si una dirección ya está registrada.
         pass
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {
-        "status": "pending_verification",
-        "message": "Si los datos son válidos, la cuenta permanecerá pendiente hasta verificar el correo.",
-    }
+    if user_id:
+        try:
+            issued = issue_email_verification_token(engine=engine, user_id=user_id)
+            send_verification_email(settings=settings, recipient=email, token=issued.token)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="No se pudo enviar el correo. Solicita un nuevo envío más tarde.") from exc
+    return {"status": "pending_verification",
+            "message": "Si los datos son válidos, recibirás un correo con los pasos para activar tu cuenta."}
 
 
 @router.post("/login")
