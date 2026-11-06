@@ -14,7 +14,7 @@ class ModelIdentityTests(unittest.IsolatedAsyncioTestCase):
             messages=[Message(role="user", content="Hola")],
         )
 
-    async def test_workspace_chat_reports_configured_model(self):
+    async def test_workspace_chat_reports_public_catalog_model(self):
         with (
             patch("api.workspace_routes._project_role"),
             patch("api.workspace_routes.retrieve", new=AsyncMock(return_value="")),
@@ -22,7 +22,7 @@ class ModelIdentityTests(unittest.IsolatedAsyncioTestCase):
             patch("api.workspace_routes.settings.chat_model", "atomic-code:test"),
         ):
             response = await workspace_chat(self.request, user={"id": "user-test"})
-        self.assertEqual(response["model"], "atomic-code:test")
+        self.assertEqual(response["model"], "atomic-code")
 
     async def test_legacy_chat_reports_configured_model(self):
         with (

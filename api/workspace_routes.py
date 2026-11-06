@@ -105,7 +105,7 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
 
     return {
         "id": "axion-atomic-local", "object": "chat.completion", "created": 0,
-        "model": settings.chat_model,
+        "model": req.model,
         "choices": [{"index": 0, "message": {"role": "assistant", "content": result.content}, "finish_reason": "stop"}],
     }
 
