@@ -141,5 +141,55 @@ class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(connection.calls), 2)
 
 
+
+    async def test_agent_task_rate_limit_blocks_planning(self):
+        denied = HTTPException(status_code=429, detail="rate limited")
+        request = TaskRequest(project_id="project-1", goal="Planificar tarea segura")
+        with (
+            patch("api.workspace_routes._project_role", return_value="editor"),
+            patch("api.workspace_routes._enforce_workspace_limit", side_effect=denied) as limit,
+            patch("api.workspace_routes.create_plan", new=AsyncMock()) as planner,
+            patch("api.workspace_routes.create_approval") as approval,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_task(request, user={"id": "user-1"})
+        self.assertEqual(raised.exception.status_code, 429)
+        limit.assert_called_once()
+        self.assertEqual(limit.call_args.args, ("user-1", "project-1", "agent"))
+        self.assertEqual(limit.call_args.kwargs["user_limit"], 10)
+        self.assertEqual(limit.call_args.kwargs["project_limit"], 30)
+        planner.assert_not_awaited()
+        approval.assert_not_called()
+
+    async def test_agent_run_rate_limit_blocks_runtime_start(self):
+        from api.workspace_routes import workspace_agent_start
+        denied = HTTPException(status_code=429, detail="rate limited")
+        request = TaskRequest(project_id="project-1", goal="Ejecutar tarea segura")
+        with (
+            patch("api.workspace_routes._enforce_workspace_limit", side_effect=denied) as limit,
+            patch("api.workspace_routes._agent_runtime") as runtime,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_agent_start(request, user={"id": "user-1"})
+        self.assertEqual(raised.exception.status_code, 429)
+        limit.assert_called_once()
+        runtime.assert_not_called()
+
+    async def test_agent_resume_rate_limit_blocks_runtime_resume(self):
+        from api.workspace_routes import workspace_agent_resume
+        denied = HTTPException(status_code=429, detail="rate limited")
+        with (
+            patch("api.workspace_routes._enforce_workspace_limit", side_effect=denied) as limit,
+            patch("api.workspace_routes._agent_runtime") as runtime,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_agent_resume(
+                    "run-1", project_id="project-1", user={"id": "user-1"}
+                )
+        self.assertEqual(raised.exception.status_code, 429)
+        limit.assert_called_once()
+        self.assertEqual(limit.call_args.args, ("user-1", "project-1", "agent"))
+        runtime.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()

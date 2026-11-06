@@ -264,6 +264,10 @@ async def workspace_ingest(req: IngestRequest, user=Depends(_csrf_user)):
 @router.post("/agent/tasks")
 async def workspace_task(req: TaskRequest, user=Depends(_csrf_user)):
     await run_in_threadpool(_project_role, user, req.project_id, ("owner", "admin", "editor"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], req.project_id, "agent",
+        user_limit=10, project_limit=30, window=timedelta(minutes=1),
+    )
     plan = await create_plan(req.goal)
     approval_id = await run_in_threadpool(create_approval, req.project_id, req.goal, plan)
     return {"status": "awaiting_approval", "approval_id": approval_id, "project_id": req.project_id, "plan": plan}
@@ -272,6 +276,10 @@ async def workspace_task(req: TaskRequest, user=Depends(_csrf_user)):
 @router.post("/agent/runs")
 async def workspace_agent_start(req: TaskRequest, user=Depends(_csrf_user)):
     """Inicia una ejecución real y persistente; cada cambio sigue sujeto a aprobación."""
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], req.project_id, "agent",
+        user_limit=10, project_limit=30, window=timedelta(minutes=1),
+    )
     try:
         run = await _agent_runtime().start(user, req.project_id, req.goal)
     except ValueError as exc:
@@ -288,6 +296,10 @@ async def workspace_agent_resume(
     user=Depends(_csrf_user),
 ):
     """Reanuda una ejecución solo tras comprobar membresía y estado persistido."""
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], project_id, "agent",
+        user_limit=10, project_limit=30, window=timedelta(minutes=1),
+    )
     try:
         run = await _agent_runtime().resume(user, project_id, run_id)
     except ValueError as exc:
