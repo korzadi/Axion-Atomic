@@ -68,6 +68,29 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
             })
             self.assertEqual(denied_task.status_code, 404)
 
+    def test_chat_succeeds_even_if_shadow_logging_and_warning_fail(self):
+        result = InferenceResult(
+            content="respuesta segura", requested_model="atomic-code",
+            returned_model="atomic-code", done=True, prompt_eval_count=3,
+            eval_count=2, total_duration_ns=10, load_duration_ns=None,
+            prompt_eval_duration_ns=None, eval_duration_ns=None,
+            usage_source="ollama_response",
+        )
+        with (
+            patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.retrieve", return_value=""),
+            patch("api.workspace_routes.chat_with_usage", new_callable=AsyncMock, return_value=result),
+            patch("api.workspace_routes.logger.info", side_effect=RuntimeError("logger unavailable")),
+            patch("api.workspace_routes.logger.warning", side_effect=RuntimeError("logger unavailable")),
+        ):
+            response = self._post("/workspace/chat/completions", {
+                "project_id": "project-a",
+                "messages": [{"role": "user", "content": "consulta"}],
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["choices"][0]["message"]["content"], "respuesta segura")
+
     def test_editor_can_ingest_and_create_plan_but_not_decide_approvals(self):
         self.role = "editor"
         with (
