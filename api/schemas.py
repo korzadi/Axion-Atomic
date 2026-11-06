@@ -41,3 +41,7 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str = Field(min_length=5, max_length=320)
     password: str = Field(min_length=1, max_length=1024)
+
+
+class ProjectCreateRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
