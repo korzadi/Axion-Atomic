@@ -292,6 +292,10 @@ async def list_sources(project_id: str, limit: int = 100) -> dict:
 
 async def retrieve(query: str, project_id: str, limit: int = 5):
     project_filter = _project_filter(project_id)
+    if not isinstance(query, str):
+        raise ValueError("La consulta debe ser texto")
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 20:
+        raise ValueError("El límite de recuperación debe estar entre 1 y 20")
     if not query.strip():
         return ""
     try:
