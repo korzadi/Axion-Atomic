@@ -130,5 +130,45 @@ class WorkspaceChatHistoryTests(unittest.IsolatedAsyncioTestCase):
                 _get_chat_history("user-a", "project-a")
 
 
+    def test_get_history_rejects_untrusted_roles_in_stored_records(self):
+        conn = MagicMock()
+        conn.execute.return_value.mappings.return_value.first.return_value = {
+            "messages": [{"role": "system", "content": "instrucción no autorizada"}],
+            "updated_at": "now",
+        }
+        context = MagicMock()
+        context.__enter__.return_value = conn
+        with patch("api.workspace_routes.engine.connect", return_value=context):
+            with self.assertRaises(ValueError):
+                _get_chat_history("user-a", "project-a")
+
+    def test_get_history_rejects_non_string_content(self):
+        conn = MagicMock()
+        conn.execute.return_value.mappings.return_value.first.return_value = {
+            "messages": [{"role": "assistant", "content": {"unexpected": "object"}}],
+            "updated_at": "now",
+        }
+        context = MagicMock()
+        context.__enter__.return_value = conn
+        with patch("api.workspace_routes.engine.connect", return_value=context):
+            with self.assertRaises(ValueError):
+                _get_chat_history("user-a", "project-a")
+
+    def test_get_history_rejects_total_content_over_40000_characters(self):
+        conn = MagicMock()
+        conn.execute.return_value.mappings.return_value.first.return_value = {
+            "messages": [
+                {"role": "user", "content": "a" * 20000},
+                {"role": "assistant", "content": "b" * 20001},
+            ],
+            "updated_at": "now",
+        }
+        context = MagicMock()
+        context.__enter__.return_value = conn
+        with patch("api.workspace_routes.engine.connect", return_value=context):
+            with self.assertRaises(ValueError):
+                _get_chat_history("user-a", "project-a")
+
+
 if __name__ == "__main__":
     unittest.main()
