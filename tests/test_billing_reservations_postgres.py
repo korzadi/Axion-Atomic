@@ -52,7 +52,7 @@ def _account(quota: int = 20):
     return user_id, project_id
 
 
-def _reserve(user_id, project_id, *, key, amount, request_id=None, digest=None):
+def _reserve(user_id, project_id, *, key, amount, request_id=None, digest=None, purchased_fallback_allowed=False):
     return reserve_credits(
         engine=engine,
         user_id=user_id,
@@ -62,6 +62,7 @@ def _reserve(user_id, project_id, *, key, amount, request_id=None, digest=None):
         payload_sha256=digest or ("a" * 64),
         required_credits=amount,
         policy_version="test-v1",
+        purchased_fallback_allowed=purchased_fallback_allowed,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
     )
 
@@ -154,7 +155,7 @@ def test_purchased_lots_reserve_and_settle_in_fefo_order():
                 "reference": reference, "expiry": expiry,
             })
 
-    reservation = _reserve(user_id, project_id, key="fefo-reserve", amount=8)
+    reservation = _reserve(user_id, project_id, key="fefo-reserve", amount=8, purchased_fallback_allowed=True)
     with engine.connect() as conn:
         reserved = conn.execute(text("""
             SELECT credit_lot_id, allocated_credits
@@ -202,3 +203,26 @@ def test_usage_above_reservation_enters_review_without_extra_debit():
     assert row.state == "review"
     assert row.reserved_credits == 5
     assert row.consumed_credits == 0
+
+
+
+def test_purchased_credits_are_not_used_without_plan_permission():
+    user_id, project_id = _account(quota=0)
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO billing_credit_lots
+                (id, user_id, source, source_reference, granted_credits, available_credits)
+            VALUES (CAST(:id AS UUID), :user_id, 'purchased', 'fallback-disabled',
+                    10, 10)
+        """), {"id": str(uuid.uuid4()), "user_id": user_id})
+
+    with pytest.raises(InsufficientCredits):
+        _reserve(user_id, project_id, key="fallback-disabled", amount=5)
+
+    with engine.connect() as conn:
+        row = conn.execute(text("""
+            SELECT available_credits, reserved_credits
+            FROM billing_credit_lots WHERE user_id=:user_id
+        """), {"user_id": user_id}).one()
+    assert row.available_credits == 10
+    assert row.reserved_credits == 0
