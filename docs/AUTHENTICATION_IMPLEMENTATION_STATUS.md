@@ -24,3 +24,10 @@ La migración 005 define las tablas de identidad y membresía. El módulo `api/a
 - Se añadieron pruebas unitarias para el cierre por defecto, validación de esquemas, creación/listado de proyectos y alcance de aprobaciones. No se han ejecutado pruebas ni migraciones.
 
 El módulo es una capa de servicio inicial, no una autenticación lista para producción. Las rutas de aprobación del workspace están protegidas por sesión, CSRF en POST y membresía de proyecto, pero siguen desactivadas mientras `AUTH_ENABLED=false`; no habilitarlas a usuarios finales hasta cerrar las limitaciones anteriores. El cambio de estado a `active` debe ocurrir únicamente después de validar un token de verificación de un solo uso, con expiración y almacenamiento seguro de su hash.
+
+
+## Verificación de correo: primitives añadidas
+
+La migración 011 añade almacenamiento de tokens de verificación con SHA-256, expiración e índice que permite un solo token abierto por usuario. `api/email_verification.py` emite tokens aleatorios de 30 minutos, invalida los anteriores y consume el token en una transacción que activa exclusivamente cuentas `pending_verification`. El token en claro solo se devuelve al adaptador que deberá enviarlo por correo; nunca se almacena en PostgreSQL.
+
+Pruebas PostgreSQL cubren activación, un solo uso, invalidación de tokens anteriores, expiración y cuentas deshabilitadas. Esto todavía NO completa el flujo público: falta proveedor de correo transaccional, endpoint de verificación con respuesta segura, límites antiabuso distribuidos, recuperación de contraseña y pruebas end-to-end. `AUTH_ENABLED` permanece desactivado.
