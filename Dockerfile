@@ -17,4 +17,4 @@ USER appuser
 EXPOSE 8000
 # Las migraciones son una operación administrativa explícita; nunca se ejecutan
 # automáticamente al iniciar o reiniciar el contenedor.
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--limit-concurrency", "64", "--backlog", "128", "--timeout-keep-alive", "5"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--limit-concurrency", "64", "--backlog", "128", "--timeout-keep-alive", "5"]
