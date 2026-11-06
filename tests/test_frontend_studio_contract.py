@@ -53,3 +53,12 @@ def test_agent_workspace_uses_real_project_scoped_plan_endpoint():
     assert "X-CSRF-Token" in source
     assert "project_id:projectId,goal:text" in source
     assert "Este plan todavía no se ha ejecutado" in source
+
+
+def test_agent_workspace_starts_persistent_runtime_and_supports_resume():
+    source = FRONTEND.read_text(encoding="utf-8")
+    assert "fetch(API+'/workspace/agent/runs'" in source
+    assert "X-CSRF-Token" in source
+    assert "Reanudar ejecución" in source
+    assert "/resume?project_id=" in source
+    assert "Las modificaciones no se aplican hasta que un propietario o administrador las apruebe" in source
