@@ -26,7 +26,7 @@
 ### Módulos conectados
 
 - **Proyectos:** `GET /auth/projects` y `POST /auth/projects`; la creación asigna la membresía `owner` en el backend.
-- **Chat IA:** `POST /workspace/chat/completions`; carga proyectos autorizados, envía sesión y CSRF y mantiene el contexto de conversación en la sesión del navegador. El backend usa el modelo configurado y RAG limitado al proyecto. No implementa streaming ni ejecución de herramientas.
+- **Chat IA:** `POST /workspace/chat/completions` y `GET /workspace/chat/history`; carga proyectos autorizados, envía sesión y CSRF y persiste el historial en PostgreSQL por usuario y proyecto (límite de 100 mensajes). El backend recupera contexto RAG filtrado por proyecto y usa el modelo configurado. No implementa streaming ni ejecución de herramientas.
 - **Agentes / aprobaciones:** consulta historial y detalle de ejecuciones y permite registrar decisiones de aprobación según rol de proyecto. Aprobar no ejecuta ni reanuda herramientas; la integración end-to-end del runtime sigue pendiente.
 - **Modelos:** consulta `GET /billing/catalog`. El catálogo actual es informativo y no habilita checkout ni facturación.
 - **Pagos:** consulta órdenes propias e historial mediante `GET /billing/orders` y `GET /billing/orders/{id}`. No crea órdenes, confirma pagos ni acredita créditos.
