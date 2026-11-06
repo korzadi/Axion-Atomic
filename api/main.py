@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import httpx
 from sqlalchemy import text
@@ -18,8 +19,24 @@ from api.workspace_routes import router as workspace_router
 from api.payment_routes import router as payment_router
 from api.admin_routes import router as admin_router
 from api.catalog_routes import router as catalog_router
+from api.capacity import CapacityExceeded
+from api.rcache import close_cache, ping_cache
 
 app = FastAPI(title="Axion Atomic API", version="0.2.0")
+
+@app.exception_handler(CapacityExceeded)
+async def inference_capacity_exceeded(request, exc: CapacityExceeded):
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "El servicio de inferencia está ocupado. Inténtalo de nuevo en unos segundos."},
+        headers={"Retry-After": str(exc.retry_after_seconds)},
+    )
+
+
+@app.on_event("shutdown")
+async def close_redis_cache():
+    await close_cache()
+
 app.include_router(auth_router)
 app.include_router(auth_recovery_router)
 app.include_router(workspace_router)
@@ -31,6 +48,8 @@ app.include_router(catalog_router)
 @app.get("/health")
 async def health():
     checks = {"database": "unavailable", "ollama": "unavailable", "qdrant": "unavailable"}
+    if settings.redis_cache_enabled:
+        checks["redis"] = "unavailable"
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -48,6 +67,8 @@ async def health():
                     checks[key] = "ok"
             except httpx.HTTPError:
                 pass
+    if settings.redis_cache_enabled and await ping_cache():
+        checks["redis"] = "ok"
     if any(value != "ok" for value in checks.values()):
         raise HTTPException(status_code=503, detail={"status": "degraded"})
     return {"status": "ok"}
