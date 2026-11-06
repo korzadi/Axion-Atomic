@@ -1,56 +1,64 @@
 # Estado de AXION STUDIO — frontend web
 
-**Rama de referencia:** `main`  
-**Estado:** shell web integrado y servido por FastAPI desde el directorio estático; autenticación y módulos siguen sujetos a las limitaciones indicadas aquí. No equivale a un SaaS listo para producción.
+**Rama:** `main`  
+**Estado:** interfaz web integrada con FastAPI y conectada a varios endpoints reales autenticados. Esta situación no equivale a un SaaS listo para producción ni a un despliegue validado.
 
-## Incluido
+## Experiencia pública y acceso
 
 - Página pública responsive con identidad AXION ATOMIC.
-- Formulario de registro por correo y contraseña, con nombre visible y aceptación de términos en la interfaz.
-- Formulario de inicio de sesión.
-- Envío de credenciales mediante `fetch` a las rutas reales `POST /auth/register` y `POST /auth/login`.
-- Validación posterior de sesión mediante `GET /auth/me`.
-- Cierre de sesión mediante `POST /auth/logout`, cookie de sesión HttpOnly y encabezado CSRF leído desde la cookie no HttpOnly.
-- Navegación visual del workspace para chat, modelos, agentes, Atomic Code, Atomic Video, proyectos, conocimiento y administración.
-- Vista Chat IA conectada a `POST /workspace/chat/completions`: carga proyectos del usuario, permite cambiar de proyecto, mantiene el contexto de la conversación en la sesión del navegador y envía cookie de sesión más encabezado CSRF. El backend usa el modelo configurado en ATOMIC CODE 1.1 y recupera contexto RAG limitado al `project_id`.
-- Vista **Proyectos** conectada a `GET /auth/projects` y `POST /auth/projects`; la creación asigna la membresía `owner` en el backend.
-- Desde cada proyecto se puede consultar el historial real de ejecuciones mediante `GET /workspace/agent/runs` y abrir su detalle con `GET /workspace/agent/runs/{run_id}`; el servidor valida membresía y filtra por `project_id`.
-- Desde proyectos con rol `owner`, `admin` o `editor` se pueden consultar las aprobaciones pendientes mediante `GET /workspace/agent/approvals`; solo `owner` y `admin` pueden decidirlas mediante las rutas CSRF protegidas de aprobación.
-- La interfaz informa expresamente que aprobar registra una decisión pero **no ejecuta ni reanuda** herramientas; el runtime end-to-end sigue pendiente.
-- Los proveedores Google y GitHub permanecen deshabilitados. No hay flujo OAuth implementado ni credenciales confirmadas.
-- FastAPI sirve `frontend/index.html` desde `/` mediante `StaticFiles`, montado después de las rutas API para no interceptar `/auth`, `/workspace`, `/health` ni `/v1`.
-- El `Dockerfile` incluye el directorio `frontend/` en la imagen. Esta modificación de código no implica que se haya construido o desplegado una imagen.
+- Registro por correo y contraseña con aceptación de términos.
+- Inicio y cierre de sesión con cookie HttpOnly y protección CSRF.
+- Verificación de correo y recuperación de contraseña mediante tokens.
+- Límites antiabuso para registro, login, OAuth y recuperación; su comportamiento en producción depende de configuración y persistencia PostgreSQL.
+- OAuth Google y GitHub dispone de rutas de inicio/callback y validación de identidad. La operación real requiere credenciales externas, URLs de callback correctas y pruebas con cuentas de proveedor; no se considera validada solo por mostrar los botones.
+- Las rutas de autenticación permanecen sujetas a `AUTH_ENABLED`; no se habilitó esa variable ni se modificó configuración del VPS.
 
-## Contrato backend verificado estáticamente
+## AXION STUDIO
 
-- Registro requiere `email`, `password` (mínimo 12 caracteres) y `display_name`; devuelve HTTP 202 y deja la cuenta en `pending_verification`.
-- Login devuelve `user`, `csrf_token` y `expires_in`; crea cookies `axion_session` y `axion_csrf`.
-- `GET /auth/me` devuelve el objeto `user`.
-- Logout requiere `X-CSRF-Token` coincidente con la cookie `axion_csrf`.
-- `GET /auth/projects` lista los proyectos del usuario.
-- Las rutas de autenticación y workspace responden HTTP 503 mientras `AUTH_ENABLED=false`.
+### Panel de inicio
 
-## Límites de seguridad y funcionalidad
+- Al validar la sesión, el usuario llega a un panel con saludo y resumen.
+- El panel consulta `GET /auth/projects` y muestra el número y los cinco proyectos recientes de la cuenta.
+- Consulta `GET /billing/catalog` para mostrar modelos publicados y el estado de checkout que informa el servidor.
+- No presenta saldos, inferencias activas ni disponibilidad del runtime sin una API que lo confirme.
+- Los accesos rápidos navegan a Chat IA, Proyectos y Modelos.
 
-- `AUTH_ENABLED` continúa deshabilitado por defecto. No se cambió ninguna variable de entorno ni se habilitó el registro.
-- El registro no puede iniciar sesión hasta que una verificación real de correo active la cuenta.
-- No existe todavía verificación/envío de correo, recuperación de contraseña, MFA ni rate limiting distribuido.
-- Google y GitHub no están conectados; los botones no simulan autenticación.
-- La vista Administración es únicamente informativa. No existe API de administración global ni RBAC global/superadmin verificado.
-- Chat IA ahora realiza inferencia real mediante `/workspace/chat/completions`, pero es una conversación asistida y no el runtime del agente: no ejecuta herramientas ni modifica archivos. El historial de ejecuciones y la revisión de aprobaciones consultan endpoints autenticados reales. No existe todavía en AXION STUDIO una acción para iniciar/reanudar el runtime de CodingAgent; modelos, agentes (salvo historial/aprobaciones), Atomic Code como módulo independiente, Atomic Video y Conocimiento conservan estados informativos cuando no tienen integración completa.
-- Las rutas legacy `/v1/*` siguen protegidas por API key de servicio y no constituyen una API multiusuario para el navegador.
-- El montaje estático depende de que exista el directorio `frontend/`; el Dockerfile ahora lo copia, pero el comportamiento empaquetado aún requiere CI y prueba de imagen en un entorno autorizado.
+### Módulos conectados
 
-## Siguiente trabajo requerido
+- **Proyectos:** `GET /auth/projects` y `POST /auth/projects`; la creación asigna la membresía `owner` en el backend.
+- **Chat IA:** `POST /workspace/chat/completions`; carga proyectos autorizados, envía sesión y CSRF y mantiene el contexto de conversación en la sesión del navegador. El backend usa el modelo configurado y RAG limitado al proyecto. No implementa streaming ni ejecución de herramientas.
+- **Agentes / aprobaciones:** consulta historial y detalle de ejecuciones y permite registrar decisiones de aprobación según rol de proyecto. Aprobar no ejecuta ni reanuda herramientas; la integración end-to-end del runtime sigue pendiente.
+- **Modelos:** consulta `GET /billing/catalog`. El catálogo actual es informativo y no habilita checkout ni facturación.
+- **Pagos:** consulta órdenes propias e historial mediante `GET /billing/orders` y `GET /billing/orders/{id}`. No crea órdenes, confirma pagos ni acredita créditos.
+- **Administración:** consulta permisos globales con `GET /admin/access/me`; no concede roles ni permite mutaciones.
 
-1. Verificar CI de los commits más recientes y mantener pruebas de entrega de `/`, precedencia API, historial y autorizaciones por proyecto.
-2. Diseñar y probar la integración del runtime persistente: inicio, restauración, reanudación tras aprobación, reconciliación de acciones interrumpidas y eventos; nunca ejecutar acciones mutables sin aprobación ligada al hash.
-3. Completar verificación/envío de correo, recuperación, rate limiting y controles antiabuso antes de habilitar `AUTH_ENABLED`.
-4. Implementar OAuth Google/GitHub solo después de definir callback URLs y configurar secretos fuera del repositorio.
-5. Diseñar roles globales separados de los roles por proyecto; implementar autorización server-side, auditoría y pruebas negativas antes de exponer un panel superadmin.
-6. Completar pruebas de integración del Chat IA (errores del proveedor, cambio de proyecto, CSRF, límites de contexto y aislamiento RAG); después conectar cada módulo únicamente a endpoints autenticados existentes.
-7. Validar la imagen y el despliegue en un entorno de pruebas, con aprobación expresa del operador; no ejecutar esa operación como parte de cambios de código.
+### Módulos todavía informativos o incompletos
+
+- Atomic Video: investigación y desarrollo; no hay flujo de generación audiovisual de producción conectado.
+- Atomic Vision y Atomic Reasoning: no se deben presentar como servicios disponibles sin verificación de sus runtimes.
+- Conocimiento: falta completar el flujo de interfaz multiusuario de carga, consulta y administración de fuentes.
+- Atomic Code como módulo independiente: el modelo se utiliza desde Chat IA; faltan controles y experiencia especializada de programación dentro del workspace.
+- Administración: la API disponible es de solo lectura; faltan operaciones administrativas seguras, auditadas y probadas.
+- Agente ejecutor: faltan inicio/reanudación persistente, recuperación de tareas interrumpidas, eventos y aprobación ligada al hash de la acción.
+
+## Límites de producción
+
+- No se ha validado OAuth con credenciales reales ni se ha probado el ciclo completo de correo en un dominio de producción.
+- No se ha habilitado autenticación en el VPS.
+- El chat no soporta streaming y no debe confundirse con un agente que ejecuta código o modifica archivos.
+- El sistema de facturación permanece en modo no conectado al endpoint real de chat; no se deben activar cobros hasta completar idempotencia HTTP, proveedor KMS real, attestation verificable del runtime y pruebas end-to-end.
+- QvaPay requiere confirmar el mecanismo de referencia de orden y verificación server-to-server/webhook firmado antes de aceptar pagos reales.
+- La imagen Docker y el despliegue en VPS requieren una validación separada y aprobación expresa del operador.
+
+## Siguientes bloques
+
+1. Pruebas funcionales del panel y de cada flujo web con sesión, CSRF, errores de API y aislamiento entre proyectos.
+2. Completar el runtime persistente del agente y su ciclo de aprobación/reanudación.
+3. Completar la experiencia de Atomic Code y el módulo de conocimiento usando únicamente endpoints reales.
+4. Validar OAuth, correo y configuración de autenticación en un entorno de pruebas.
+5. Completar los gates de facturación y pagos sin habilitar cobros prematuramente.
+6. Validar build e instalación en un entorno autorizado antes de cualquier despliegue.
 
 ## Estado operativo
 
-La integración se ha realizado en el repositorio y rama `main`. No se ha desplegado, construido ni reiniciado Docker; no se ha accedido al VPS, ejecutado migraciones, cambiado variables de entorno ni modificado servicios o datos.
+Los cambios de código se guardan en el repositorio. No se ha accedido al VPS, construido o reiniciado Docker, aplicado migraciones, cambiado variables de entorno, alterado servicios ni modificado datos.
