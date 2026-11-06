@@ -92,7 +92,7 @@ async def workspace_approvals(
 
 @router.post("/agent/approvals/{approval_id}")
 async def workspace_approve(
-    approval_id: int,
+    approval_id: str,
     req: ApprovalRequest,
     project_id: str = Query(min_length=1, max_length=200),
     user=Depends(_csrf_user),
