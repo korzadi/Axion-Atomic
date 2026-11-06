@@ -29,6 +29,7 @@ def test_rcache_round_trips_embedding_with_ttl(monkeypatch):
 
     monkeypatch.setattr(rcache, "_redis_client", client)
     monkeypatch.setattr(rcache.settings, "redis_embedding_cache_ttl_seconds", 1800)
+    monkeypatch.setattr(rcache.settings, "api_key", "test-only-cache-key-secret")
 
     async def scenario():
         await rcache.set_embedding("embed-v1", 3, "texto privado", [0.1, 0.2, 0.3])
@@ -49,6 +50,7 @@ def test_rcache_rejects_corrupt_or_wrong_dimension_value(monkeypatch):
         return fake
 
     monkeypatch.setattr(rcache, "_redis_client", client)
+    monkeypatch.setattr(rcache.settings, "api_key", "test-only-cache-key-secret")
 
     async def scenario():
         key = rcache._cache_key("embed-v1", 2, "hello")
