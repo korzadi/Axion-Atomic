@@ -28,7 +28,7 @@ class ProjectCreationRouteTests(unittest.IsolatedAsyncioTestCase):
             )
         limit.assert_called_once()
         args, kwargs = limit.call_args
-        self.assertEqual(args[1].url.path, "/auth/projects")
+        self.assertEqual(args[0].url.path, "/auth/projects")
         self.assertEqual(kwargs["namespace"], "auth:projects:create:user")
         self.assertEqual(kwargs["subject"], "user-1")
         self.assertEqual(kwargs["limit"], 10)
