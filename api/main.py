@@ -6,7 +6,7 @@ from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest
 from api.ollama import chat
 from api.config import settings
 from api.database import engine
-from rag.service import ingest_text, retrieve
+from rag.service import SensitiveContentError, ingest_text, retrieve
 from agent.planner import create_plan
 from agent.approvals import create_approval, decide_approval, list_pending
 from api.auth_routes import router as auth_router
@@ -69,7 +69,12 @@ async def completions(req: ChatRequest):
 
 @app.post("/v1/knowledge/ingest", dependencies=[Depends(require_api_key)])
 async def ingest(req: IngestRequest):
-    n = await ingest_text(req.text, req.source, req.project_id)
+    try:
+        n = await ingest_text(req.text, req.source, req.project_id)
+    except SensitiveContentError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     return {"status": "indexed", "project_id": req.project_id, "chunks": n}
 
 

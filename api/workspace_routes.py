@@ -8,7 +8,7 @@ from api.auth import current_user, authorize_project, require_csrf, COOKIE_NAME,
 from api.config import settings
 from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest
 from api.ollama import chat
-from rag.service import ingest_text, retrieve
+from rag.service import SensitiveContentError, ingest_text, retrieve
 from agent.planner import create_plan
 from agent.approvals import create_approval
 
@@ -60,7 +60,12 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
 @router.post("/knowledge/ingest")
 async def workspace_ingest(req: IngestRequest, user=Depends(_csrf_user)):
     _project_role(user, req.project_id, ("owner", "admin", "editor"))
-    count = await ingest_text(req.text, req.source, req.project_id)
+    try:
+        count = await ingest_text(req.text, req.source, req.project_id)
+    except SensitiveContentError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     return {"status": "indexed", "project_id": req.project_id, "chunks": count}
 
 
