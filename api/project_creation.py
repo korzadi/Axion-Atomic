@@ -18,15 +18,12 @@ def _create_workspace_exclusive(root: str | Path, project_id: str) -> Path:
     base = Path(root).resolve(strict=True)
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
     root_fd = os.open(base, flags)
-    created = False
     try:
         os.mkdir(project_id, 0o700, dir_fd=root_fd)
-        created = True
         try:
             child_fd = os.open(project_id, flags, dir_fd=root_fd)
         except OSError:
             os.rmdir(project_id, dir_fd=root_fd)
-            created = False
             raise
         try:
             if not stat.S_ISDIR(os.fstat(child_fd).st_mode):
@@ -36,8 +33,6 @@ def _create_workspace_exclusive(root: str | Path, project_id: str) -> Path:
             os.close(child_fd)
     finally:
         os.close(root_fd)
-    if not created:
-        raise FileExistsError("workspace was not created exclusively")
     return base / project_id
 
 
@@ -93,9 +88,4 @@ def create_owned_project_with_workspace(user_id: str, name: str) -> dict:
             _remove_empty_workspace(root, project_id)
         raise
 
-    return {
-        "id": project_id,
-        "name": clean_name,
-        "role": "owner",
-        "workspace": str(Path(root).resolve(strict=True) / project_id),
-    }
+    return {"id": project_id, "name": clean_name, "role": "owner"}
