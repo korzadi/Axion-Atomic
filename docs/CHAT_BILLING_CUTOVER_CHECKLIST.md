@@ -12,7 +12,7 @@ The legacy `/v1/chat/completions` route uses a shared API key, not a user identi
 ### 1. Identity and idempotency
 - Require a strict client idempotency key.
 - Derive a stable request UUID scoped to authenticated user and key.
-- Hash canonical request data: model, project, messages, generation settings, and policy version.
+- [x] Pure helper hashes canonical request data: model, project, messages, generation settings, and policy version (`api/billing_request_identity.py`).\n- [ ] The HTTP endpoint still does not require or persist `Idempotency-Key`; helper availability alone is not HTTP idempotency.
 - Same key with different payload must conflict, never create another charge.
 
 ### 2. Runtime and budget attestation
@@ -59,4 +59,4 @@ The legacy `/v1/chat/completions` route uses a shared API key, not a user identi
 - QvaPay Lightning Address order correlation and server-to-server verification remain unconfirmed.
 - Real OAuth credentials/callbacks and production session configuration require validation.
 
-**Release rule:** this checklist is a cutover specification, not evidence that any gate has passed. Production billing remains disabled.
+**Implementation note:** The current workspace chat path remains shadow-only. Do not describe it as idempotent until the endpoint atomically persists the user/key/fingerprint and connects it to durable execution recovery.\n\n**Release rule:** this checklist is a cutover specification, not evidence that any gate has passed. Production billing remains disabled.
