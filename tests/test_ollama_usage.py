@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 import pytest
 from unittest.mock import AsyncMock
@@ -69,8 +70,7 @@ def test_requested_and_returned_models_are_kept_separate():
     assert result.returned_model == "different-model:latest"
 
 
-@pytest.mark.asyncio
-async def test_chat_with_usage_sends_non_streaming_request_and_parses_response(monkeypatch):
+def test_chat_with_usage_sends_non_streaming_request_and_parses_response(monkeypatch):
     captured = {}
 
     class FakeResponse:
@@ -103,11 +103,11 @@ async def test_chat_with_usage_sends_non_streaming_request_and_parses_response(m
             return FakeResponse()
 
     monkeypatch.setattr("api.ollama.httpx.AsyncClient", FakeAsyncClient)
-    result = await chat_with_usage(
+    result = asyncio.run(chat_with_usage(
         [{"role": "user", "content": "hola"}],
         temperature=0.3,
         max_tokens=64,
-    )
+    ))
 
     assert result.content == "respuesta"
     assert result.prompt_eval_count == 9
@@ -120,8 +120,7 @@ async def test_chat_with_usage_sends_non_streaming_request_and_parses_response(m
     assert captured["url"].endswith("/api/chat")
 
 
-@pytest.mark.asyncio
-async def test_chat_with_usage_propagates_transport_timeout(monkeypatch):
+def test_chat_with_usage_propagates_transport_timeout(monkeypatch):
     class FakeAsyncClient:
         def __init__(self, timeout):
             pass
@@ -137,15 +136,14 @@ async def test_chat_with_usage_propagates_transport_timeout(monkeypatch):
 
     monkeypatch.setattr("api.ollama.httpx.AsyncClient", FakeAsyncClient)
     with pytest.raises(httpx.TimeoutException):
-        await chat_with_usage([{"role": "user", "content": "hola"}])
+        asyncio.run(chat_with_usage([{"role": "user", "content": "hola"}]))
 
 
-@pytest.mark.asyncio
-async def test_legacy_chat_wrapper_still_returns_only_text(monkeypatch):
+def test_legacy_chat_wrapper_still_returns_only_text(monkeypatch):
     mocked = AsyncMock(return_value=type("Result", (), {"content": "solo texto"})())
     monkeypatch.setattr("api.ollama.chat_with_usage", mocked)
 
-    result = await chat([{"role": "user", "content": "hola"}])
+    result = asyncio.run(chat([{"role": "user", "content": "hola"}]))
 
     assert result == "solo texto"
     mocked.assert_awaited_once()
