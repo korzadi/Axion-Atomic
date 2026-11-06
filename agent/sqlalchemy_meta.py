@@ -34,6 +34,10 @@ class SqlAlchemyMetaStore(MetaStore):
             conn.rollback()
             raise
         finally:
-            if cur is not None:
-                cur.close()
-            conn.close()
+            # Una excepción al cerrar el cursor no debe dejar la conexión prestada
+            # fuera del pool. El cierre de la conexión siempre se intenta.
+            try:
+                if cur is not None:
+                    cur.close()
+            finally:
+                conn.close()
