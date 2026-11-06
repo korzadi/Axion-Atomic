@@ -54,7 +54,7 @@ def begin(engine: Engine, provider: str, settings, *, terms_accepted: bool) -> t
     return "https://github.com/login/oauth/authorize?" + urlencode(params), state
 
 
-def consume_state(engine: Engine, provider: str, state: str) -> str:
+def consume_state(engine: Engine, provider: str, state: str) -> dict:
     if not isinstance(state, str) or not 20 <= len(state) <= 256:
         raise ValueError("Estado OAuth inválido")
     now, hashed = datetime.now(timezone.utc), digest(state)
