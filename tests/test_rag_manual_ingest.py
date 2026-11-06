@@ -281,6 +281,14 @@ class RetrievalInputBoundsTests(unittest.IsolatedAsyncioTestCase):
                 embed.assert_not_awaited()
                 query.assert_not_called()
 
+    async def test_retrieval_rejects_oversized_query_before_store_access(self):
+        with patch.object(service, "ensure_collection") as ensure, patch.object(service, "embed", new=AsyncMock()) as embed, patch.object(service.client, "query_points") as query:
+            with self.assertRaisesRegex(ValueError, "12000 caracteres"):
+                await service.retrieve("x" * 12001, "project-a")
+        ensure.assert_not_called()
+        embed.assert_not_awaited()
+        query.assert_not_called()
+
     async def test_retrieval_rejects_non_text_query_before_store_access(self):
         with patch.object(service, "ensure_collection") as ensure, patch.object(service, "embed", new=AsyncMock()) as embed, patch.object(service.client, "query_points") as query:
             with self.assertRaisesRegex(ValueError, "consulta debe ser texto"):
