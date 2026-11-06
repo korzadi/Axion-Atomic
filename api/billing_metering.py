@@ -32,9 +32,12 @@ class InferenceCharge:
 
 def calculate_inference_charge(result, policy: ModelRatePolicy) -> InferenceCharge:
     """Calcula créditos solo con resultado final, medido y explícitamente habilitado."""
-    if not policy.enabled:
+    if policy.enabled is not True:
         raise PermissionError("La facturación de este modelo no está habilitada")
-    if not policy.model_name or not policy.version:
+    if (
+        not isinstance(policy.model_name, str) or not policy.model_name.strip()
+        or not isinstance(policy.version, str) or not policy.version.strip()
+    ):
         raise ValueError("La política del modelo requiere nombre y versión")
     if result.requested_model != policy.model_name:
         raise ValueError("El modelo solicitado no coincide con la política de precios")
