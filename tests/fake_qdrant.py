@@ -8,12 +8,16 @@ class FakeQdrantClient:
     def __init__(self):
         self.collections = set()
         self.points = {}
+        self.payload_indexes = set()
 
     def get_collections(self):
         return SimpleNamespace(collections=[SimpleNamespace(name=n) for n in self.collections])
 
     def create_collection(self, collection_name, vectors_config):
         self.collections.add(collection_name)
+
+    def create_payload_index(self, collection_name, field_name, field_schema):
+        self.payload_indexes.add((collection_name, field_name, field_schema))
 
     def upsert(self, collection_name, points, **kwargs):
         if collection_name not in self.collections:
@@ -66,3 +70,4 @@ class FakeQdrantClient:
     def close(self):
         self.points.clear()
         self.collections.clear()
+        self.payload_indexes.clear()
