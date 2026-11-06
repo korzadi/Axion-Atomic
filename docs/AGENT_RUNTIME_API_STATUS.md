@@ -75,3 +75,11 @@ La inspección estática de `Dockerfile`, `compose.yaml` y `sandbox/backends.py`
 5. Probar permisos UID/GID, lectura/escritura de snapshots, límites de CPU/RAM/PIDs, timeout, limpieza de contenedores y ausencia de procesos huérfanos en un entorno desechable.
 
 **Resultado:** el backend contiene parámetros de aislamiento útiles, pero la configuración actual del proyecto no demuestra que pueda ejecutarse desde la API. No conectar herramientas de ejecución ni habilitar endpoints de runtime hasta cerrar y probar todos los puntos anteriores. Esta revisión fue estática; no se ejecutó Docker ni se modificó infraestructura.
+
+
+## Endurecimiento adicional: salida de red del sandbox
+
+- `DockerBackend` ahora rechaza por defecto cualquier ejecución solicitada con red. La existencia de una red llamada `axion-sandbox-egress` no demuestra que tenga filtrado de salida; habilitarla requiere una política egress real, verificada y una decisión explícita de configuración.
+- `LocalBackend` ya no interpreta silenciosamente la ausencia de `unshare` o de permisos para crear namespaces como si la red estuviera aislada. Si no puede crear el namespace de red y no existe una excepción explícita reservada a pruebas/desarrollo, rechaza la ejecución.
+- Las pruebas locales que necesitan red declaran ahora de forma explícita `AXION_ALLOW_UNSAFE_LOCAL_NETWORK=1`. Esa excepción no debe configurarse en producción.
+- Este cambio es de fail-closed; no habilita red ni conecta el runtime HTTP. El backend Docker continúa sin estar configurado en Compose y no se ejecutó ningún contenedor real.
