@@ -71,6 +71,25 @@ def test_execution_claim_is_unique_and_completed_ciphertext_is_recoverable():
         )
 
 
+
+def test_concurrent_execution_claims_grant_exactly_one_inference_right():
+    from concurrent.futures import ThreadPoolExecutor
+
+    user_id, reservation_id = _reservation(engine)
+
+    def claim():
+        return claim_execution(
+            engine=engine, user_id=user_id, reservation_id=reservation_id,
+        )
+
+    # Distintas conexiones compiten por la misma reserva real de PostgreSQL.
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        claims = list(pool.map(lambda _: claim(), range(8)))
+
+    assert sum(1 for item in claims if item.claimed) == 1
+    assert len({item.execution_id for item in claims}) == 1
+    assert {item.state for item in claims} == {"started"}
+
 def test_started_execution_can_be_marked_unknown_and_never_reclaimed():
     user_id, reservation_id = _reservation(engine)
     first = claim_execution(engine=engine, user_id=user_id, reservation_id=reservation_id)
