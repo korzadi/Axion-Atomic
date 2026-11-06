@@ -133,5 +133,98 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
         )
 
 
+    def test_editor_cannot_decide_action_approval_before_database_access(self):
+        self.role = "editor"
+        with (
+            patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.engine.begin") as begin,
+        ):
+            response = self._post(
+                "/workspace/agent/approvals/action-7?project_id=project-a",
+                {"approved": True, "note": "no autorizado"},
+            )
+        self.assertEqual(response.status_code, 404)
+        begin.assert_not_called()
+
+    def test_owner_and_admin_can_decide_action_approval_without_execution(self):
+        from types import SimpleNamespace
+
+        for role in ("owner", "admin"):
+            with self.subTest(role=role):
+                self.role = role
+                conn = MagicMock()
+                conn.execute.side_effect = [
+                    MagicMock(first=MagicMock(return_value=SimpleNamespace(
+                        id="action-7", action_hash="hash-test"
+                    ))),
+                    MagicMock(rowcount=1),
+                ]
+                transaction = MagicMock()
+                transaction.__enter__.return_value = conn
+                with (
+                    patch("api.workspace_routes._project_role", side_effect=enforce_role),
+                    patch("api.workspace_routes.engine.begin", return_value=transaction),
+                ):
+                    response = self._post(
+                        "/workspace/agent/approvals/action-7?project_id=project-a",
+                        {"approved": True, "note": "revisión humana"},
+                    )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["status"], "approved")
+                self.assertEqual(response.json()["execution"], "not_executed")
+                self.assertEqual(conn.execute.call_count, 2)
+                self.assertEqual(
+                    conn.execute.call_args_list[1].args[1],
+                    {
+                        "state": "approved",
+                        "project_id": "project-a",
+                        "proposal_id": "action-7",
+                        "action_hash": "hash-test",
+                    },
+                )
+
+    def test_action_approval_rolls_back_when_action_link_is_missing(self):
+        from types import SimpleNamespace
+
+        self.role = "owner"
+        conn = MagicMock()
+        conn.execute.side_effect = [
+            MagicMock(first=MagicMock(return_value=SimpleNamespace(
+                id="action-7", action_hash="hash-test"
+            ))),
+            MagicMock(rowcount=0),
+        ]
+        transaction = MagicMock()
+        transaction.__enter__.return_value = conn
+        with (
+            patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.engine.begin", return_value=transaction),
+        ):
+            response = self._post(
+                "/workspace/agent/approvals/action-7?project_id=project-a",
+                {"approved": True, "note": "revisión humana"},
+            )
+        self.assertEqual(response.status_code, 409)
+        self.assertTrue(transaction.__exit__.called)
+        self.assertIsNotNone(transaction.__exit__.call_args.args[0])
+
+    def test_action_approval_rejects_another_projects_record(self):
+        self.role = "admin"
+        conn = MagicMock()
+        conn.execute.return_value.first.return_value = None
+        transaction = MagicMock()
+        transaction.__enter__.return_value = conn
+        with (
+            patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.engine.begin", return_value=transaction),
+        ):
+            response = self._post(
+                "/workspace/agent/approvals/action-owned-by-a?project_id=project-b",
+                {"approved": True, "note": "revisión humana"},
+            )
+        self.assertEqual(response.status_code, 404)
+        conn.execute.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()
