@@ -75,10 +75,7 @@ class WorkspaceAgentRuntimeHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("private path", raised.exception.detail)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-    async def test_start_and_resume_routes_require_csrf_dependency():
+    async def test_start_and_resume_routes_require_csrf_dependency(self):
         import inspect
         from api.workspace_routes import workspace_agent_resume, workspace_agent_start
 
@@ -86,3 +83,8 @@ if __name__ == "__main__":
         resume_user = inspect.signature(workspace_agent_resume).parameters["user"].default
         self.assertEqual(start_user.dependency.__name__, "_csrf_user")
         self.assertEqual(resume_user.dependency.__name__, "_csrf_user")
+
+
+if __name__ == "__main__":
+    unittest.main()
+
