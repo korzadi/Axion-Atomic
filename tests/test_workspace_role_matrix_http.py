@@ -1,5 +1,7 @@
 """Pruebas HTTP de permisos por rol para las rutas principales de workspace."""
 import unittest
+import json
+import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import HTTPException
@@ -53,6 +55,10 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
             self.assertEqual(response.json()["choices"][0]["message"]["content"], "respuesta")
             chat.assert_awaited_once()
             self.assertIn('"event":"inference_usage_shadow"', usage_logs.output[0])
+            event = json.loads(usage_logs.output[0].split("INFO:axion.usage.shadow:", 1)[-1])
+            self.assertEqual(event["user_id"], "user-test")
+            self.assertEqual(event["project_id"], "project-a")
+            self.assertTrue(uuid.UUID(event["request_id"]))
             self.assertNotIn("hola", usage_logs.output[0])
 
             denied_ingest = self._post("/workspace/knowledge/ingest", {
