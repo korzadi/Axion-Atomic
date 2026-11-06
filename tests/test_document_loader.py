@@ -35,3 +35,50 @@ def test_rejects_invalid_docx_and_pdf():
         extract_document("broken.docx", b"not a zip")
     with pytest.raises(DocumentLoadError):
         extract_document("broken.pdf", b"not a pdf")
+
+
+def _pdf_bytes(*, pages=1, password=None):
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    for _ in range(pages):
+        writer.add_blank_page(width=72, height=72)
+    if password:
+        writer.encrypt(password)
+    output = io.BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
+def test_pdf_rejects_encrypted_and_excessive_page_documents():
+    with pytest.raises(DocumentLoadError, match="cifrados"):
+        extract_document("private.pdf", _pdf_bytes(password="secret"))
+    with pytest.raises(DocumentLoadError, match="250 páginas"):
+        extract_document("too-many.pdf", _pdf_bytes(pages=251))
+
+
+def test_pdf_with_no_extractable_text_is_rejected():
+    with pytest.raises(DocumentLoadError, match="No se encontró texto"):
+        extract_document("blank.pdf", _pdf_bytes())
+
+
+def test_docx_rejects_archive_with_too_many_entries():
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "word/document.xml",
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            '<w:body><w:p><w:r><w:t>Texto válido</w:t></w:r></w:p></w:body></w:document>',
+        )
+        for index in range(1_000):
+            archive.writestr(f"extra/{index}.txt", "")
+    with pytest.raises(DocumentLoadError, match="demasiados componentes"):
+        extract_document("many.docx", stream.getvalue())
+
+
+def test_document_loader_sanitizes_windows_path_and_bounds_display_name():
+    text, name = extract_document(r"C:\\private\\manual.txt", b"Contenido seguro")
+    assert text == "Contenido seguro"
+    assert name == "manual.txt"
+    _, long_name = extract_document(("a" * 600) + ".txt", b"ok")
+    assert len(long_name) == 500
