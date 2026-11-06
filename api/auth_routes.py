@@ -2,6 +2,7 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy.exc import IntegrityError
 
 from api.auth import (
@@ -14,6 +15,7 @@ from api.project_creation import create_owned_project_with_workspace
 from api.projects import list_user_projects
 from api.database import engine
 from api.rate_limit import consume_rate_limit, rate_limit_key
+from api.oauth import begin, consume_state, configured, provider_profile, resolve_user
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 SESSION_MAX_AGE = 12 * 60 * 60
@@ -94,6 +96,64 @@ async def login(req: LoginRequest, request: Request, response: Response):
         secure=settings.auth_cookie_secure, samesite="lax", path="/",
     )
     return {"user": user, "csrf_token": csrf, "expires_in": SESSION_MAX_AGE}
+
+
+
+@router.get("/oauth/providers")
+async def oauth_providers():
+    return {"google": configured(settings, "google"), "github": configured(settings, "github")}
+
+
+@router.get("/oauth/{provider}/start")
+async def oauth_start(provider: str, request: Request):
+    _require_auth_feature()
+    if provider not in ("google", "github"):
+        raise HTTPException(status_code=404, detail="Proveedor no admitido")
+    _enforce_rate_limit(request, namespace="auth:oauth:start:" + provider,
+                        limit=10, window=timedelta(minutes=10))
+    try:
+        return RedirectResponse(begin(engine, provider, settings), status_code=302)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/oauth/{provider}/callback")
+async def oauth_callback(provider: str, code: str | None = None,
+                         state: str | None = None, error: str | None = None):
+    _require_auth_feature()
+    if provider not in ("google", "github"):
+        raise HTTPException(status_code=404, detail="Proveedor no admitido")
+    if error or not code or not state:
+        return RedirectResponse("/?oauth_error=cancelled", status_code=303)
+    try:
+        nonce = consume_state(engine, provider, state)
+        profile = provider_profile(provider, code, nonce, settings)
+        user = resolve_user(engine, provider, profile)
+    except Exception:
+        # Nunca mostrar ni registrar códigos, tokens ni respuestas del proveedor.
+        return RedirectResponse("/?oauth_error=failed", status_code=303)
+    import secrets
+    from datetime import datetime, timezone
+    from api.auth import _digest
+    now = datetime.now(timezone.utc)
+    session, csrf = secrets.token_urlsafe(48), secrets.token_urlsafe(32)
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO user_sessions(id,user_id,token_hash,csrf_hash,created_at,expires_at,last_seen_at)
+            VALUES(:id,:user_id,:token_hash,:csrf_hash,:now,:expires,:now)
+        """), {"id": secrets.token_urlsafe(24), "user_id": user["id"],
+               "token_hash": _digest(session), "csrf_hash": _digest(csrf),
+               "now": now, "expires": now + timedelta(seconds=SESSION_MAX_AGE)})
+        conn.execute(text("UPDATE users SET last_login_at=:now WHERE id=:id"),
+                     {"now": now, "id": user["id"]})
+    result = RedirectResponse("/?oauth=success", status_code=303)
+    result.set_cookie(key=COOKIE_NAME, value=session, max_age=SESSION_MAX_AGE,
+                      httponly=True, secure=settings.auth_cookie_secure,
+                      samesite="lax", path="/")
+    result.set_cookie(key=CSRF_COOKIE, value=csrf, max_age=SESSION_MAX_AGE,
+                      httponly=False, secure=settings.auth_cookie_secure,
+                      samesite="lax", path="/")
+    return result
 
 
 @router.get("/me")
