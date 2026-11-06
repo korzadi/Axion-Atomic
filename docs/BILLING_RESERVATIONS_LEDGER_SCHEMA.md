@@ -1,6 +1,6 @@
 # Base PostgreSQL de cuotas y créditos — migración 007
 
-La migración `007_billing_reservations_ledger.sql` propone el esquema persistente de cuotas, lotes de crédito, reservas, asignaciones y libro append-only.
+La migración `007_billing_reservations_ledger.sql` añade el esquema persistente de cuotas, lotes de crédito, reservas, asignaciones y movimientos del libro económico.
 
 ## Garantías previstas
 
@@ -10,12 +10,12 @@ La migración `007_billing_reservations_ledger.sql` propone el esquema persisten
 - Reservas con clave de idempotencia única por usuario y hash SHA-256 del payload.
 - Estados `unknown` y `review` para resultados inciertos; no liberar saldo solo por expiración.
 - Asignaciones diferenciadas para cuota diaria, suscripción y créditos comprados.
-- Libro append-only; las correcciones serán asientos compensatorios.
+- El ledger registra movimientos con claves idempotentes; la protección append-only mediante permisos y trigger todavía debe implementarse y probarse.
 - Relaciones económicas protegidas frente a borrado en cascada.
 
 ## Alcance y limitaciones
 
-Este diseño no implementa todavía transacciones de reserva/liquidación, bloqueo ordenado de filas, reconciliador, cálculo de tokens ni endpoints. Tampoco concede créditos ni activa cobros. No debe considerarse listo para facturar hasta superar pruebas PostgreSQL de concurrencia, idempotencia, atomicidad y recuperación.
+El esquema todavía no implementa transacciones de reserva/liquidación, bloqueo ordenado de filas, reconciliador, cálculo de tokens, endpoints ni la protección append-only efectiva del ledger. Tampoco concede créditos ni activa cobros. No debe considerarse listo para facturar hasta superar pruebas PostgreSQL de concurrencia, idempotencia, atomicidad y recuperación.
 
 ## Contrato obligatorio de implementación
 
