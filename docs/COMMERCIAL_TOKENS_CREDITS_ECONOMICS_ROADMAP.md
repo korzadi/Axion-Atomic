@@ -264,4 +264,26 @@ Se ha añadido el documento [COMMERCIAL_BILLING_TECHNICAL_DESIGN.md](COMMERCIAL_
 
 El diseño recomienda comenzar con facturación individual por `user_id`, mantener `project_id` como dimensión de atribución y dejar organizaciones para una decisión explícita; usar PostgreSQL como autoridad; separar el ledger inmutable de créditos del contador de cuota; y no mantener transacciones/locks DB durante inferencias.
 
-**Fase 2: diseño inicial preparado para revisión; no implementado.** Antes de fijar migraciones y reglas finales deben resolverse las preguntas de política sobre prioridad y caducidad de créditos, zona horaria, sobreconsumo y ámbito individual/organización. No se ha creado código económico ni se han activado cobros.
+**Fase 2: diseño técnico actualizado con decisiones de política autorizadas por el propietario; no implementado.** Las reglas iniciales quedan registradas en `COMMERCIAL_BILLING_TECHNICAL_DESIGN.md`: cuota FREE → cuota de suscripción → créditos comprados; expiración por tipo; UTC predeterminado; fallback a créditos comprados solo si el plan lo permite; ponderadores de crédito por modelo/tipo de token; titularidad individual inicial. Los planes, precios y tarifas de referencia no están publicados ni activos. No se ha creado código económico ni se han activado cobros.
+
+
+## 13. Decisiones de política aprobadas y siguiente ejecución (6 de noviembre de 2026)
+
+El propietario autorizó expresamente al equipo a resolver las seis decisiones de política que estaban pendientes. Se registraron como reglas iniciales versionadas en el diseño técnico:
+
+1. Prioridad: cuota gratuita diaria → cuota incluida de suscripción → créditos comprados FEFO.
+2. Expiración: cuota diaria al cierre del día; cuota incluida al final del ciclo, sin rollover inicial; créditos comprados con ventana inicial de 12 meses, pendiente de validación legal/comercial antes de vender.
+3. Zona horaria: UTC predeterminado; persistir zona IANA y límites UTC exactos.
+4. Sobreconsumo: permitir créditos comprados únicamente cuando el plan habilite ese fallback; nunca saldo negativo.
+5. Conversión: unidad base 1 crédito/token, con ponderadores versionados por modelo y separado input/output. Atomic Code inicia en 1/1 para simulación; no se activa facturación.
+6. Titularidad: cuenta individual por usuario; proyecto solo como atribución; organizaciones después.
+
+### Próximas tareas técnicas
+
+- Completar revisión de los scripts de rollback y de los módulos de autenticación/administración antes de diseñar las migraciones definitivas.
+- Añadir una máquina de estados y un contrato tipado de inferencia que conserve contadores reales de Ollama sin introducir cobro todavía.
+- Diseñar e implementar primero la medición en modo observación (shadow mode): registrar uso sin bloquear solicitudes ni descontar créditos.
+- Incorporar pruebas de contrato y PostgreSQL para medición, idempotencia, transacciones y concurrencia antes de activar reservas.
+- No publicar planes/precios como activos, no habilitar pagos ni ejecutar migraciones de producción hasta superar las pruebas y la revisión comercial/legal.
+
+**Autorización recibida:** cubre elegir y documentar las políticas de diseño. No constituye autorización para cobros reales, compras, cambios de infraestructura, despliegues o migraciones en VPS.
