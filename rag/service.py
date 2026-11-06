@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import threading
+import time
 import uuid
 
 from agent.secrets import find_secrets
@@ -10,6 +12,9 @@ from rag.chunking import chunk_text
 
 client = QdrantClient(url=settings.qdrant_url)
 logger = logging.getLogger(__name__)
+_collection_lock = threading.Lock()
+_collection_checked_at = 0.0
+_COLLECTION_CHECK_INTERVAL_SECONDS = 60.0
 
 MAX_MANUAL_INGEST_CHARS = 100_000
 MAX_MANUAL_SOURCE_CHARS = 500
@@ -43,14 +48,29 @@ def validate_manual_ingest(text: str, source: str, project_id: str) -> None:
 
 
 def ensure_collection():
-    existing = {x.name for x in client.get_collections().collections}
-    if settings.qdrant_collection not in existing:
-        client.create_collection(
-            collection_name=settings.qdrant_collection,
-            vectors_config=models.VectorParams(
-                size=settings.embed_dimension, distance=models.Distance.COSINE
-            ),
-        )
+    """Comprueba/crea la colección con caché breve y sincronización entre threads.
+
+    Evita una petición get_collections a Qdrant en cada chat. Se vuelve a
+    comprobar cada minuto para detectar cambios operativos y no marcar como
+    inicializada una colección si Qdrant falla.
+    """
+    global _collection_checked_at
+    now = time.monotonic()
+    if now - _collection_checked_at < _COLLECTION_CHECK_INTERVAL_SECONDS:
+        return
+    with _collection_lock:
+        now = time.monotonic()
+        if now - _collection_checked_at < _COLLECTION_CHECK_INTERVAL_SECONDS:
+            return
+        existing = {x.name for x in client.get_collections().collections}
+        if settings.qdrant_collection not in existing:
+            client.create_collection(
+                collection_name=settings.qdrant_collection,
+                vectors_config=models.VectorParams(
+                    size=settings.embed_dimension, distance=models.Distance.COSINE
+                ),
+            )
+        _collection_checked_at = time.monotonic()
 
 
 def _project_filter(project_id: str):
