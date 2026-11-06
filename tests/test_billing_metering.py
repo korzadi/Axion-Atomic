@@ -1,6 +1,4 @@
 """Tests puros para medición de uso facturable; no acceden a PostgreSQL."""
-from dataclasses import replace
-
 import pytest
 
 from api.billing_metering import ModelRatePolicy, calculate_inference_charge
@@ -92,3 +90,9 @@ def test_zero_token_result_is_valid_but_does_not_invent_usage():
         _result(prompt_eval_count=0, eval_count=0), _policy()
     )
     assert charge.credits == 0
+
+
+
+def test_model_enablement_requires_literal_true():
+    with pytest.raises(PermissionError):
+        calculate_inference_charge(_result(), _policy(enabled="true"))
