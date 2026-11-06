@@ -24,7 +24,7 @@ if __name__ == "__main__": unittest.main()
 
 class Base(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        p = mock.patch.dict(os.environ, {"AXION_ALLOW_UNSAFE_LOCAL_SANDBOX": "1"}); p.start(); self.addCleanup(p.stop)
+        p = mock.patch.dict(os.environ, {"AXION_ALLOW_UNSAFE_LOCAL_SANDBOX": "1", "AXION_ALLOW_UNSAFE_LOCAL_NETWORK": "1"}); p.start(); self.addCleanup(p.stop)
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.sbx_base = tempfile.TemporaryDirectory(); self.addCleanup(self.sbx_base.cleanup)
         self.root = Path(self.tmp.name)
