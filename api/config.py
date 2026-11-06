@@ -9,7 +9,9 @@ class Settings(BaseSettings):
     num_ctx: int = 16384
     embed_model: str = "nomic-embed-text"
     embed_dimension: int = 768
-    qdrant_url: str = "http://localhost:6333"
+    # Qdrant Cloud: configurar URL HTTPS del cluster y API key por entorno.
+    qdrant_url: str = "https://YOUR-CLUSTER.qdrant.io"
+    qdrant_api_key: str | None = None
     qdrant_collection: str = "qwen_knowledge"
     database_url: str = "postgresql+psycopg://axion:change-me@localhost:5433/axion_atomic"
     api_key: str | None = None
