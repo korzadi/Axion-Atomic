@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     email_normalized TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     display_name TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'active'
+    status TEXT NOT NULL DEFAULT 'pending_verification'
         CHECK (status IN ('active', 'disabled', 'pending_verification')),
     email_verified_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
