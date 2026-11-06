@@ -243,6 +243,12 @@ async def workspace_chat_history(
         return await run_in_threadpool(_get_chat_history, user["id"], project_id)
     except (ValueError, json.JSONDecodeError):
         raise HTTPException(status_code=500, detail="El historial de chat almacenado no es válido") from None
+    except Exception:
+        try:
+            logger.warning("No se pudo recuperar el historial de chat")
+        except Exception:
+            pass
+        raise HTTPException(status_code=503, detail="No se pudo recuperar el historial de la conversación") from None
 
 
 @router.post("/chat/completions")
