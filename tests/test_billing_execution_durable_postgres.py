@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -19,7 +20,7 @@ engine = create_engine(DATABASE_URL, future=True, pool_pre_ping=True)
 from api.billing_budget import InferenceBudget
 from api.billing_execution_durable import execute_durable_reserved_inference
 from api.billing_result_crypto import AesGcmResultCipher
-from api.billing_recovery import recover_completed_billing_executions
+from api.billing_recovery import recover_completed_billing_executions, _claim_attempt
 from api.billing_execution_envelope import (
     serialize_billing_execution_result,
     deserialize_billing_execution_result,
@@ -208,3 +209,86 @@ def test_recovery_worker_settles_completed_execution_without_second_inference():
     assert row["recovery_attempts"] == 1
     assert row["recovery_next_attempt_at"] is None
     assert row["recovery_settled_at"] is not None
+
+
+
+def test_recovery_claim_is_exclusive_across_concurrent_workers():
+    user_id, project_id = _account()
+    request_id = str(uuid.uuid4())
+
+    async def inference():
+        return SimpleNamespace(
+            requested_model="atomic-code:16k-8k",
+            returned_model="atomic-code:16k-8k",
+            done=True, usage_source="ollama_response",
+            prompt_eval_count=12, eval_count=8, content="concurrency-marker",
+        )
+
+    with patch(
+        "api.billing_execution_durable.settle_reservation",
+        side_effect=RuntimeError("simulated settlement outage"),
+    ):
+        with pytest.raises(RuntimeError, match="settlement outage"):
+            _execute(user_id, project_id, request_id, inference)
+
+    with engine.connect() as conn:
+        execution_id = conn.execute(text("""
+            SELECT id FROM billing_inference_executions WHERE user_id=:user_id
+        """), {"user_id": user_id}).scalar_one()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [
+            pool.submit(_claim_attempt, engine, str(execution_id)),
+            pool.submit(_claim_attempt, engine, str(execution_id)),
+        ]
+        claims = [future.result(timeout=10) for future in futures]
+
+    assert sorted(value for value in claims if value is not None) == [1]
+    assert claims.count(None) == 1
+
+
+def test_recovery_decrypt_failure_sets_backoff_and_is_not_retried_immediately():
+    user_id, project_id = _account()
+    request_id = str(uuid.uuid4())
+
+    async def inference():
+        return SimpleNamespace(
+            requested_model="atomic-code:16k-8k",
+            returned_model="atomic-code:16k-8k",
+            done=True, usage_source="ollama_response",
+            prompt_eval_count=12, eval_count=8, content="backoff-marker",
+        )
+
+    with patch(
+        "api.billing_execution_durable.settle_reservation",
+        side_effect=RuntimeError("simulated settlement outage"),
+    ):
+        with pytest.raises(RuntimeError, match="settlement outage"):
+            _execute(user_id, project_id, request_id, inference)
+
+    class BrokenCipher:
+        def decrypt(self, *args, **kwargs):
+            raise ValueError("invalid test ciphertext")
+
+    batch = recover_completed_billing_executions(
+        engine=engine, cipher=BrokenCipher(), limit=10,
+    )
+    assert batch.examined == 1
+    assert batch.failed == 1
+
+    with engine.connect() as conn:
+        state = conn.execute(text("""
+            SELECT recovery_attempts, recovery_next_attempt_at,
+                   recovery_last_error_code
+            FROM billing_inference_executions WHERE user_id=:user_id
+        """), {"user_id": user_id}).mappings().one()
+
+    assert state["recovery_attempts"] == 1
+    assert state["recovery_next_attempt_at"] is not None
+    assert state["recovery_last_error_code"] == "ValueError"
+
+    repeated = recover_completed_billing_executions(
+        engine=engine, cipher=BrokenCipher(), limit=10,
+    )
+    assert repeated.examined == 0
+    assert repeated.failed == 0
