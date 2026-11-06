@@ -122,6 +122,12 @@ class CodingAgent:
             self.run_store.create_run(run)
         return await self._loop(run)
 
+    async def continue_run(self, run: AgentRun) -> AgentRun:
+        """Continúa una ejecución restaurada que no está esperando aprobación."""
+        if run.status != "running":
+            raise ApprovalError("Solo se pueden continuar ejecuciones en estado running")
+        return await self._loop(run)
+
     def restore(self, run_id: str, project_id: str) -> AgentRun:
         """Restaura una ejecución únicamente dentro del proyecto indicado."""
         if self.run_store is None:
@@ -221,9 +227,13 @@ class CodingAgent:
             pid = self.gate.request(prop)
             summary = f"{prop.what} -> {', '.join(prop.resources)}"
             if self.run_store is not None:
-                self.run_store.record_action(run.id, run.project_id, value, args,
-                                             prop.action_hash, str(pid), summary)
-            run.pending.append(PendingAction(pid, value, args, prop.action_hash, summary))
+                action_row = self.run_store.record_action(run.id, run.project_id, value, args,
+                                                          prop.action_hash, str(pid), summary)
+                pid = action_row["proposal_id"]
+                action_run_id = action_row["run_id"]
+            else:
+                action_run_id = run.id
+            run.pending.append(PendingAction(pid, value, args, prop.action_hash, summary, action_run_id))
             run.status = "awaiting_approval"
             self._emit(run, "approval_requested", tool=value, proposal_id=pid, what=prop.what)
             self._persist(run)
