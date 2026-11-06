@@ -77,7 +77,11 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
         }, separators=(",", ":"), sort_keys=True))
     except Exception:
         # La telemetría shadow nunca debe convertir una inferencia exitosa en error.
-        logger.warning("No se pudo emitir el evento de uso shadow")
+        try:
+            logger.warning("No se pudo emitir el evento de uso shadow")
+        except Exception:
+            # Incluso un handler de logging defectuoso debe quedar aislado.
+            pass
 
     return {
         "id": "axion-atomic-local", "object": "chat.completion", "created": 0,
