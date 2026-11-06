@@ -49,7 +49,8 @@ def test_core_postgresql_tables_exist():
         "billing_reservation_reconciliations",
         "billing_inference_executions",
         "email_verification_tokens",
-        "password_reset_tokens",\n        "auth_rate_limit_buckets",
+        "password_reset_tokens",
+        "auth_rate_limit_buckets",
     }
     assert expected <= tables
 
