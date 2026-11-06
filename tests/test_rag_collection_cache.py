@@ -9,12 +9,16 @@ class FakeQdrant:
     def __init__(self):
         self.calls = 0
         self.lock = threading.Lock()
+        self.index_calls = []
 
     def get_collections(self):
         with self.lock:
             self.calls += 1
         time.sleep(0.02)
         return SimpleNamespace(collections=[SimpleNamespace(name="axion-test")])
+
+    def create_payload_index(self, **kwargs):
+        self.index_calls.append(kwargs)
 
     def create_collection(self, **kwargs):
         raise AssertionError("No debe crear una colección que ya existe")
@@ -35,6 +39,7 @@ def test_collection_readiness_check_is_cached_across_concurrent_requests(monkeyp
         assert not thread.is_alive()
 
     assert fake.calls == 1
+    assert [item['field_name'] for item in fake.index_calls] == ['project_id', 'source_id']
 
 
 def test_collection_readiness_check_revalidates_after_interval(monkeypatch):
@@ -55,3 +60,4 @@ def test_collection_readiness_check_revalidates_after_interval(monkeypatch):
     clock[0] += 2
     service.ensure_collection()
     assert fake.calls == 2
+    assert len(fake.index_calls) == 4
