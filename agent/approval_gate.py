@@ -59,13 +59,16 @@ class InMemoryApprovalGate:
         self._records[pid] = Record(proposal, self.clock())
         return pid
 
-    def _get(self, pid: int) -> Record:
+    def _get(self, pid: int | str) -> Record:
+        # RunStore serializa los IDs en texto. La puerta en memoria puede
+        # recibirlos restaurados como "1", aunque originalmente fueran 1.
+        key = int(pid) if isinstance(pid, str) and pid.isdecimal() else pid
         try:
-            return self._records[pid]
+            return self._records[key]
         except KeyError:
             raise ApprovalError(f"Aprobación inexistente: {pid}") from None
 
-    def decide(self, pid: int, approved: bool, reviewer: str, note: str = "") -> None:
+    def decide(self, pid: int | str, approved: bool, reviewer: str, note: str = "") -> None:
         rec = self._get(pid)
         if rec.state != "pending":
             raise ApprovalError(f"La solicitud {pid} ya fue resuelta ({rec.state})")
@@ -75,7 +78,7 @@ class InMemoryApprovalGate:
             raise ApprovalError("Se requiere identificar al revisor")
         rec.state, rec.reviewer, rec.note = ("approved" if approved else "rejected"), reviewer, note
 
-    def status(self, pid: int) -> tuple[str, str]:
+    def status(self, pid: int | str) -> tuple[str, str]:
         rec = self._get(pid)
         if rec.state in ("pending", "approved") and self.clock() - rec.created > self.ttl_s:
             return "expired", ""
@@ -84,7 +87,7 @@ class InMemoryApprovalGate:
     def pending(self) -> list[tuple[int, ActionProposal]]:
         return [(i, r.proposal) for i, r in self._records.items() if r.state == "pending" and self.status(i)[0] == "pending"]
 
-    def redeem(self, pid: int, action_hash: str) -> ApprovedAction:
+    def redeem(self, pid: int | str, action_hash: str) -> ApprovedAction:
         rec = self._get(pid)
         state, _ = self.status(pid)
         if state != "approved":
