@@ -40,12 +40,14 @@ def claim_execution(*, engine: Engine, user_id: str, reservation_id: str) -> Exe
     execution_id = str(uuid.uuid4())
     with engine.begin() as conn:
         reservation = conn.execute(text("""
-            SELECT id FROM billing_usage_reservations
+            SELECT id, state FROM billing_usage_reservations
             WHERE id=CAST(:id AS UUID) AND user_id=:user_id
             FOR UPDATE
-        """), {"id": rid, "user_id": user_id}).first()
+        """), {"id": rid, "user_id": user_id}).mappings().first()
         if reservation is None:
             raise ExecutionStoreError("Reserva inexistente")
+        if reservation["state"] != "held":
+            raise ExecutionStoreError("Solo una reserva held puede reclamar una ejecución")
         inserted = conn.execute(text("""
             INSERT INTO billing_inference_executions
                 (id, reservation_id, user_id, state)
