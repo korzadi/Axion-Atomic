@@ -415,18 +415,20 @@ def reconcile_confirmed_no_execution(
             amount = item["allocated_credits"]
             purchased = item["source"] == "purchased"
             if purchased:
-                conn.execute(text("""
+                updated = conn.execute(text("""
                     UPDATE billing_credit_lots
                     SET reserved_credits=reserved_credits-:amount,
                         available_credits=available_credits+:amount
                     WHERE id=CAST(:id AS UUID) AND reserved_credits >= :amount
                 """), {"amount": amount, "id": str(item["credit_lot_id"])})
             else:
-                conn.execute(text("""
+                updated = conn.execute(text("""
                     UPDATE billing_quota_periods
                     SET reserved_credits=reserved_credits-:amount
                     WHERE id=CAST(:id AS UUID) AND reserved_credits >= :amount
                 """), {"amount": amount, "id": str(item["quota_period_id"])})
+            if updated.rowcount != 1:
+                raise ReservationStateError("El saldo reservado no coincide con las asignaciones")
             ledger = conn.execute(text("""
                 INSERT INTO billing_credit_ledger
                     (id, user_id, credit_lot_id, reservation_id, event_type,
