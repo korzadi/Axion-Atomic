@@ -15,6 +15,8 @@ from api.usage_events import persist_shadow_usage_event
 from rag.service import KnowledgeStoreUnavailable, SensitiveContentError, ingest_text, retrieve
 from agent.planner import create_plan
 from agent.approvals import create_approval
+from agent.project_runtime import ProjectAgentRuntime
+from api.ollama import chat
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 logger = logging.getLogger("axion.usage.shadow")
@@ -38,6 +40,30 @@ def _csrf_user(
 
 def _project_role(user: dict, project_id: str, roles: tuple[str, ...]):
     return authorize_project(user["id"], project_id, roles)
+
+
+
+
+def _agent_runtime():
+    """Crea el runtime persistente con herramientas confinadas al workspace autorizado."""
+    return ProjectAgentRuntime(engine=engine, chat=chat, workspace_root=settings.workspace_root)
+
+
+def _agent_run_payload(run):
+    return {
+        "run_id": run.id,
+        "project_id": run.project_id,
+        "goal": run.goal,
+        "status": run.status,
+        "final": run.final,
+        "error": run.error,
+        "steps": run.steps,
+        "pending_actions": [
+            {"proposal_id": str(item.proposal_id), "tool": item.tool,
+             "action_hash": item.action_hash, "summary": item.summary}
+            for item in run.pending
+        ],
+    }
 
 
 def _list_runs(project_id: str, limit: int):
@@ -206,6 +232,34 @@ async def workspace_task(req: TaskRequest, user=Depends(_csrf_user)):
     plan = await create_plan(req.goal)
     approval_id = await run_in_threadpool(create_approval, req.project_id, req.goal, plan)
     return {"status": "awaiting_approval", "approval_id": approval_id, "project_id": req.project_id, "plan": plan}
+
+
+@router.post("/agent/runs")
+async def workspace_agent_start(req: TaskRequest, user=Depends(_csrf_user)):
+    """Inicia una ejecución real y persistente; cada cambio sigue sujeto a aprobación."""
+    try:
+        run = await _agent_runtime().start(user, req.project_id, req.goal)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except OSError:
+        raise HTTPException(status_code=503, detail="El workspace del proyecto no está disponible de forma segura") from None
+    return _agent_run_payload(run)
+
+
+@router.post("/agent/runs/{run_id}/resume")
+async def workspace_agent_resume(
+    run_id: str,
+    project_id: str = Query(min_length=1, max_length=200),
+    user=Depends(_csrf_user),
+):
+    """Reanuda una ejecución solo tras comprobar membresía y estado persistido."""
+    try:
+        run = await _agent_runtime().resume(user, project_id, run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except OSError:
+        raise HTTPException(status_code=503, detail="El workspace del proyecto no está disponible de forma segura") from None
+    return _agent_run_payload(run)
 
 
 @router.get("/agent/runs")
