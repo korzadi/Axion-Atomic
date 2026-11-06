@@ -1,6 +1,6 @@
 # Diseño de identidad y autorización de AXION
 
-Estado: esquema aditivo preparado; implementación HTTP y pruebas de integración pendientes. No ejecutar esta migración en producción sin revisión y aprobación del operador.
+Estado: esquema aditivo y primeras rutas HTTP preparadas; autenticación desactivada por defecto. No ejecutar migraciones en producción sin revisión y aprobación. No ejecutar esta migración en producción sin revisión y aprobación del operador.
 
 ## Modelo
 
@@ -24,7 +24,9 @@ Estado: esquema aditivo preparado; implementación HTTP y pruebas de integració
 ## Secuencia de implementación
 
 - Crear repositorio de usuarios/sesiones/membresías sobre la conexión compartida.
-- Rutas iniciales register/login/logout/me creadas y bloqueadas por `AUTH_ENABLED=false`; completar verificación de correo, rate limits distribuidos, pruebas de integración y activar solo tras revisión.
+- Rutas iniciales register/login/logout/me y listado/creación de proyectos creadas; bloqueadas por `AUTH_ENABLED=false`. La creación del proyecto y su membresía `owner` ocurre en una transacción.
+- Rutas `/workspace/*` exigen sesión, CSRF en operaciones mutables y membresía/rol por proyecto. Lectura de chat admite viewer; ingestión/tareas requieren editor o superior; decisiones de aprobación requieren owner/admin.
+- Completar verificación de correo, rate limits distribuidos, pruebas de integración y activar solo tras revisión.
 - Añadir dependencia `current_user` y guardas de rol/proyecto a todas las rutas.
 - Sustituir `reviewer` enviado por el cliente por el usuario autenticado.
 - Probar aislamiento negativo: usuario A no puede leer, indexar, aprobar, ejecutar, enumerar ni borrar recursos del usuario B.
@@ -33,4 +35,4 @@ Estado: esquema aditivo preparado; implementación HTTP y pruebas de integració
 
 ## Pendientes
 
-El esquema no es autenticación funcional. No hay todavía registro/login, cookies, CSRF, middleware, repositorios de identidad, límites antiabuso ni pruebas de integración. Los proyectos existentes no reciben automáticamente un propietario: la asignación requiere un proceso de bootstrap auditado para no adjudicar datos al usuario equivocado.
+Las rutas multiusuario iniciales no están listas para producción: `AUTH_ENABLED=false`, falta verificación de correo y rate limiting distribuido, y las rutas legacy `/v1/*` siguen siendo de servicio con API key global. Los proyectos existentes no reciben propietario automáticamente. Los proyectos existentes no reciben automáticamente un propietario: la asignación requiere un proceso de bootstrap auditado para no adjudicar datos al usuario equivocado.
