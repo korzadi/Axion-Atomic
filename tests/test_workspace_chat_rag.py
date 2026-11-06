@@ -153,3 +153,24 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
             "No se pudo guardar el historial de la conversación",
         )
 
+    async def test_chat_does_not_persist_history_when_inference_fails(self):
+        request = ChatRequest(
+            project_id="project-a",
+            messages=[Message(role="user", content="Pregunta sin respuesta")],
+        )
+        with (
+            patch("api.workspace_routes.run_in_threadpool", side_effect=_run_in_threadpool),
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.retrieve", new=AsyncMock(return_value="")),
+            patch(
+                "api.workspace_routes.chat_with_usage",
+                new=AsyncMock(side_effect=RuntimeError("inference unavailable")),
+            ),
+            patch("api.workspace_routes._save_chat_history") as save_history,
+        ):
+            with self.assertRaises(RuntimeError):
+                await workspace_chat(request, {"id": "user-a"})
+
+        save_history.assert_not_called()
+
