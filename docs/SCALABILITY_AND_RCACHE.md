@@ -7,7 +7,9 @@ AXION ATOMIC no debe aceptar trabajo ilimitado ni permitir que una ráfaga de us
 ## Controles incorporados en código
 
 - **Admisión Ollama:** un turno pesado simultáneo por defecto, ocho solicitudes esperando y un tiempo máximo de cola de 20 segundos. El resto recibe HTTP 503 con `Retry-After`; no se crea una cola ilimitada en memoria.
-- **Concurrencia HTTP:** Uvicorn limita a 64 conexiones concurrentes y backlog 128. El exceso puede recibir 503 en el servidor ASGI.
+- **Concurrencia HTTP:** Uvicorn se fija en un worker y limita a 64 conexiones concurrentes y backlog 128. El worker único hace que el gate local controle el proceso completo; el exceso puede recibir 503 en el servidor ASGI.
+- **Event loop:** las consultas PostgreSQL de rutas de workspace/autenticación y health checks se descargan al threadpool para no bloquear el loop async con I/O síncrono.
+- **Pool agotado:** PostgreSQL espera como máximo 3 segundos para obtener conexión; el agotamiento se traduce en HTTP 503 con Retry-After, no en una espera indefinida.
 - **PostgreSQL:** pool por proceso de 5 conexiones, máximo 5 conexiones extra y timeout de adquisición de 10 segundos. Con varias réplicas, el total debe calcularse como `réplicas × (pool_size + max_overflow)` y mantenerse por debajo del presupuesto PostgreSQL.
 - **Redis:** servicio interno limitado a 192 MB, política LRU y sin persistencia porque se utiliza solo como caché reconstruible.
 - **RCache del bot:** guarda embeddings derivados por hash de modelo, dimensión y texto, con TTL configurable (1 hora por defecto). No almacena prompts completos, respuestas del modelo, sesiones, saldo ni eventos de cobro.
@@ -26,7 +28,7 @@ No se cachean respuestas del chat. De esa forma no se mezclan conversaciones ent
 | 100 | La API limita conexiones y la admisión de Ollama evita 100 inferencias concurrentes; muchos usuarios recibirán 503/429 hasta reintentar. |
 | 1000 | No es una meta de inferencias servidas por un único VPS CPU. Se espera rechazo controlado y health-check disponible; para atenderlos se requiere separar API y workers, varias máquinas GPU, cola persistente y semáforo distribuido. |
 
-Los números anteriores describen límites configurados, no resultados de un benchmark ni garantía de disponibilidad. El script `load-tests/axion-capacity.js` permite medir en un entorno de staging autenticado con k6. No se ejecutó contra el VPS ni contra usuarios reales.
+Los números anteriores describen límites configurados, no resultados de un benchmark ni garantía de disponibilidad. El script `load-tests/axion-capacity.js` permite medir en un entorno de staging autenticado con k6. Ejemplo: `k6 run -e BASE_URL=https://staging.example -e AXION_SESSION=<sesion> -e AXION_CSRF=<csrf> -e AXION_PROJECT_ID=<proyecto> load-tests/axion-capacity.js`. No se ejecutó contra el VPS ni contra usuarios reales.
 
 ## Próximas fases de escalado
 
