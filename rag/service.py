@@ -89,8 +89,12 @@ def _project_filter(project_id: str):
     )
 
 
-async def ingest_text(text, source, project_id: str):
+async def ingest_text(text, source, project_id: str, source_id: str | None = None):
     validate_manual_ingest(text, source, project_id)  # Antes de Qdrant y del embedder.
+    try:
+        source_id = str(uuid.UUID(source_id)) if source_id else str(uuid.uuid4())
+    except (ValueError, TypeError, AttributeError):
+        raise ValueError("source_id debe ser un UUID válido") from None
     try:
         await asyncio.to_thread(ensure_collection)
     except Exception:
@@ -107,7 +111,7 @@ async def ingest_text(text, source, project_id: str):
             models.PointStruct(
                 id=str(uuid.uuid4()),
                 vector=vector,
-                payload={"text": chunk, "source": source, "project_id": project_id, "chunk": index},
+                payload={"text": chunk, "source": source, "source_id": source_id, "project_id": project_id, "chunk": index},
             )
         )
     if points:
@@ -117,6 +121,31 @@ async def ingest_text(text, source, project_id: str):
             logger.error("RAG ingestion failed; knowledge store is unavailable")
             raise KnowledgeStoreUnavailable("El almacén de conocimiento no está disponible") from None
     return len(points)
+
+
+async def delete_source(source_id: str, project_id: str) -> None:
+    """Elimina todos los fragmentos de una fuente, siempre dentro del proyecto indicado."""
+    project_filter = _project_filter(project_id)
+    try:
+        normalized_source_id = str(uuid.UUID(source_id))
+    except (ValueError, TypeError, AttributeError):
+        raise ValueError("source_id debe ser un UUID válido") from None
+    source_filter = models.Filter(
+        must=project_filter.must + [
+            models.FieldCondition(key="source_id", match=models.MatchValue(value=normalized_source_id))
+        ]
+    )
+    try:
+        await asyncio.to_thread(ensure_collection)
+        await asyncio.to_thread(
+            client.delete,
+            collection_name=settings.qdrant_collection,
+            points_selector=models.FilterSelector(filter=source_filter),
+            wait=True,
+        )
+    except Exception:
+        logger.error("RAG source deletion failed; knowledge store is unavailable")
+        raise KnowledgeStoreUnavailable("El almacén de conocimiento no está disponible") from None
 
 
 async def retrieve(query: str, project_id: str, limit: int = 5):
