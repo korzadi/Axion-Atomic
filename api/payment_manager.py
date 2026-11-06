@@ -179,6 +179,22 @@ def confirm_verified_payment(
             raise PaymentOrderStateError("La orden ya fue pagada por otra transacción")
         if order["status"] != "pending":
             raise PaymentOrderStateError("La orden no acepta pagos en su estado actual")
+        if verified_at > order["expires_at"]:
+            conn.execute(text("""
+                UPDATE payment_orders SET status='under_review', updated_at=:now
+                WHERE id=CAST(:id AS UUID)
+            """), {"id": order_uuid, "now": verified_at})
+            conn.execute(text("""
+                INSERT INTO payment_order_events
+                    (id, order_id, event_type, event_key, details, actor, created_at)
+                VALUES (CAST(:event_id AS UUID), CAST(:id AS UUID), 'review_required',
+                        :event_key, CAST(:details AS JSONB), 'payment-verifier', :now)
+            """), {
+                "event_id": str(uuid.uuid4()), "id": order_uuid,
+                "event_key": f"late-payment-review:{payment.provider_transaction_id}",
+                "details": '{"reason":"payment_verified_after_order_expiry"}', "now": verified_at,
+            })
+            return False
         if payment.amount_minor != order["amount_minor"] or payment.currency != order["currency"].strip():
             conn.execute(text("""
                 UPDATE payment_orders SET status='under_review', updated_at=:now

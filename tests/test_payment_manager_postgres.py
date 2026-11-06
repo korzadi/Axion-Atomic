@@ -134,3 +134,29 @@ def test_same_provider_transaction_cannot_pay_two_orders():
         confirm_verified_payment(engine=engine, order_id=second.order_id, payment=payment,
                                  expected_recipient="axionatomic@qvpay.me")
     assert get_payment_order(engine=engine, user_id=user_id, order_id=second.order_id).status == "pending"
+
+
+def test_payment_verified_after_order_expiry_goes_to_review_without_credit():
+    user_id = _user()
+    now = datetime.now(timezone.utc)
+    order = create_payment_order(
+        engine=engine, user_id=user_id, product_code="credits-1000",
+        amount_minor=500, credits=1000, now=now,
+        expires_at=now + timedelta(minutes=1),
+    )
+    payment = VerifiedPayment(
+        provider_transaction_id="qv-lightning-tx-late-004",
+        amount_minor=500, currency="USD", recipient="axionatomic@qvpay.me",
+        verification_source="provider_api", verified_at=now + timedelta(minutes=2),
+    )
+    assert not confirm_verified_payment(
+        engine=engine, order_id=order.order_id, payment=payment,
+        expected_recipient="axionatomic@qvpay.me",
+    )
+    assert get_payment_order(engine=engine, user_id=user_id, order_id=order.order_id).status == "under_review"
+    with engine.connect() as conn:
+        count = conn.execute(
+            text("SELECT count(*) FROM billing_credit_lots WHERE user_id=:u"),
+            {"u": user_id},
+        ).scalar_one()
+    assert count == 0
