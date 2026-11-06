@@ -148,3 +148,15 @@ La inspección estática de `Dockerfile`, `compose.yaml` y `sandbox/backends.py`
 - CI del commit `a00f19fc2e02a580738b33eb5a5dd46668b85f13` terminó correctamente: compilación y suite de pruebas (`python-tests: success`).
 
 **Límites pendientes:** `find_secrets` es una heurística, no un detector universal; no debe prometerse que detecta todas las credenciales. La API de ingestión todavía usa llamadas síncronas del cliente Qdrant dentro de funciones `async`, por lo que su comportamiento bajo concurrencia/carga necesita una mejora y pruebas específicas. La ruta de recuperación también mantiene manejo degradado que oculta fallos Qdrant devolviendo contexto vacío. No se conectó el runtime ni se cambió infraestructura.
+
+
+
+## Remediación aplicada: operaciones RAG fuera del event loop
+
+- Las llamadas síncronas `ensure_collection`, `upsert` y `query_points` del cliente Qdrant se ejecutan mediante `asyncio.to_thread` para no bloquear el event loop de FastAPI mientras esperan operaciones de red.
+- La recuperación ya no convierte cualquier excepción de Qdrant en contexto vacío. Lanza `KnowledgeStoreUnavailable` con un mensaje público genérico y registra un evento sin incluir detalles internos.
+- Las rutas de chat heredada y multiusuario convierten ese estado en HTTP 503; no continúan la generación como si la recuperación hubiera funcionado correctamente.
+- Se añadieron pruebas para confirmar que las operaciones síncronas de ingestión se ejecutan fuera del hilo del event loop y que un fallo de recuperación no se oculta ni filtra detalles internos.
+- CI del commit `8feb350e136722ed56b41bcbd1159ca8d8a0f7b9` terminó correctamente: compilación y suite completa (`python-tests: success`).
+
+**Límites pendientes:** `asyncio.to_thread` evita bloquear el event loop, pero no hace que el cliente Qdrant sea asíncrono ni elimina la necesidad de límites de concurrencia y timeout. Las pruebas usan dobles; todavía se necesita una prueba de integración contra Qdrant real en un entorno desechable. La generación de embeddings sigue siendo secuencial por fragmento. No se ha habilitado autenticación ni runtime HTTP.
