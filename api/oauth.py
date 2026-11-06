@@ -1,12 +1,17 @@
 """OAuth 2.0 para Google OIDC y GitHub; los access tokens solo viven en memoria."""
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 import httpx
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
@@ -80,20 +85,34 @@ def provider_profile(provider: str, code: str, nonce: str, settings) -> dict:
             identity_token = token_response.json().get("id_token")
             if not isinstance(identity_token, str):
                 raise ValueError("Google no devolvió token de identidad")
-            # tokeninfo verifica firma, expiración y emisor en el servidor de Google;
-            # además validamos audiencia, nonce y correo verificado localmente.
-            verified = client.get("https://oauth2.googleapis.com/tokeninfo",
-                                  params={"id_token": identity_token})
-            verified.raise_for_status()
-            claims = verified.json()
+            parts = identity_token.split(".")
+            if len(parts) != 3:
+                raise ValueError("JWT de Google inválido")
+            header = json.loads(base64.urlsafe_b64decode(parts[0] + "=" * (-len(parts[0]) % 4)))
+            claims = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)))
+            if header.get("alg") != "RS256" or not isinstance(header.get("kid"), str):
+                raise ValueError("Algoritmo JWT de Google no admitido")
+            keys_response = client.get("https://www.googleapis.com/oauth2/v3/certs")
+            keys_response.raise_for_status()
+            jwk = next((key for key in keys_response.json().get("keys", [])
+                        if key.get("kid") == header["kid"] and key.get("kty") == "RSA"), None)
+            if jwk is None:
+                raise ValueError("Clave de firma Google desconocida")
+            decode = lambda value: base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+            public_key = rsa.RSAPublicNumbers(int.from_bytes(decode(jwk["e"]), "big"),
+                                              int.from_bytes(decode(jwk["n"]), "big")).public_key()
+            public_key.verify(decode(parts[2]), (parts[0] + "." + parts[1]).encode("ascii"),
+                              padding.PKCS1v15(), hashes.SHA256())
             audience = claims.get("aud")
-            if audience != settings.google_oauth_client_id:
+            if audience != settings.google_oauth_client_id and not (
+                isinstance(audience, list) and settings.google_oauth_client_id in audience
+            ):
                 raise ValueError("Audiencia Google inválida")
             if claims.get("iss") not in ("accounts.google.com", "https://accounts.google.com"):
                 raise ValueError("Emisor Google inválido")
             if claims.get("nonce") != nonce or claims.get("email_verified") not in (True, "true"):
                 raise ValueError("Google no verificó el correo o nonce")
-            if int(claims.get("exp", "0")) <= int(datetime.now(timezone.utc).timestamp()):
+            if int(claims.get("exp", 0)) <= int(time.time()):
                 raise ValueError("Token Google expirado")
             email, subject = claims.get("email"), claims.get("sub")
             name = claims.get("name") or (email or "").split("@")[0]
