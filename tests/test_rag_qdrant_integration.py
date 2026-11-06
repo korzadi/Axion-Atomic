@@ -1,15 +1,15 @@
-"""Pruebas de integración RAG con el motor Qdrant local real (sin red)."""
+"""Pruebas del ciclo RAG usando un doble del protocolo Qdrant, sin servidor local."""
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from qdrant_client import QdrantClient
+from tests.fake_qdrant import FakeQdrantClient
 
 from rag import service
 
 
 class RagQdrantIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.client = QdrantClient(":memory:")
+        self.client = FakeQdrantClient()
         self.collection = "rag_integration_test"
         self.client_ref = service.client
         self.collection_ref = service.settings.qdrant_collection
@@ -22,8 +22,7 @@ class RagQdrantIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.embed_patch.start()
 
         async def run_in_test_thread(function, *args, **kwargs):
-            # Qdrant local mode uses SQLite bound to the creating thread.
-            # Execute its synchronous client calls on this test thread.
+            # Keep the fake client deterministic without starting a storage server.
             return function(*args, **kwargs)
 
         self.thread_patch = patch.object(service.asyncio, "to_thread", new=run_in_test_thread)
