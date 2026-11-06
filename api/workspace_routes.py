@@ -14,7 +14,7 @@ from api.config import settings
 from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest
 from api.ollama import chat_with_usage
 from api.usage_events import persist_shadow_usage_event
-from rag.service import EmbeddingServiceUnavailable, KnowledgeStoreUnavailable, SensitiveContentError, ingest_text, retrieve
+from rag.service import EmbeddingServiceUnavailable, KnowledgeStoreUnavailable, SensitiveContentError, delete_source, ingest_text, retrieve
 from agent.planner import create_plan
 from agent.approvals import create_approval
 from agent.project_runtime import ProjectAgentRuntime
@@ -340,14 +340,35 @@ async def workspace_ingest(req: IngestRequest, user=Depends(_csrf_user)):
         user_limit=10, project_limit=30, window=timedelta(hours=1),
     )
     try:
-        count = await ingest_text(req.text, req.source, req.project_id)
+        source_id = str(uuid.uuid4())
+        count = await ingest_text(req.text, req.source, req.project_id, source_id=source_id)
     except SensitiveContentError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except (KnowledgeStoreUnavailable, EmbeddingServiceUnavailable) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
-    return {"status": "indexed", "project_id": req.project_id, "chunks": count}
+    return {"status": "indexed", "project_id": req.project_id, "source_id": source_id, "chunks": count}
+
+
+@router.delete("/knowledge/sources/{source_id}")
+async def workspace_delete_knowledge_source(
+    source_id: str,
+    project_id: str = Query(min_length=1, max_length=200),
+    user=Depends(_csrf_user),
+):
+    await run_in_threadpool(_project_role, user, project_id, ("owner", "admin", "editor"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], project_id, "knowledge_manage",
+        user_limit=20, project_limit=60, window=timedelta(minutes=1),
+    )
+    try:
+        await delete_source(source_id, project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except KnowledgeStoreUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    return {"status": "deleted", "project_id": project_id, "source_id": str(uuid.UUID(source_id))}
 
 
 @router.post("/agent/tasks")
