@@ -23,7 +23,7 @@ class CodingAgentPersistenceTests(unittest.IsolatedAsyncioTestCase):
             id TEXT PRIMARY KEY, run_id TEXT NOT NULL, project_id TEXT NOT NULL, tool TEXT NOT NULL,
             action_hash TEXT NOT NULL, args_json TEXT NOT NULL, proposal_id TEXT, summary TEXT NOT NULL,
             state TEXT NOT NULL, result TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-            UNIQUE(run_id, action_hash)
+            UNIQUE(project_id, action_hash)
         )""")
         conn.commit()
 
