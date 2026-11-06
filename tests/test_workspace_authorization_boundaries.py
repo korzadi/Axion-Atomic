@@ -21,7 +21,7 @@ class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("api.workspace_routes._project_role", side_effect=denied),
             patch("api.workspace_routes.retrieve", new=AsyncMock()) as retrieve,
-            patch("api.workspace_routes.chat", new=AsyncMock()) as chat,
+            patch("api.workspace_routes.chat_with_usage", new=AsyncMock()) as chat,
         ):
             with self.assertRaises(HTTPException) as raised:
                 await workspace_chat(request, user={"id": "user-a"})
