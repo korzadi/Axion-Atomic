@@ -54,3 +54,24 @@ El adaptador no autentica ni autoriza usuarios, no determina el directorio de tr
 - **Riesgo residual importante:** la comprobación usa resolución de rutas seguida de operaciones de filesystem separadas. Un proceso local concurrente que pueda modificar el árbol del workspace podría intentar una carrera TOCTOU (cambiar symlinks/componentes entre validación y uso). Estas pruebas no eliminan ni demuestran ausencia de esa carrera.
 - Antes de exponer herramientas de escritura a usuarios, sustituir las operaciones sensibles por acceso basado en descriptores de directorio (`openat`/equivalentes con `O_NOFOLLOW`), o ejecutar el workspace dentro de un volumen aislado cuya estructura no pueda modificar otro usuario/proceso; añadir pruebas de carrera en Linux.
 - La configuración y el despliegue del backend Docker siguen sin verificarse; no se debe interpretar la existencia de `DockerBackend` como prueba de que la API lo usa correctamente.
+
+
+## Revisión del despliegue del sandbox Docker
+
+La inspección estática de `Dockerfile`, `compose.yaml` y `sandbox/backends.py` identifica bloqueos concretos que impiden considerar operativo el backend Docker:
+
+- La imagen de la API parte de `python:3.12-slim` e instala únicamente `requirements.txt`; no instala el cliente Docker.
+- El servicio `api` de Compose no monta un socket Docker ni declara un endpoint de daemon. Por tanto, el proceso API no tiene un daemon configurado al que enviar `docker run`.
+- `DockerBackend` monta en el daemon la ruta absoluta de un snapshot creado por el proceso API. Si se añade un daemon externo o en otro contenedor, esa ruta debe existir y ser accesible desde el host del daemon; compartirla no está configurado ni demostrado.
+- El backend selecciona una red Docker llamada `axion-sandbox-egress` para ejecuciones con red. El nombre de una red bridge no demuestra filtrado de salida ni una allowlist de destinos. Las acciones que necesitan red deben seguir deshabilitadas hasta definir y probar una política de egress real.
+- `LocalBackend` no aísla el filesystem y no es una alternativa aceptable para producción.
+
+### Condiciones antes de conectar el runtime
+
+1. Elegir explícitamente el modelo operativo del daemon (socket del host, daemon dedicado o servicio remoto). No montar el socket privilegiado del host como solución automática: concedería a la API una capacidad equivalente a control amplio del host.
+2. Si se usa daemon externo, diseñar un mecanismo seguro de transferencia/montaje del snapshot y verificar que el path es visible desde el daemon. Añadir una prueba de integración que ejecute un contenedor efímero y compruebe que solo ve el snapshot previsto.
+3. Incorporar el cliente Docker de forma reproducible en la imagen y configurar el endpoint de daemon explícitamente; comprobar disponibilidad al iniciar el backend, sin degradar silenciosamente a `LocalBackend`.
+4. Mantener `--network none` como único modo habilitado inicialmente. Antes de permitir red, implementar una red de egress con reglas de salida verificables (DNS, IP, puertos y destinos), protección contra acceso a metadata/servicios internos y pruebas negativas.
+5. Probar permisos UID/GID, lectura/escritura de snapshots, límites de CPU/RAM/PIDs, timeout, limpieza de contenedores y ausencia de procesos huérfanos en un entorno desechable.
+
+**Resultado:** el backend contiene parámetros de aislamiento útiles, pero la configuración actual del proyecto no demuestra que pueda ejecutarse desde la API. No conectar herramientas de ejecución ni habilitar endpoints de runtime hasta cerrar y probar todos los puntos anteriores. Esta revisión fue estática; no se ejecutó Docker ni se modificó infraestructura.
