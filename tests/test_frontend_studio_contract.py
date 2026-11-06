@@ -38,12 +38,21 @@ def test_home_navigation_routes_to_existing_workspace_views():
 def test_knowledge_workspace_uses_authenticated_project_scoped_ingestion():
     source = FRONTEND.read_text(encoding="utf-8")
     assert "async function renderKnowledge()" in source
-    assert "fetch(API+'/workspace/knowledge/ingest'" in source
+    assert "workspace/knowledge/ingest" in source
     assert "X-CSRF-Token" in source
     assert "project_id:projectId" in source
-    assert "El backend valida permisos" in source
-    assert "document.querySelector('[data-view=\"chat\"]')" in source
+    assert "canEdit()" in source
+    assert "document.querySelector('[data-view=\\"chat\\"]')" in source
 
+
+def test_knowledge_workspace_lists_reindexes_and_deletes_project_sources():
+    source = FRONTEND.read_text(encoding="utf-8")
+    assert "workspace/knowledge/sources?" in source
+    assert "method:'PUT'" in source
+    assert "method:'DELETE'" in source
+    assert "¿Eliminar todos los fragmentos" in source
+    assert "Reindexar con el editor" in source
+    assert "legacy" in source
 
 def test_agent_workspace_uses_persistent_project_scoped_runtime():
     source = FRONTEND.read_text(encoding="utf-8")
