@@ -171,3 +171,15 @@ La inspección estática de `Dockerfile`, `compose.yaml` y `sandbox/backends.py`
 - CI del commit `18e99ec740c406de9ec2c1b8969f4c3a362cb1d1` terminó correctamente: compilación y suite completa (`python-tests: success`).
 
 **Alcance de la prueba:** utiliza una respuesta simulada de Qdrant; demuestra el contrato de filtrado y la defensa adicional en la aplicación, pero no sustituye una prueba de integración con un servidor Qdrant real ni una revisión de credenciales/configuración del servicio.
+
+
+
+## Bloqueos adicionales del flujo de identidad
+
+- El registro crea usuarios con estado `pending_verification` y la autenticación solo acepta usuarios `active`.
+- La migración contiene `email_verified_at`, pero en las rutas revisadas no existe un flujo para emitir, enviar, validar y consumir un token de verificación. Tampoco existe una ruta de recuperación/cambio de contraseña.
+- Por tanto, el registro HTTP actual no permite completar por sí solo el alta de una cuenta utilizable. No se debe activar `AUTH_ENABLED` hasta diseñar e implementar verificación de correo con tokens de un solo uso, expiración, almacenamiento hash, invalidación y límites antiabuso.
+- No se encontró rate limiting distribuido ni MFA. La autenticación permanece deshabilitada (`AUTH_ENABLED=false`); no se cambió ese valor.
+- La prueba `test_workspace_authorization.py` verifica que el helper recibe el usuario autenticado y los roles solicitados, pero no ejecuta una matriz HTTP completa de cada endpoint para cada rol. Esa cobertura sigue pendiente.
+
+**Decisión de seguridad:** no crear un mecanismo manual para marcar usuarios como `active` ni habilitar autenticación solo para sortear el bloqueo. La verificación debe ser un flujo verificable y auditable, no un cambio directo de estado.
