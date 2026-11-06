@@ -3,10 +3,11 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 
-from api.schemas import ApprovalRequest, ChatRequest, Message, TaskRequest
+from api.schemas import ApprovalRequest, ChatRequest, IngestRequest, Message, TaskRequest
 from api.workspace_routes import (
     workspace_approve,
     workspace_chat,
+    workspace_ingest,
     workspace_task,
 )
 
@@ -195,6 +196,44 @@ class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
         limit.assert_called_once()
         self.assertEqual(limit.call_args.args, ("user-1", "project-1", "agent"))
         runtime.assert_not_called()
+
+
+    async def test_knowledge_ingest_maps_embedding_outage_to_safe_503(self):
+        from rag.service import EmbeddingServiceUnavailable
+        request = IngestRequest(project_id="project-1", text="documentación segura")
+        with (
+            patch("api.workspace_routes._project_role", return_value="editor"),
+            patch("api.workspace_routes.ingest_text", new=AsyncMock(side_effect=EmbeddingServiceUnavailable("El servicio de embeddings no está disponible"))),
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_ingest(request, user={"id": "user-1"})
+        self.assertEqual(raised.exception.status_code, 503)
+        self.assertEqual(raised.exception.detail, "El servicio de embeddings no está disponible")
+
+    async def test_knowledge_ingest_maps_vector_store_outage_to_safe_503(self):
+        from rag.service import KnowledgeStoreUnavailable
+        request = IngestRequest(project_id="project-1", text="documentación segura")
+        with (
+            patch("api.workspace_routes._project_role", return_value="editor"),
+            patch("api.workspace_routes.ingest_text", new=AsyncMock(side_effect=KnowledgeStoreUnavailable("El almacén de conocimiento no está disponible"))),
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_ingest(request, user={"id": "user-1"})
+        self.assertEqual(raised.exception.status_code, 503)
+        self.assertEqual(raised.exception.detail, "El almacén de conocimiento no está disponible")
+
+    async def test_knowledge_ingest_rejects_non_editor_before_embedding(self):
+        request = IngestRequest(project_id="project-1", text="documentación segura")
+        denied = HTTPException(status_code=403, detail="forbidden")
+        with (
+            patch("api.workspace_routes._project_role", side_effect=denied),
+            patch("api.workspace_routes.ingest_text", new=AsyncMock()) as ingest,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_ingest(request, user={"id": "user-1"})
+        self.assertEqual(raised.exception.status_code, 403)
+        ingest.assert_not_awaited()
+
 
 if __name__ == "__main__":
     unittest.main()
