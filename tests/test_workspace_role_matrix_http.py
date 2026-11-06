@@ -39,6 +39,7 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
         with (
             patch("api.workspace_routes._project_role", side_effect=enforce_role),
             patch("api.workspace_routes.retrieve", return_value=""),
+            patch("api.workspace_routes.persist_shadow_usage_event") as persist_usage,
             patch("api.workspace_routes.chat_with_usage", new_callable=AsyncMock, return_value=InferenceResult(
                 content="respuesta", requested_model="atomic-code", returned_model="atomic-code",
                 done=True, prompt_eval_count=3, eval_count=2, total_duration_ns=10,
@@ -54,6 +55,9 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["choices"][0]["message"]["content"], "respuesta")
             chat.assert_awaited_once()
+            persist_usage.assert_called_once()
+            self.assertEqual(persist_usage.call_args.kwargs["user_id"], "user-test")
+            self.assertEqual(persist_usage.call_args.kwargs["project_id"], "project-a")
             self.assertIn('"event":"inference_usage_shadow"', usage_logs.output[0])
             event = json.loads(usage_logs.output[0].split("INFO:axion.usage.shadow:", 1)[-1])
             self.assertEqual(event["user_id"], "user-test")
@@ -86,6 +90,7 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
             patch("api.workspace_routes._project_role", side_effect=enforce_role),
             patch("api.workspace_routes.retrieve", return_value=""),
             patch("api.workspace_routes.chat_with_usage", new_callable=AsyncMock, return_value=result),
+            patch("api.workspace_routes.persist_shadow_usage_event", side_effect=RuntimeError("db unavailable")),
             patch("api.workspace_routes.logger.info", side_effect=RuntimeError("logger unavailable")),
             patch("api.workspace_routes.logger.warning", side_effect=RuntimeError("logger unavailable")),
         ):
