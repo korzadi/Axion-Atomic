@@ -105,3 +105,33 @@ La inspección estática de `Dockerfile`, `compose.yaml` y `sandbox/backends.py`
 - Las rutas `/workspace/*` sí exigen sesión, CSRF en operaciones mutables y comprobación de membresía/rol del proyecto. Aun así, autenticación sigue desactivada por defecto y no se debe habilitar para producción sin verificación de correo, rate limiting distribuido, MFA y recuperación segura.
 - La ruta `/health` consulta y revela el estado general de PostgreSQL, Ollama y Qdrant. Antes de publicar la API, limitar su exposición o devolver únicamente un estado agregado sin detalles de dependencias.
 - No se cambió el comportamiento de estas rutas en esta fase. El objetivo de esta anotación es dejar explícito el límite de confianza y evitar que una API key global se confunda con autorización multiusuario.
+
+
+
+## Auditoría del RAG utilizado por las rutas multiusuario
+
+- `POST /workspace/knowledge/ingest` y `POST /workspace/chat/completions` llaman actualmente a `rag.service` (Qdrant directo), no al pipeline más reciente `RepoIndexer` / `Retriever`.
+- El filtro `project_id` se aplica tanto al guardar como al recuperar, y la recuperación vuelve a comprobar el proyecto del payload. Esto reduce el riesgo de mezcla entre proyectos, pero no resuelve el manejo de secretos.
+- `IngestRequest` permite hasta 100.000 caracteres y `ingest_text` divide, genera embeddings y guarda el texto original en Qdrant sin pasar por `find_secrets` / `redact`. Un usuario podría indexar accidentalmente claves, tokens, datos personales u otros contenidos sensibles. La protección de secretos del `RepoIndexer` no se aplica a esta ruta.
+- La llamada al cliente Qdrant es síncrona dentro de funciones `async`; puede bloquear el event loop bajo carga. La ruta captura excepciones de recuperación y devuelve contexto vacío, ocultando fallos operativos al usuario y reduciendo observabilidad.
+- El campo `source` acepta texto libre de hasta 500 caracteres. Debe tratarse como dato no confiable y no como ruta o identidad verificada del origen.
+
+### Remediación requerida antes de habilitar autenticación o publicar estas rutas
+
+1. Aplicar detección de secretos y política de redacción/rechazo antes de generar embeddings y antes de persistir texto o metadatos. No basta con proteger solo la indexación de repositorios.
+2. Añadir pruebas que demuestren que una cadena con un secreto sintético nunca llega al embedder ni a Qdrant, y que el aislamiento por proyecto se conserva.
+3. Unificar la ruta manual con el pipeline RAG mantenido o documentar claramente sus garantías distintas; evitar dos implementaciones con políticas de seguridad divergentes.
+4. Ejecutar operaciones Qdrant fuera del event loop o utilizar un cliente asíncrono; establecer límites de tiempo, tamaño total y cantidad de fragmentos.
+5. Registrar fallos de recuperación de forma segura y devolver un estado degradado observable, sin exponer detalles internos ni secretos.
+
+**Estado:** hallazgo estático confirmado en el código; no se modificó el comportamiento RAG ni se ejecutaron servicios. Las rutas web siguen cerradas por `AUTH_ENABLED=false` y no deben habilitarse hasta cerrar esta brecha.
+
+## Matriz de autorización observada
+
+- `viewer`: puede usar chat y consultar ejecuciones; no puede ingerir conocimiento, crear tareas ni decidir aprobaciones.
+- `editor`: además puede ingerir conocimiento y crear solicitudes de plan; no puede aprobar planes ni acciones.
+- `owner` / `admin`: pueden decidir aprobaciones de plan y de acción.
+- La decisión de aprobación devuelve `execution=not_executed`; la aprobación no ejecuta herramientas por sí misma.
+- No se encontraron rutas multiusuario para invitar, retirar o cambiar el rol de miembros. La gestión de membresías sigue siendo una capacidad pendiente, no debe suponerse implementada.
+- Las pruebas actuales verifican el helper de autorización y el alcance de consultas de aprobaciones, pero todavía no constituyen una matriz HTTP completa para todos los roles y endpoints.
+
