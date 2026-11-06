@@ -31,3 +31,8 @@ El módulo es una capa de servicio inicial, no una autenticación lista para pro
 La migración 011 añade almacenamiento de tokens de verificación con SHA-256, expiración e índice que permite un solo token abierto por usuario. `api/email_verification.py` emite tokens aleatorios de 30 minutos, invalida los anteriores y consume el token en una transacción que activa exclusivamente cuentas `pending_verification`. El token en claro solo se devuelve al adaptador que deberá enviarlo por correo; nunca se almacena en PostgreSQL.
 
 Pruebas PostgreSQL cubren activación, un solo uso, invalidación de tokens anteriores, expiración y cuentas deshabilitadas. Esto todavía NO completa el flujo público: falta proveedor de correo transaccional, endpoint de verificación con respuesta segura, límites antiabuso distribuidos, recuperación de contraseña y pruebas end-to-end. `AUTH_ENABLED` permanece desactivado.
+
+
+## Endpoint de verificación
+
+Se añadió `POST /auth/verify-email`, que valida el token en el servicio transaccional y responde con un mensaje genérico para tokens inválidos o expirados. El endpoint permanece detrás del interruptor global `AUTH_ENABLED=false`; no se activa hasta completar entrega real de correo y rate limiting. La emisión y entrega del token al registrarse todavía no están conectadas: no se debe considerar un flujo de registro funcional ni enviar usuarios a este endpoint hasta completar el adaptador de correo.

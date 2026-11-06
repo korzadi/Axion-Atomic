@@ -7,7 +7,7 @@ from api.auth import (
     require_csrf, revoke_session,
 )
 from api.config import settings
-from api.schemas import LoginRequest, RegisterRequest, ProjectCreateRequest
+from api.schemas import LoginRequest, RegisterRequest, ProjectCreateRequest, EmailVerificationRequest\nfrom api.email_verification import consume_email_verification_token\nfrom api.database import engine
 from api.project_creation import create_owned_project_with_workspace
 from api.projects import list_user_projects
 
@@ -52,7 +52,7 @@ async def register(req: RegisterRequest):
     }
 
 
-@router.post("/login")
+@router.post("/verify-email")\nasync def verify_email(req: EmailVerificationRequest):\n    """Activa una cuenta solo con un token válido, vigente y de un solo uso."""\n    _require_auth_feature()\n    if not consume_email_verification_token(engine=engine, token=req.token):\n        raise HTTPException(status_code=400, detail="El enlace de verificación no es válido o ha expirado")\n    return {"status": "verified", "message": "Correo verificado correctamente"}\n\n\n@router.post("/login")
 async def login(req: LoginRequest, request: Request, response: Response):
     _require_auth_feature()
     user, token, csrf = authenticate(req.email, req.password, request.headers.get("user-agent"))

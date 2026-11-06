@@ -35,3 +35,23 @@ class AuthRouteGateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_email_verification_request_is_bounded(self):
+        from api.schemas import EmailVerificationRequest
+        request = EmailVerificationRequest(token="x" * 256)
+        self.assertEqual(len(request.token), 256)
+
+    def test_email_verification_rejects_short_token(self):
+        from api.schemas import EmailVerificationRequest
+        with self.assertRaises(ValueError):
+            EmailVerificationRequest(token="short")
+
+    def test_verify_email_route_requires_auth_feature_gate(self):
+        from api.auth_routes import verify_email
+        from api.schemas import EmailVerificationRequest
+        with patch("api.auth_routes.settings.auth_enabled", False):
+            with self.assertRaises(HTTPException) as raised:
+                import asyncio
+                asyncio.run(verify_email(EmailVerificationRequest(token="x" * 32)))
+        self.assertEqual(raised.exception.status_code, 503)
