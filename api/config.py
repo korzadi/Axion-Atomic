@@ -1,4 +1,3 @@
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,9 +10,8 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "qwen_knowledge"
     database_url: str = "postgresql+psycopg://qwen:change-me@localhost:5433/qwen_engineering"
-    # No hay clave de desarrollo por defecto: la API debe fallar al arrancar si falta
-    # una clave explícita de al menos 32 caracteres.
-    api_key: str = Field(min_length=32)
+    # None permite importar módulos en pruebas; la capa HTTP rechaza solicitudes si falta una clave fuerte.
+    api_key: str | None = None
     workspace_root: str = "/workspace"
 
 
