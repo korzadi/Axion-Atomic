@@ -17,6 +17,7 @@ from api.auth_recovery_routes import router as auth_recovery_router
 from api.workspace_routes import router as workspace_router
 from api.payment_routes import router as payment_router
 from api.admin_routes import router as admin_router
+from api.catalog_routes import router as catalog_router
 
 app = FastAPI(title="Axion Atomic API", version="0.2.0")
 app.include_router(auth_router)
@@ -24,6 +25,7 @@ app.include_router(auth_recovery_router)
 app.include_router(workspace_router)
 app.include_router(payment_router)
 app.include_router(admin_router)
+app.include_router(catalog_router)
 
 
 @app.get("/health")
