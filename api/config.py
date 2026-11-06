@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     embed_model: str = "nomic-embed-text"
     embed_dimension: int = 768
     qdrant_url: str = "http://localhost:6333"
-    # Mantiene el índice persistente existente hasta ejecutar una migración de colección revisada.
+    # Colección AXION para instalaciones nuevas; no elimina ni migra colecciones anteriores.
     qdrant_collection: str = "axion_atomic_knowledge"
     database_url: str = "postgresql+psycopg://axion:change-me@localhost:5433/axion_atomic"
     # La capa HTTP rechaza solicitudes si falta una clave fuerte.
