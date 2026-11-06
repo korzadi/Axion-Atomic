@@ -32,7 +32,7 @@ La tabla se añadió mediante `migrations/006_inference_usage_events.sql`, sin e
 | event_id | UUID | PK, generado por la aplicación |
 | request_id | UUID | NOT NULL, UNIQUE; estable durante los reintentos de persistencia |
 | user_id | TEXT | FK a users(id), NOT NULL, ON DELETE RESTRICT |
-| project_id | TEXT | FK a projects(id), nullable, ON DELETE RESTRICT |
+| project_id | TEXT | NOT NULL, FK a projects(id), ON DELETE RESTRICT |
 | provider | TEXT | No se almacena en la primera versión; el adaptador configurado es Ollama |
 | requested_model | TEXT | NOT NULL |
 | returned_model | TEXT | nullable |
@@ -52,7 +52,7 @@ Reglas de integridad:
 - usage_source='ollama_response' solo cuando input y output sean enteros no negativos conocidos.
 - Si falta cualquiera de los dos contadores, usage_source='unavailable'; se conserva cualquier contador individual que sí esté disponible.
 - Los valores booleanos no son contadores válidos aunque Python considere bool una subclase de int.
-- request_id identifica una inferencia, no un intento de cobro. La restricción UNIQUE evita insertar dos observaciones para la misma solicitud.
+- request_id identifica una inferencia, no un intento de cobro. La clave primaria y `ON CONFLICT DO NOTHING` evitan duplicar la observación.
 - Las referencias históricas no deben borrarse en cascada al eliminar usuarios o proyectos. La política de baja/anónimo debe definirse aparte, respetando retención y obligaciones legales.
 
 ## 3. Índices iniciales
@@ -124,7 +124,7 @@ La suite SQLite actual es útil para lógica general, pero no acredita constrain
 
 1. Revisar el resultado de CI actual y cerrar las incompatibilidades de Shadow Mode.
 2. Ejecutar y cerrar el nuevo job PostgreSQL de CI; ampliar sus pruebas cuando se implemente el repositorio de telemetría.
-3. Implementar migración 006 solo después de aprobar este diseño y sus pruebas.
+3. Verificar la migración 006 y sus pruebas en CI antes de desplegarla.
 4. Añadir un repositorio de escritura append-only y pruebas de aislamiento ante fallo de DB.
 5. Añadir consultas de lectura protegidas por identidad/RBAC.
 6. Observar cobertura, pérdidas y volumen en Shadow Mode.
