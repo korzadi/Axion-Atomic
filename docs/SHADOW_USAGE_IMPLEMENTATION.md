@@ -12,7 +12,8 @@
 - `/workspace/chat/completions` usa el resultado tipado y emite un evento JSON de observación con usuario autenticado, proyecto, modelos, contadores y duraciones.
 - La respuesta pública mantiene la estructura previa y no expone los metadatos nuevos.
 - La ruta heredada `/v1` no se incorpora a medición individual.
-- `tests/test_ollama_usage.py` añade pruebas de parsing completo, contadores ausentes, valores inválidos, contenido inválido y diferencia entre modelo solicitado/devuelto.
+- `tests/test_ollama_usage.py` cubre parsing completo, contadores ausentes/inválidos, contenido inválido, modelos solicitado/devuelto, petición HTTP no streaming, propagación de timeout y compatibilidad del wrapper `chat()`.
+- `tests/test_workspace_role_matrix_http.py` se actualizó para simular el contrato `InferenceResult`, comprobar la respuesta del endpoint y verificar que el evento de observación no contiene el texto del usuario.
 
 ## Límites deliberados
 
@@ -26,11 +27,11 @@
 
 ## Verificación
 
-No se ejecutó pytest ni CI desde esta sesión. Los tests están añadidos, pero su resultado es **pendiente de ejecución**. Tampoco se ejecutaron migraciones, llamadas reales a Ollama, cambios en VPS, Docker o despliegues.
+Las pruebas focalizadas están añadidas y publicadas. No se ejecutó pytest ni se confirmó una ejecución de GitHub Actions desde esta sesión; su resultado sigue **pendiente de ejecución**. Las pruebas asíncronas usan `asyncio.run` para no añadir una dependencia de `pytest-asyncio`. Tampoco se ejecutaron migraciones, llamadas reales a Ollama, cambios en VPS, Docker o despliegues.
 
 ## Siguiente paso
 
-1. Ejecutar suite focalizada y suite completa en CI.
-2. Corregir cualquier incompatibilidad sin alterar contratos existentes.
-3. Verificar en un entorno de prueba que el logger emite eventos y que no incluye prompts/respuestas.
+1. Confirmar que CI ejecuta las pruebas actualizadas y corregir incompatibilidades.
+2. Añadir una prueba de aislamiento ante fallo de logging/telemetría.
+3. Verificar en un entorno de prueba la configuración INFO, retención y acceso a los eventos.
 4. Después, diseñar persistencia PostgreSQL de telemetría en modo append-only, con retención y control de acceso, antes de introducir reservas/cuotas activas.
