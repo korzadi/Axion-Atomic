@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://axion:change-me@localhost:5433/axion_atomic"
     # La capa HTTP rechaza solicitudes si falta una clave fuerte.
     api_key: str | None = None
+    # La API heredada /v1 usa una clave global sin identidad humana ni alcance por proyecto.
+    # Debe permanecer cerrada hasta implementar credenciales con permisos acotados.
+    legacy_api_enabled: bool = False
     workspace_root: str = "/workspace"
     # Desactivado hasta incorporar rate limiting distribuido y verificación de correo.
     auth_enabled: bool = False

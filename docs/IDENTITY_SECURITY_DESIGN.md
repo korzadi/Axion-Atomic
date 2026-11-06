@@ -15,6 +15,18 @@ Este documento define el contrato mínimo para cerrar el alta de cuentas sin cre
 - No se encontró rate limiting distribuido aplicado a las rutas de identidad.
 - `AUTH_ENABLED` tiene valor predeterminado `false`; debe permanecer así.
 
+## 1.1 API heredada `/v1` — cerrada por defecto
+
+Las rutas `/v1/chat/completions`, `/v1/knowledge/ingest`, `/v1/agent/tasks` y `/v1/agent/approvals` usan una clave global compartida. Esa clave acredita a una integración, no a una persona, y no demuestra membresía ni permisos sobre el `project_id` recibido.
+
+- La configuración `LEGACY_API_ENABLED` debe permanecer en `false`.
+- Con el valor predeterminado, la dependencia común rechaza las rutas heredadas con HTTP 503, incluso si existe una API key fuerte.
+- No habilitar esta opción para usuarios finales ni como solución temporal.
+- Antes de reabrir estas rutas, diseñar credenciales de servicio con alcance explícito por proyecto y capacidades, rotación/revocación, auditoría y pruebas de aislamiento. Las decisiones de aprobación deben seguir vinculadas a una identidad autorizada y nunca tratar la posesión de una clave global como aprobación humana.
+- Las rutas autenticadas bajo `/workspace` mantienen su propio control de sesión, CSRF y membresía; este cambio no las modifica.
+
+Esta medida no revoca claves ni cambia datos existentes: solo cierra por defecto el acceso HTTP a la API heredada.
+
 ## 2. Verificación de correo
 
 ### Contrato HTTP propuesto

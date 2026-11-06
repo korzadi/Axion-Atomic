@@ -5,6 +5,9 @@ from api.config import settings
 
 async def require_api_key(authorization: str | None = Header(default=None),
                           x_api_key: str | None = Header(default=None)):
+    # La clave compartida no representa a un usuario ni autoriza un project_id concreto.
+    if not settings.legacy_api_enabled:
+        raise HTTPException(status_code=503, detail="Legacy API is disabled")
     configured = settings.api_key
     if not configured or len(configured) < 32:
         raise HTTPException(status_code=503, detail="API key is not configured securely")
