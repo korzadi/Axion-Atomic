@@ -154,11 +154,25 @@ async def execute_durable_reserved_inference(
         or getattr(result, "usage_source", None) != "ollama_response"
     ):
         raise UsageUnavailable("Resultado recuperado no cumple el contrato de inferencia")
+    # Si el serializer usa el envelope versionado, su snapshot de política
+    # debe coincidir con la política de la reserva antes de liquidar.
+    stored_policy = getattr(result, "policy_version", None)
+    stored_input_weight = getattr(result, "input_weight", None)
+    stored_output_weight = getattr(result, "output_weight", None)
+    stored_credits = getattr(result, "actual_credits", None)
+    if stored_policy is not None and stored_policy != budget.policy_version:
+        raise UsageUnavailable("La política del resultado cifrado no coincide con la reserva")
+    if stored_input_weight is not None and stored_input_weight != budget.input_weight:
+        raise UsageUnavailable("El ponderador de entrada no coincide con la reserva")
+    if stored_output_weight is not None and stored_output_weight != budget.output_weight:
+        raise UsageUnavailable("El ponderador de salida no coincide con la reserva")
     actual = credits_for_usage(
         getattr(result, "prompt_eval_count", None),
         getattr(result, "eval_count", None),
         input_weight=budget.input_weight, output_weight=budget.output_weight,
     )
+    if stored_credits is not None and stored_credits != actual:
+        raise UsageUnavailable("Los créditos guardados no coinciden con la medición recuperada")
     settlement = await asyncio.to_thread(
         settle_reservation, engine=engine, user_id=user_id,
         reservation_id=reservation.reservation_id, actual_credits=actual,
