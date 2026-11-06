@@ -47,7 +47,3 @@ class LoginRequest(BaseModel):
 
 class ProjectCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=120)
-
-
-class EmailVerificationRequest(BaseModel):
-    token: str = Field(min_length=20, max_length=256)

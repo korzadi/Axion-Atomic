@@ -1,10 +1,9 @@
-import asyncio
 import unittest
 from unittest.mock import patch
 from fastapi import HTTPException
 
-from api.auth_routes import _require_auth_feature, _authenticated_user, verify_email
-from api.schemas import LoginRequest, RegisterRequest, EmailVerificationRequest
+from api.auth_routes import _require_auth_feature, _authenticated_user
+from api.schemas import LoginRequest, RegisterRequest
 
 
 class AuthRouteGateTests(unittest.TestCase):
@@ -32,20 +31,6 @@ class AuthRouteGateTests(unittest.TestCase):
     def test_login_request_is_bounded(self):
         request = LoginRequest(email="user@example.com", password="a" * 1024)
         self.assertEqual(len(request.password), 1024)
-
-    def test_email_verification_request_is_bounded(self):
-        request = EmailVerificationRequest(token="x" * 256)
-        self.assertEqual(len(request.token), 256)
-
-    def test_email_verification_rejects_short_token(self):
-        with self.assertRaises(ValueError):
-            EmailVerificationRequest(token="short")
-
-    def test_verify_email_route_requires_auth_feature_gate(self):
-        with patch("api.auth_routes.settings.auth_enabled", False):
-            with self.assertRaises(HTTPException) as raised:
-                asyncio.run(verify_email(EmailVerificationRequest(token="x" * 32)))
-        self.assertEqual(raised.exception.status_code, 503)
 
 
 if __name__ == "__main__":

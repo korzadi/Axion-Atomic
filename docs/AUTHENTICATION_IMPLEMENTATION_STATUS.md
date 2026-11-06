@@ -36,3 +36,10 @@ Pruebas PostgreSQL cubren activación, un solo uso, invalidación de tokens ante
 ## Endpoint de verificación
 
 Se añadió `POST /auth/verify-email`, que valida el token en el servicio transaccional y responde con un mensaje genérico para tokens inválidos o expirados. El endpoint permanece detrás del interruptor global `AUTH_ENABLED=false`; no se activa hasta completar entrega real de correo y rate limiting. La emisión y entrega del token al registrarse todavía no están conectadas: no se debe considerar un flujo de registro funcional ni enviar usuarios a este endpoint hasta completar el adaptador de correo.
+
+
+## Recuperación de contraseña: base transaccional
+
+La migración 012 añade almacenamiento separado para tokens de recuperación. El módulo api/password_reset.py emite tokens aleatorios de 30 minutos únicamente para cuentas activas, guarda solo SHA-256 e invalida tokens anteriores. La confirmación valida la nueva contraseña con Argon2id, consume el token una sola vez, actualiza la contraseña y revoca todas las sesiones existentes en una misma transacción. Las direcciones inexistentes o cuentas no activas producen el mismo resultado vacío en la primitiva de emisión para que la capa HTTP pueda responder sin revelar si existe una cuenta.
+
+Esta entrega es una primitiva de servicio y esquema, NO un flujo público: todavía faltan endpoint, correo transaccional, rate limiting distribuido, notificación posterior al cambio y pruebas end-to-end. AUTH_ENABLED sigue desactivado.
