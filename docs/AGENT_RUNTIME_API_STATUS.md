@@ -160,3 +160,14 @@ La inspección estática de `Dockerfile`, `compose.yaml` y `sandbox/backends.py`
 - CI del commit `8feb350e136722ed56b41bcbd1159ca8d8a0f7b9` terminó correctamente: compilación y suite completa (`python-tests: success`).
 
 **Límites pendientes:** `asyncio.to_thread` evita bloquear el event loop, pero no hace que el cliente Qdrant sea asíncrono ni elimina la necesidad de límites de concurrencia y timeout. Las pruebas usan dobles; todavía se necesita una prueba de integración contra Qdrant real en un entorno desechable. La generación de embeddings sigue siendo secuencial por fragmento. No se ha habilitado autenticación ni runtime HTTP.
+
+
+
+## Verificación adicional del aislamiento en recuperación RAG manual
+
+- Se añadió una prueba que simula una respuesta de Qdrant que contiene un resultado del proyecto autorizado y otro de un proyecto distinto.
+- La prueba comprueba que la consulta incluye un filtro Qdrant exacto por `project_id` y que la capa de aplicación vuelve a validar el `project_id` del payload antes de construir el contexto.
+- También comprueba que `query_points` se ejecuta fuera del hilo del event loop.
+- CI del commit `18e99ec740c406de9ec2c1b8969f4c3a362cb1d1` terminó correctamente: compilación y suite completa (`python-tests: success`).
+
+**Alcance de la prueba:** utiliza una respuesta simulada de Qdrant; demuestra el contrato de filtrado y la defensa adicional en la aplicación, pero no sustituye una prueba de integración con un servidor Qdrant real ni una revisión de credenciales/configuración del servicio.
