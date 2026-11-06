@@ -170,5 +170,40 @@ class WorkspaceChatHistoryTests(unittest.IsolatedAsyncioTestCase):
                 _get_chat_history("user-a", "project-a")
 
 
+    async def test_history_route_returns_503_when_storage_is_unavailable(self):
+        with (
+            patch("api.workspace_routes.run_in_threadpool", side_effect=_run_history_callback),
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes._get_chat_history", side_effect=RuntimeError("database unavailable")),
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                await workspace_chat_history(project_id="project-a", user={"id": "user-a"})
+        self.assertEqual(caught.exception.status_code, 503)
+        self.assertEqual(
+            caught.exception.detail,
+            "No se pudo recuperar el historial de la conversación",
+        )
+
+    async def test_history_route_returns_500_for_corrupt_stored_history(self):
+        with (
+            patch("api.workspace_routes.run_in_threadpool", side_effect=_run_history_callback),
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes._get_chat_history", side_effect=ValueError("invalid stored data")),
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                await workspace_chat_history(project_id="project-a", user={"id": "user-a"})
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(
+            caught.exception.detail,
+            "El historial de chat almacenado no es válido",
+        )
+
+
+def _run_history_callback(func, *args, **kwargs):
+    return func(*args, **kwargs)
+
+
 if __name__ == "__main__":
     unittest.main()
