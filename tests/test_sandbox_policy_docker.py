@@ -92,6 +92,15 @@ class DockerArgvTests(unittest.TestCase):
             with self.assertRaises(SandboxUnavailable):
                 backend.run(["echo", "unsafe"], "/tmp", ResourceLimits(), False)
 
+    def test_local_backend_fails_closed_for_approved_egress_without_explicit_dev_opt_in(self):
+        import os
+        with mock.patch.dict(os.environ, {"AXION_ALLOW_UNSAFE_LOCAL_SANDBOX": "1"}, clear=False), \
+             mock.patch("sandbox.backends.LocalBackend._probe_unshare", return_value=True):
+            os.environ.pop("AXION_ALLOW_UNSAFE_LOCAL_NETWORK", None)
+            backend = LocalBackend()
+            with self.assertRaises(SandboxUnavailable):
+                backend.run(["pip", "install", "example"], "/tmp", ResourceLimits(), True)
+
 
 if __name__ == "__main__":
     unittest.main()
