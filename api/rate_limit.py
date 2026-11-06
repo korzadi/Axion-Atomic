@@ -48,7 +48,7 @@ def consume_rate_limit(
         raise ValueError("bucket_key debe ser SHA-256 hexadecimal")
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1 or limit > 1_000_000:
         raise ValueError("limit no válido")
-    if not isinstance(window, timedelta) or window <= timedelta(0) or window > timedelta(days=7):
+    if not isinstance(window, timedelta) or window < timedelta(seconds=1) or window > timedelta(days=7):
         raise ValueError("window no válida")
     instant = _utc(now)
     seconds = int(window.total_seconds())
