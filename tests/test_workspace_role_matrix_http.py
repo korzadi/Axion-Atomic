@@ -226,5 +226,67 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
         conn.execute.assert_called_once()
 
 
+    def test_run_list_is_scoped_to_requested_project(self):
+        from api.workspace_routes import _enabled_user
+
+        app.dependency_overrides[_enabled_user] = lambda: {
+            "id": "user-test", "email": "user@example.test", "role": "viewer",
+        }
+        conn = MagicMock()
+        conn.execute.return_value.mappings.return_value.all.return_value = [
+            {"id": "run-project-a", "goal": "test", "status": "completed"}
+        ]
+        db_context = MagicMock()
+        db_context.__enter__.return_value = conn
+        with (
+            patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.engine.connect", return_value=db_context),
+        ):
+            response = self.client.get("/workspace/agent/runs?project_id=project-a")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["items"][0]["id"], "run-project-a")
+        sql = str(conn.execute.call_args.args[0])
+        self.assertIn("WHERE project_id=:project_id", sql)
+        self.assertEqual(conn.execute.call_args.args[1], {"project_id": "project-a", "limit": 20})
+
+    def test_chat_retrieval_receives_authorized_project_id(self):
+        with (
+            patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.retrieve", return_value="") as retrieve_mock,
+            patch("api.workspace_routes.chat", return_value="respuesta"),
+        ):
+            response = self._post("/workspace/chat/completions", {
+                "project_id": "project-a",
+                "messages": [{"role": "user", "content": "consulta privada"}],
+            })
+        self.assertEqual(response.status_code, 200)
+        retrieve_mock.assert_awaited_once_with("consulta privada", project_id="project-a", limit=5)
+
+    def test_authorize_project_checks_user_and_project_membership(self):
+        from api.auth import authorize_project
+
+        conn = MagicMock()
+        conn.execute.return_value.scalar_one_or_none.return_value = "editor"
+        db_context = MagicMock()
+        db_context.__enter__.return_value = conn
+        with patch("api.auth.engine.connect", return_value=db_context):
+            role = authorize_project("user-a", "project-a", ("owner", "admin", "editor"))
+        self.assertEqual(role, "editor")
+        params = conn.execute.call_args.args[1]
+        self.assertEqual(params, {"user_id": "user-a", "project_id": "project-a"})
+
+    def test_authorize_project_hides_non_member_project(self):
+        from api.auth import authorize_project
+
+        conn = MagicMock()
+        conn.execute.return_value.scalar_one_or_none.return_value = None
+        db_context = MagicMock()
+        db_context.__enter__.return_value = conn
+        with patch("api.auth.engine.connect", return_value=db_context):
+            with self.assertRaises(HTTPException) as caught:
+                authorize_project("user-b", "project-a", ("owner", "admin", "editor", "viewer"))
+        self.assertEqual(caught.exception.status_code, 404)
+
+
 if __name__ == "__main__":
     unittest.main()
