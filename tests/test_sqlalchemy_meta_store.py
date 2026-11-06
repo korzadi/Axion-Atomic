@@ -72,6 +72,22 @@ class SqlAlchemyMetaStoreTests(unittest.TestCase):
             self.assertTrue(conn.cursors[0].closed)
         self.assertEqual(engine.connections[0].statements[0][0], "SELECT id FROM items WHERE id = %s")
 
+    def test_explicit_transaction_uses_one_connection_and_commits_once(self):
+        engine = Engine()
+        store = SqlAlchemyMetaStore(engine)
+
+        with store.transaction() as cursor:
+            cursor.execute(store.sql("UPDATE items SET state = ?"), ("one",))
+            cursor.execute(store.sql("UPDATE items SET state = ?"), ("two",))
+
+        self.assertEqual(len(engine.connections), 1)
+        conn = engine.connections[0]
+        self.assertEqual(len(conn.statements), 2)
+        self.assertEqual(conn.commits, 1)
+        self.assertEqual(conn.rollbacks, 0)
+        self.assertTrue(conn.closed)
+        self.assertTrue(conn.cursors[0].closed)
+
     def test_failure_rolls_back_and_releases_connection(self):
         engine = Engine((True,))
         store = SqlAlchemyMetaStore(engine)
