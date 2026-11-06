@@ -287,3 +287,16 @@ El propietario autorizó expresamente al equipo a resolver las seis decisiones d
 - No publicar planes/precios como activos, no habilitar pagos ni ejecutar migraciones de producción hasta superar las pruebas y la revisión comercial/legal.
 
 **Autorización recibida:** cubre elegir y documentar las políticas de diseño. No constituye autorización para cobros reales, compras, cambios de infraestructura, despliegues o migraciones en VPS.
+
+
+## 14. Auditoría de scripts de reversión (6 de noviembre de 2026)
+
+Se inspeccionaron los dos archivos existentes en `migrations/rollback/`:
+
+- `002_down.sql` elimina las tablas RAG y memoria de proyecto y borra su marca de migración.
+- `003_down.sql` elimina aprobaciones de acciones y auditoría encadenada y borra su marca de migración.
+- No hay scripts down identificados para 001, 004 y 005.
+
+Ambos scripts existentes son destructivos por diseño y no representan una reversión segura para producción. En particular, podrían borrar datos de proyecto, memoria, aprobaciones o auditoría. **No se ejecutaron.** Las futuras migraciones comerciales serán forward-only por defecto; si se necesita corregir esquema, se añadirá una migración compensatoria que preserve datos. El ledger económico jamás se revertirá borrando movimientos: se utilizarán asientos compensatorios.
+
+El migrador actual verifica checksum, usa advisory lock PostgreSQL y ejecuta cada migración en transacción. No se ejecutó ninguna migración.
