@@ -13,7 +13,8 @@
 - La respuesta pública mantiene la estructura previa y no expone los metadatos nuevos.
 - La ruta heredada `/v1` no se incorpora a medición individual.
 - `tests/test_ollama_usage.py` cubre parsing completo, contadores ausentes/inválidos, contenido inválido, modelos solicitado/devuelto, petición HTTP no streaming, propagación de timeout y compatibilidad del wrapper `chat()`.
-- `tests/test_workspace_role_matrix_http.py` se actualizó para simular el contrato `InferenceResult`, comprobar la respuesta del endpoint y verificar que el evento de observación no contiene el texto del usuario.
+- `tests/test_workspace_role_matrix_http.py` se actualizó para simular el contrato `InferenceResult`, comprobar la respuesta del endpoint, verificar que el evento no contiene el texto del usuario y que un logger defectuoso no interrumpe la respuesta.
+- `tests/test_model_identity.py` y `tests/test_workspace_authorization_boundaries.py` actualizan sus mocks al adaptador `chat_with_usage()`.
 
 ## Límites deliberados
 
@@ -34,4 +35,4 @@ Las pruebas focalizadas están añadidas y publicadas. No se ejecutó pytest ni 
 1. Confirmar que CI ejecuta las pruebas actualizadas y corregir incompatibilidades.
 2. Añadir una prueba de aislamiento ante fallo de logging/telemetría.
 3. Verificar en un entorno de prueba la configuración INFO, retención y acceso a los eventos.
-4. Después, diseñar persistencia PostgreSQL de telemetría en modo append-only, con retención y control de acceso, antes de introducir reservas/cuotas activas.
+4. El diseño de persistencia PostgreSQL append-only está documentado en `docs/SHADOW_USAGE_POSTGRESQL_DESIGN.md`; antes de crear la migración 006 deben añadirse y pasar pruebas PostgreSQL de CI.
