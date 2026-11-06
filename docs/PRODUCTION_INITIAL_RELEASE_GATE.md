@@ -98,3 +98,8 @@ Solo etiquetar como **producción inicial lista para cobro** cuando A–E estén
 ### Serialización y huella canónica de solicitudes (implementación auxiliar)
 
 Se añadieron `api/billing_result_codec.py` y `api/billing_request_fingerprint.py`. El codec serializa de forma determinista el resultado estructurado de Ollama, valida el esquema/contadores y limita el payload a 2 MiB antes del cifrado; no guarda plaintext en PostgreSQL. La huella SHA-256 enlaza identidad, proyecto, modelo público, mensajes finales, temperatura, máximo de salida y versión de política, evitando que una clave idempotente se reutilice para otro contenido o parámetros. Ambos módulos tienen pruebas unitarias. Aún deben conectarse al endpoint HTTP y al orquestador durable; la autenticación sigue deshabilitada y no se aceptan solicitudes facturables.
+
+
+### Preflight unificado fail-closed
+
+Se añadió `api/billing_preflight.py` para agrupar el cálculo de presupuesto y la huella SHA-256 de la solicitud. Recibe explícitamente los mensajes finales completos (incluidos system/historial/RAG), modelo público/runtime, parámetros de generación y ventana de contexto. Rechaza la preparación facturable salvo que `tokenizer_verified is True`; también rechaza runtime/modelo público no autorizado. Es una función pura: no reserva saldo, no llama a Ollama y no está conectada a HTTP. La verificación real del tokenizer/Modelfile/template sigue pendiente, por lo que esta puerta no se puede habilitar todavía.
