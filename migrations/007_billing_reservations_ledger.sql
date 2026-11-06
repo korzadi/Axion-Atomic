@@ -54,7 +54,7 @@ CREATE TABLE billing_usage_reservations (
     settled_at TIMESTAMPTZ,
     UNIQUE (user_id, idempotency_key),
     CHECK (expires_at > created_at),
-    CHECK ((state = 'settled' AND settled_at IS NOT NULL) OR state <> 'settled')
+    CHECK ((state = 'settled') = (settled_at IS NOT NULL))
 );
 CREATE INDEX idx_billing_reservations_recovery
     ON billing_usage_reservations(state, expires_at);
@@ -94,7 +94,7 @@ CREATE TABLE billing_credit_ledger (
     reason TEXT NOT NULL CHECK (length(reason) BETWEEN 1 AND 500),
     actor_user_id TEXT REFERENCES users(id) ON DELETE RESTRICT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CHECK (available_delta + reserved_delta + consumed_delta <> 0),
+    CHECK (available_delta <> 0 OR reserved_delta <> 0 OR consumed_delta <> 0),
     CHECK (
         (event_type IN ('grant', 'adjustment') AND reservation_id IS NULL)
         OR (event_type IN ('reserve', 'consume', 'release') AND reservation_id IS NOT NULL)
