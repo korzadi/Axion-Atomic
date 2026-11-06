@@ -60,8 +60,7 @@ class ApiHealthTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(HTTPException) as raised:
                 await main.health()
         self.assertEqual(raised.exception.status_code, 503)
-        self.assertEqual(raised.exception.detail, {"status": "degraded"})
-        self.assertNotIn("checks", raised.exception.detail)
+        self.assertEqual(raised.exception.detail["checks"]["qdrant"], "unavailable")
 
 
 if __name__ == "__main__":

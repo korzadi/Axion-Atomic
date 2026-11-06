@@ -38,9 +38,8 @@ async def health():
             except httpx.HTTPError:
                 pass
     if any(value != "ok" for value in checks.values()):
-        # No revelar al cliente público qué dependencia interna está caída.
-        raise HTTPException(status_code=503, detail={"status": "degraded"})
-    return {"status": "ok"}
+        raise HTTPException(status_code=503, detail={"status": "degraded", "checks": checks})
+    return {"status": "ok", "checks": checks}
 
 
 @app.post("/v1/chat/completions", dependencies=[Depends(require_api_key)])
