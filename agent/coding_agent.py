@@ -151,7 +151,22 @@ class CodingAgent:
         run.status = "running"
         self._persist(run)
         while run.steps < self.max_steps:
-            text = await self.chat(run.messages)
+            try:
+                text = await self.chat(run.messages)
+            except Exception:
+                # Un timeout, rechazo de capacidad o caída de Ollama no debe dejar
+                # snapshots eternamente en "running". No persistimos detalles internos.
+                run.status = "failed"
+                run.error = "El servicio de inferencia no pudo completar el paso. La ejecución se cerró sin aplicar acciones adicionales."
+                self._emit(run, "inference_error")
+                self._persist(run)
+                return run
+            if not isinstance(text, str):
+                run.status = "failed"
+                run.error = "El modelo devolvió una respuesta inválida. La ejecución se cerró sin aplicar acciones adicionales."
+                self._emit(run, "inference_error")
+                self._persist(run)
+                return run
             run.steps += 1
             run.messages.append({"role": "assistant", "content": text})
             self._persist(run)
