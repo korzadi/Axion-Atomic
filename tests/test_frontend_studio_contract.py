@@ -71,3 +71,27 @@ def test_agent_workspace_starts_persistent_runtime_and_supports_resume():
     assert "Reanudar ejecución" in source
     assert "/resume?project_id=" in source
     assert "Las modificaciones no se aplican hasta que un propietario o administrador las apruebe" in source
+
+
+def test_chat_workspace_restores_private_history_before_enabling_send():
+    source = FRONTEND.read_text(encoding="utf-8")
+    assert "workspace/chat/history?project_id=" in source
+    assert "historyReady=false" in source
+    assert "if(request!==historyRequest||select.value!==projectId)return" in source
+    assert "send.disabled=!select.value||!historyReady||chatInFlight" in source
+    assert "historyReady=false;notice.textContent=error.message" in source
+
+
+def test_chat_workspace_saves_successful_turn_and_restores_failed_turn():
+    source = FRONTEND.read_text(encoding="utf-8")
+    assert "workspace/chat/completions" in source
+    assert "messages=[...next,{role:'assistant',content:answer}]" in source
+    assert "messages=previous;draw();input.value=value" in source
+    assert "Respuesta recibida y guardada en el historial del proyecto." in source
+
+
+def test_chat_workspace_sends_csrf_and_does_not_send_while_history_is_unavailable():
+    source = FRONTEND.read_text(encoding="utf-8")
+    assert "'X-CSRF-Token':decodeURIComponent(cookie('axion_csrf'))" in source
+    assert "if(!value||!projectId||!historyReady||chatInFlight||send.disabled)return" in source
+    assert "select.addEventListener('change',()=>loadHistory(select.value))" in source
