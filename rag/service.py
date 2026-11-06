@@ -28,6 +28,10 @@ class KnowledgeStoreUnavailable(RuntimeError):
     """El almacén de conocimiento no pudo completar una operación."""
 
 
+class EmbeddingServiceUnavailable(RuntimeError):
+    """El servicio de embeddings no pudo procesar el contenido."""
+
+
 def validate_manual_ingest(text: str, source: str, project_id: str) -> None:
     """Valida todo el material antes de invocar embeddings o persistencia."""
     _project_filter(project_id)
@@ -87,10 +91,18 @@ def _project_filter(project_id: str):
 
 async def ingest_text(text, source, project_id: str):
     validate_manual_ingest(text, source, project_id)  # Antes de Qdrant y del embedder.
-    await asyncio.to_thread(ensure_collection)
+    try:
+        await asyncio.to_thread(ensure_collection)
+    except Exception:
+        logger.error("RAG ingestion failed; knowledge store is unavailable")
+        raise KnowledgeStoreUnavailable("El almacén de conocimiento no está disponible") from None
     points = []
     for index, chunk in enumerate(chunk_text(text)):
-        vector = await embed(chunk)
+        try:
+            vector = await embed(chunk)
+        except Exception:
+            logger.error("RAG ingestion failed; embedding service is unavailable")
+            raise EmbeddingServiceUnavailable("El servicio de embeddings no está disponible") from None
         points.append(
             models.PointStruct(
                 id=str(uuid.uuid4()),
@@ -99,7 +111,11 @@ async def ingest_text(text, source, project_id: str):
             )
         )
     if points:
-        await asyncio.to_thread(client.upsert, collection_name=settings.qdrant_collection, points=points)
+        try:
+            await asyncio.to_thread(client.upsert, collection_name=settings.qdrant_collection, points=points)
+        except Exception:
+            logger.error("RAG ingestion failed; knowledge store is unavailable")
+            raise KnowledgeStoreUnavailable("El almacén de conocimiento no está disponible") from None
     return len(points)
 
 
