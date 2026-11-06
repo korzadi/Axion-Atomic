@@ -10,6 +10,7 @@ from api.auth import current_user, authorize_project, require_csrf, COOKIE_NAME,
 from api.config import settings
 from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest
 from api.ollama import chat_with_usage
+from api.usage_events import persist_shadow_usage_event
 from rag.service import KnowledgeStoreUnavailable, SensitiveContentError, ingest_text, retrieve
 from agent.planner import create_plan
 from agent.approvals import create_approval
@@ -59,8 +60,22 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
         req.temperature, req.max_tokens,
     )
 
-    # Shadow mode: observación únicamente. No persiste saldos, no reserva cuotas,
-    # no bloquea solicitudes y nunca registra prompts ni respuestas.
+    # Shadow mode: persiste medición técnica, pero no crea cargos, reservas ni saldos.
+    # La persistencia best-effort no debe interrumpir una inferencia ya completada.
+    try:
+        persist_shadow_usage_event(
+            request_id=request_id,
+            user_id=user["id"],
+            project_id=req.project_id,
+            result=result,
+        )
+    except Exception:
+        try:
+            logger.warning("No se pudo persistir el evento de uso shadow")
+        except Exception:
+            pass
+
+    # Telemetría sin prompts ni respuestas para observabilidad operativa.
     try:
         logger.info(json.dumps({
             "event": "inference_usage_shadow",
