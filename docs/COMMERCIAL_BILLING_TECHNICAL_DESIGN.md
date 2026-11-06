@@ -157,6 +157,20 @@ La función recibe la lista FINAL que se enviaría a Ollama, después de incorpo
 - El valor devuelto todavía NO se pasa a `reserve_credits`, no se crea reserva y no se llama desde la ruta HTTP. Shadow Usage sigue sin cargos.
 - La siguiente integración deberá calcular esta cota sobre los mensajes finales, persistir la reserva de forma atómica y solo después llamar a Ollama. Cualquier error o incertidumbre antes de la inferencia debe impedir la llamada.
 
+## 4.2 Orquestación transaccional (servicio no conectado a HTTP)
+
+Se añadió `api/billing_execution.py` como capa de orquestación aislada. Su secuencia es: reservar en PostgreSQL, llamar al motor una sola vez, verificar modelo/estado/contadores, calcular el uso real con los ponderadores del presupuesto y liquidar. La llamada al motor ocurre después de confirmar la reserva y fuera de la transacción SQL.
+
+Reglas fail-closed implementadas:
+- Una reserva idempotente existente nunca vuelve a ejecutar el modelo; esta capa lanza `DuplicateExecution` hasta que una capa superior recupere el resultado persistido o concilie la petición.
+- Timeout, cancelación, excepción, modelo distinto, ejecución incompleta o contadores ausentes conservan la reserva en estado `unknown`.
+- Si el uso real supera la reserva, el servicio deja el caso en `review` y no devuelve el contenido al caller.
+- Solo un resultado completo, del runtime esperado y con contadores reales de Ollama puede liquidarse.
+
+Se añadieron pruebas unitarias con dobles para verificar orden reserva→inferencia, ausencia de reejecución idempotente, estado desconocido y revisión por exceso.
+
+**No está conectado a `workspace_chat` ni habilita facturación.** Antes de conectarlo hacen falta persistencia recuperable de resultado/estado para reintentos, endpoint idempotente, digest y plantilla verificados del artefacto Ollama, pruebas PostgreSQL de la orquestación completa y autenticación de producción. El servicio no debe activarse mientras no existan esas piezas.
+
 ## 5. Concurrencia y límites
 
 - PostgreSQL es autoridad: `SELECT ... FOR UPDATE` sobre filas de cuota/lotes y actualizaciones condicionales con saldo suficiente.
