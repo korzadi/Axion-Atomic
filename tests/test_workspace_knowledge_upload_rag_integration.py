@@ -1,10 +1,10 @@
-"""Integración real de la ruta de carga con extracción y Qdrant local en memoria."""
+"""Integración de extracción y ruta de carga con doble del protocolo Qdrant."""
 import io
 import unittest
 from unittest.mock import AsyncMock, patch
 
 from fastapi import UploadFile
-from qdrant_client import QdrantClient
+from tests.fake_qdrant import FakeQdrantClient
 
 from api.workspace_routes import workspace_upload_knowledge_document
 from rag import service
@@ -12,7 +12,7 @@ from rag import service
 
 class WorkspaceKnowledgeUploadRagIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.client = QdrantClient(":memory:")
+        self.client = FakeQdrantClient()
         self.collection = "workspace_upload_rag_integration"
         self.previous_client = service.client
         self.previous_collection = service.settings.qdrant_collection
@@ -26,7 +26,7 @@ class WorkspaceKnowledgeUploadRagIntegrationTests(unittest.IsolatedAsyncioTestCa
         self.embedding_patch.start()
 
         async def run_on_test_thread(function, *args, **kwargs):
-            # QdrantClient(":memory:") usa SQLite ligado al hilo que lo creó.
+            # El doble de protocolo no requiere servidor ni almacenamiento local.
             return function(*args, **kwargs)
 
         self.thread_patch = patch.object(service.asyncio, "to_thread", new=run_on_test_thread)
