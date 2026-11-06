@@ -37,3 +37,20 @@ El archivo `.env.example` solo contiene marcadores de posición. Nunca copiar un
 5. No habilitar usuarios reales hasta superar estas comprobaciones.
 
 **Estado:** el código está preparado para Qdrant Cloud. La prueba remota real queda pendiente de las credenciales del clúster de pruebas del operador.
+
+
+## Resultado de prueba remota — 6 de noviembre de 2026
+
+La validación que antes figuraba como pendiente se completó en GitHub Actions, run [42295136956](https://github.com/korzadi/Axion-Atomic/actions/runs/42295136956), job `qdrant-cloud-integration`, con resultado **success**:
+
+- Conexión HTTPS autenticada a Qdrant Cloud.
+- Creación de colección temporal de prueba.
+- Inserción de vectores.
+- Búsqueda filtrada por `project_id`.
+- Verificación de aislamiento entre proyectos.
+- Eliminación filtrada de puntos.
+- Eliminación final de la colección temporal creada por el propio job.
+
+La prueba terminó con el mensaje: `PASS: Qdrant Cloud autenticado; crear, insertar, buscar, aislar proyectos y borrar puntos.` La colección temporal fue eliminada. No se usó Qdrant local ni se modificaron colecciones preexistentes.
+
+**Límites:** esta prueba no sustituye una prueba completa de reindexación de documentos ni valida todavía la configuración de ejecución del VPS. No se ha desplegado ni cambiado infraestructura. Mantener las credenciales únicamente en secretos/variables protegidos; nunca imprimir la API key.
