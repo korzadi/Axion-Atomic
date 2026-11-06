@@ -30,17 +30,19 @@ def configured(settings, provider: str) -> bool:
     return False
 
 
-def begin(engine: Engine, provider: str, settings) -> tuple[str, str]:
+def begin(engine: Engine, provider: str, settings, *, terms_accepted: bool) -> tuple[str, str]:
     if provider not in PROVIDERS or not configured(settings, provider):
         raise ValueError("Proveedor OAuth no configurado")
+    if terms_accepted is not True:
+        raise ValueError("Debes aceptar los términos y la política de privacidad")
     state, nonce = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
     with engine.begin() as conn:
         conn.execute(text("""
-            INSERT INTO oauth_login_states(state_hash,provider,nonce,created_at,expires_at)
-            VALUES(:hash,:provider,:nonce,:now,:expires)
+            INSERT INTO oauth_login_states(state_hash,provider,nonce,terms_accepted,created_at,expires_at)
+            VALUES(:hash,:provider,:nonce,:terms_accepted,:now,:expires)
         """), {"hash": digest(state), "provider": provider, "nonce": nonce,
-               "now": now, "expires": now + timedelta(minutes=10)})
+               "terms_accepted": True, "now": now, "expires": now + timedelta(minutes=10)})
     callback = settings.oauth_public_base_url.rstrip("/") + "/auth/oauth/" + provider + "/callback"
     if provider == "google":
         params = {"client_id": settings.google_oauth_client_id, "redirect_uri": callback,
@@ -58,7 +60,7 @@ def consume_state(engine: Engine, provider: str, state: str) -> str:
     now, hashed = datetime.now(timezone.utc), digest(state)
     with engine.begin() as conn:
         row = conn.execute(text("""
-            SELECT nonce FROM oauth_login_states
+            SELECT nonce,terms_accepted FROM oauth_login_states
             WHERE state_hash=:hash AND provider=:provider
               AND consumed_at IS NULL AND expires_at > :now FOR UPDATE
         """), {"hash": hashed, "provider": provider, "now": now}).mappings().first()
@@ -70,7 +72,7 @@ def consume_state(engine: Engine, provider: str, state: str) -> str:
         """), {"now": now, "hash": hashed})
         if changed.rowcount != 1:
             raise ValueError("Estado OAuth ya utilizado")
-        return row["nonce"]
+        return {"nonce": row["nonce"], "terms_accepted": row["terms_accepted"]}
 
 
 def provider_profile(provider: str, code: str, nonce: str, settings) -> dict:
@@ -148,9 +150,11 @@ def provider_profile(provider: str, code: str, nonce: str, settings) -> dict:
     return {"email": email.strip().casefold(), "subject": subject, "name": str(name)[:120]}
 
 
-def resolve_user(engine: Engine, provider: str, profile: dict) -> dict:
+def resolve_user(engine: Engine, provider: str, profile: dict, *, terms_accepted: bool) -> dict:
     from api.auth import hash_password
     import uuid
+    if terms_accepted is not True:
+        raise ValueError("Consentimiento legal requerido")
     now = datetime.now(timezone.utc)
     with engine.begin() as conn:
         linked = conn.execute(text("""
@@ -161,6 +165,8 @@ def resolve_user(engine: Engine, provider: str, profile: dict) -> dict:
         if linked:
             if linked["status"] != "active":
                 raise ValueError("Cuenta deshabilitada")
+            conn.execute(text("UPDATE users SET terms_accepted_at=COALESCE(terms_accepted_at,:now),updated_at=:now WHERE id=:id"),
+                         {"id": linked["id"], "now": now})
             return dict(linked)
         user = conn.execute(text("""
             SELECT id,email,display_name,status FROM users
@@ -171,14 +177,14 @@ def resolve_user(engine: Engine, provider: str, profile: dict) -> dict:
         if user:
             user_id, display_name = user["id"], user["display_name"]
             conn.execute(text("""
-                UPDATE users SET status='active',email_verified_at=COALESCE(email_verified_at,:now),updated_at=:now
+                UPDATE users SET status='active',email_verified_at=COALESCE(email_verified_at,:now),terms_accepted_at=COALESCE(terms_accepted_at,:now),updated_at=:now
                 WHERE id=:id
             """), {"id": user_id, "now": now})
         else:
             user_id, display_name = secrets.token_urlsafe(24), profile["name"]
             conn.execute(text("""
-                INSERT INTO users(id,email,email_normalized,password_hash,display_name,status,email_verified_at,created_at,updated_at)
-                VALUES(:id,:email,:email,:password,:name,'active',:now,:now,:now)
+                INSERT INTO users(id,email,email_normalized,password_hash,display_name,status,email_verified_at,terms_accepted_at,created_at,updated_at)
+                VALUES(:id,:email,:email,:password,:name,'active',:now,:now,:now,:now)
             """), {"id": user_id, "email": profile["email"],
                    "password": hash_password(secrets.token_urlsafe(40)),
                    "name": display_name, "now": now})

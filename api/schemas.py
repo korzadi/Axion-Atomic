@@ -38,6 +38,7 @@ class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=320)
     password: str = Field(min_length=12, max_length=1024)
     display_name: str = Field(min_length=1, max_length=120)
+    terms_accepted: bool = False
 
 
 class LoginRequest(BaseModel):

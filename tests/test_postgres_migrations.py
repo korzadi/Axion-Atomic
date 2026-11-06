@@ -21,7 +21,7 @@ def test_all_expected_migrations_are_registered():
         versions = conn.execute(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).scalars().all()
-    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014"]
+    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015"]
 
 
 def test_core_postgresql_tables_exist():
@@ -61,7 +61,7 @@ def test_identity_constraints_and_relationships_exist():
     inspector = inspect(engine)
 
     user_columns = {column["name"] for column in inspector.get_columns("users")}
-    assert {"id", "email_normalized", "password_hash", "status"} <= user_columns
+    assert {"id", "email_normalized", "password_hash", "status", "terms_accepted_at"} <= user_columns
 
     user_uniques = inspector.get_unique_constraints("users")
     assert any("email_normalized" in item.get("column_names", []) for item in user_uniques)

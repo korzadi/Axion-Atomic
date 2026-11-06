@@ -43,7 +43,7 @@ def verify_password(password_hash: str, password: str) -> bool:
         return False
 
 
-def create_user(email: str, password: str, display_name: str) -> str:
+def create_user(email: str, password: str, display_name: str, terms_accepted_at: datetime | None = None) -> str:
     normalized = email.strip().casefold()
     if len(normalized) > 320 or "@" not in normalized:
         raise ValueError("Correo electrónico no válido")
@@ -53,11 +53,12 @@ def create_user(email: str, password: str, display_name: str) -> str:
     now = _now()
     with engine.begin() as conn:
         conn.execute(text("""
-            INSERT INTO users (id, email, email_normalized, password_hash, display_name, status, created_at, updated_at)
-            VALUES (:id, :email, :normalized, :password_hash, :name, 'pending_verification', :now, :now)
+            INSERT INTO users (id, email, email_normalized, password_hash, display_name, status, terms_accepted_at, created_at, updated_at)
+            VALUES (:id, :email, :normalized, :password_hash, :name, 'pending_verification', :terms_accepted_at, :now, :now)
         """), {
             "id": user_id, "email": email.strip(), "normalized": normalized,
-            "password_hash": hash_password(password), "name": display_name.strip(), "now": now,
+            "password_hash": hash_password(password), "name": display_name.strip(),
+            "terms_accepted_at": terms_accepted_at, "now": now,
         })
     return user_id
 

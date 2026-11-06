@@ -45,7 +45,7 @@ class AuthRouteGateTests(unittest.TestCase):
              patch("api.auth_routes.create_user", return_value=None):
             import asyncio
             asyncio.run(register(
-                RegisterRequest(email="new@example.com", password="StrongPassword123!", display_name="New"),
+                RegisterRequest(email="new@example.com", password="StrongPassword123!", display_name="New", terms_accepted=True),
                 request,
             ))
         self.assertEqual(limiter.call_count, 2)

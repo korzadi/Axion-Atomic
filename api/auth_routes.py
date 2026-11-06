@@ -1,5 +1,5 @@
 """Rutas de sesión web. Permanecen cerradas por defecto hasta habilitar controles antiabuso."""
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import secrets
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
@@ -72,6 +72,8 @@ def _enforce_rate_limit(request: Request, *, namespace: str, limit: int, window:
 async def register(req: RegisterRequest, request: Request):
     _require_auth_feature()
     _enforce_rate_limit(request, namespace="auth:register:ip", limit=10, window=timedelta(minutes=10))
+    if req.terms_accepted is not True:
+        raise HTTPException(status_code=400, detail="Debes aceptar los términos y la política de privacidad.")
     email = req.email.strip().casefold()
     _enforce_rate_limit(request, namespace="auth:register:account", subject=email,
                         limit=5, window=timedelta(hours=1))
@@ -79,7 +81,7 @@ async def register(req: RegisterRequest, request: Request):
         raise HTTPException(status_code=503, detail="El registro por correo no está disponible temporalmente.")
     user_id = None
     try:
-        user_id = create_user(req.email, req.password, req.display_name)
+        user_id = create_user(req.email, req.password, req.display_name, terms_accepted_at=datetime.now(timezone.utc))
     except IntegrityError:
         # No revelar si una dirección ya está registrada.
         pass
@@ -119,14 +121,14 @@ async def oauth_providers():
 
 
 @router.get("/oauth/{provider}/start")
-async def oauth_start(provider: str, request: Request):
+async def oauth_start(provider: str, request: Request, terms_accepted: bool = False):
     _require_auth_feature()
     if provider not in ("google", "github"):
         raise HTTPException(status_code=404, detail="Proveedor no admitido")
     _enforce_rate_limit(request, namespace="auth:oauth:start:" + provider,
                         limit=10, window=timedelta(minutes=10))
     try:
-        destination, oauth_state = begin(engine, provider, settings)
+        destination, oauth_state = begin(engine, provider, settings, terms_accepted=terms_accepted)
         result = RedirectResponse(destination, status_code=302)
         result.set_cookie(key="axion_oauth_state", value=oauth_state, max_age=600,
                           httponly=True, secure=settings.auth_cookie_secure,
@@ -148,9 +150,11 @@ async def oauth_callback(provider: str, code: str | None = None,
         result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
         return result
     try:
-        nonce = consume_state(engine, provider, state)
-        profile = provider_profile(provider, code, nonce, settings)
-        user = resolve_user(engine, provider, profile)
+        state_data = consume_state(engine, provider, state)
+        if state_data["terms_accepted"] is not True:
+            raise ValueError("Consentimiento legal no registrado")
+        profile = provider_profile(provider, code, state_data["nonce"], settings)
+        user = resolve_user(engine, provider, profile, terms_accepted=state_data["terms_accepted"])
     except Exception:
         # Nunca mostrar ni registrar códigos, tokens ni respuestas del proveedor.
         result = RedirectResponse("/?oauth_error=failed", status_code=303)
