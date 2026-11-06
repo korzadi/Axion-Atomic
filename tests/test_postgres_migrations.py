@@ -21,7 +21,7 @@ def test_all_expected_migrations_are_registered():
         versions = conn.execute(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).scalars().all()
-    assert versions == ["001", "002", "003", "004", "005", "006", "007"]
+    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008"]
 
 
 def test_core_postgresql_tables_exist():
@@ -193,3 +193,18 @@ def test_billing_reservation_and_ledger_schema_constraints_exist():
         item["name"] for item in inspector.get_indexes("billing_usage_reservations")
     }
     assert "idx_billing_reservations_recovery" in reservation_indexes
+
+
+
+def test_billing_ledger_rejects_update_delete_and_truncate():
+    with engine.connect() as conn:
+        triggers = conn.execute(text("""
+            SELECT tgname
+            FROM pg_trigger
+            WHERE tgrelid = 'billing_credit_ledger'::regclass
+              AND NOT tgisinternal
+        """)).scalars().all()
+    assert {
+        "trg_billing_ledger_no_update_delete",
+        "trg_billing_ledger_no_truncate",
+    } <= set(triggers)
