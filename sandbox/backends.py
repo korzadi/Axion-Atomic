@@ -55,14 +55,15 @@ def docker_argv(image: str, argv: list[str], snapshot: str, limits: ResourceLimi
 class DockerBackend:
     isolation = "container"
 
-    def __init__(self, images: dict[str, str], egress_network: str = "axion-sandbox-egress", docker_bin: str = "docker",
-                 docker_host: str | None = None, allow_egress: bool = False):
+    def __init__(self, images: dict[str, str], docker_bin: str = "docker", docker_host: str | None = None,
+                 egress_network: str | None = None, allow_egress: bool = False):
         if "default" not in images:
             raise ValueError("images debe incluir 'default'")
-        self.images, self.egress, self.docker_bin, self.docker_host = images, egress_network, docker_bin, docker_host
-        # Un nombre de red Docker no prueba que exista filtrado de salida. El permiso queda desactivado
-        # hasta que una política de egress real se configure y se pruebe fuera de este backend.
-        self.allow_egress = allow_egress
+        # No existe todavía una implementación de filtrado egress verificable. Rechazar incluso
+        # el opt-in evita que una variable de configuración convierta una bridge Docker en salida libre.
+        if allow_egress or egress_network is not None:
+            raise SandboxUnavailable("La salida de red Docker no se puede habilitar hasta implementar y verificar una política egress")
+        self.images, self.docker_bin, self.docker_host = images, docker_bin, docker_host
 
     def image_for(self, exe: str) -> str:
         exe = exe.rsplit("/", 1)[-1]
@@ -70,10 +71,10 @@ class DockerBackend:
         return self.images.get(key, self.images["default"])
 
     def run(self, argv: list[str], snapshot: str, limits: ResourceLimits, network: bool) -> ExecResult:
-        if network and not self.allow_egress:
-            raise SandboxUnavailable("La salida de red del sandbox está deshabilitada: falta una política egress verificada")
+        if network:
+            raise SandboxUnavailable("La salida de red Docker está deshabilitada; no existe una política egress verificada")
         name = "axion-" + uuid.uuid4().hex[:12]
-        cmd = docker_argv(self.image_for(argv[0]), argv, snapshot, limits, self.egress if network else "none", name,
+        cmd = docker_argv(self.image_for(argv[0]), argv, snapshot, limits, "none", name,
                           os.getuid(), os.getgid(), self.docker_bin)
         env = {"PATH": "/usr/bin:/bin:/usr/local/bin"}
         if self.docker_host:
