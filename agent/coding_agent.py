@@ -205,7 +205,7 @@ class CodingAgent:
                         continue
                     if state in ("pending", "approved"):
                         run.pending.append(PendingAction(existing["proposal_id"], value, args,
-                                                         prop.action_hash, existing["summary"]))
+                                                         prop.action_hash, existing["summary"], existing["run_id"]))
                         run.status = "awaiting_approval"
                         self._persist(run)
                         return run
