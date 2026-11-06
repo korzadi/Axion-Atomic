@@ -4,7 +4,11 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException, UploadFile
 
-from api.workspace_routes import (\n    workspace_upload_knowledge_document,\n    workspace_list_knowledge_sources,\n    workspace_delete_knowledge_source,\n)
+from api.workspace_routes import (
+    workspace_upload_knowledge_document,
+    workspace_list_knowledge_sources,
+    workspace_delete_knowledge_source,
+)
 
 
 class KnowledgeUploadRouteTests(unittest.IsolatedAsyncioTestCase):
