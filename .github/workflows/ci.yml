@@ -39,3 +39,38 @@ jobs:
           API_KEY: ci-only-not-a-production-secret-0123456789
           DATABASE_URL: sqlite:///./ci-test.db
         run: python -m pytest -q
+
+  postgres-migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: axion_ci
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: axion_ci
+        options: >-
+          --health-cmd "pg_isready -U axion_ci -d axion_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://axion_ci:ci-only-password@localhost:5432/axion_ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+      - name: Apply PostgreSQL migrations
+        run: python -m api.migrate
+      - name: Verify migration idempotency
+        run: python -m api.migrate
+      - name: Verify PostgreSQL schema
+        run: python -m pytest -q tests/test_postgres_migrations.py
