@@ -70,11 +70,12 @@ class RunStore:
 
     def record_action(self, run_id: str, project_id: str, tool: str, args: dict,
                       action_hash: str, proposal_id: str, summary: str) -> dict:
+        self.get_run(run_id, project_id)
         now = self.clock()
         self.meta.execute(
             "INSERT INTO agent_run_actions (id, run_id, project_id, tool, action_hash, args_json, "
             "proposal_id, summary, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?) "
-            "ON CONFLICT (run_id, action_hash) DO NOTHING",
+            "ON CONFLICT (project_id, action_hash) DO NOTHING",
             (uuid.uuid4().hex, run_id, project_id, tool, action_hash,
              json.dumps(args, sort_keys=True, ensure_ascii=False), str(proposal_id), summary, now, now),
         )
@@ -90,6 +91,18 @@ class RunStore:
             "FROM agent_run_actions WHERE run_id = ? AND action_hash = ?",
             (run_id, action_hash),
         )
+        return self._action_row(rows)
+
+    def get_project_action(self, project_id: str, action_hash: str) -> dict | None:
+        rows = self.meta.query(
+            "SELECT id, run_id, project_id, tool, action_hash, args_json, proposal_id, summary, state, result "
+            "FROM agent_run_actions WHERE project_id = ? AND action_hash = ?",
+            (project_id, action_hash),
+        )
+        return self._action_row(rows)
+
+    @staticmethod
+    def _action_row(rows):
         if not rows:
             return None
         return dict(zip(("id", "run_id", "project_id", "tool", "action_hash", "args_json",
