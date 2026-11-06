@@ -210,9 +210,6 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
         upsert.assert_not_called()
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
     async def test_replace_source_rolls_back_new_chunks_if_retiring_old_chunks_fails(self):
         from types import SimpleNamespace
@@ -268,3 +265,7 @@ if __name__ == "__main__":
                 await service.list_sources("project-a")
         self.assertEqual(str(caught.exception), "El almacén de conocimiento no está disponible")
         self.assertNotIn("private qdrant endpoint", str(caught.exception))
+
+
+if __name__ == "__main__":
+    unittest.main()
