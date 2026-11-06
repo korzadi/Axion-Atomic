@@ -99,3 +99,28 @@ def test_boolean_counters_are_rejected():
     payload["prompt_tokens"] = True
     with pytest.raises(ExecutionEnvelopeError):
         parse_execution_envelope(json.dumps(payload).encode())
+
+
+def test_durable_callbacks_round_trip_a_provider_result_and_metering():
+    from api.billing_execution_envelope import (
+        deserialize_billing_execution_result,
+        serialize_billing_execution_result,
+    )
+
+    encoded = serialize_billing_execution_result(
+        _result(),
+        expected_model="atomic-code:16k-8k",
+        policy_version="atomic-code-v1",
+        input_weight=2,
+        output_weight=3,
+    )
+    recovered = deserialize_billing_execution_result(encoded)
+    assert recovered.content == "respuesta privada"
+    assert recovered.requested_model == "atomic-code:16k-8k"
+    assert recovered.returned_model == "atomic-code:16k-8k"
+    assert recovered.done is True
+    assert recovered.usage_source == "ollama_response"
+    assert recovered.prompt_eval_count == 100
+    assert recovered.eval_count == 25
+    assert recovered.actual_credits == 275
+    assert recovered.policy_version == "atomic-code-v1"
