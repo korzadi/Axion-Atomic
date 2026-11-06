@@ -13,7 +13,7 @@
 - Ollama existente se trata como servicio externo; no instalar, actualizar ni alterar sus datos.
 - No se integra ni depende de Open WebUI.
 - No se accede al VPS, no se despliega, no se ejecutan migraciones ni se modifican secretos.
-- El trabajo de implementación continúa sobre `main), sin operaciones de infraestructura.
+- El trabajo de implementación continúa sobre `main`, sin operaciones de infraestructura.
 
 ## Implementado (inspección estática; validación de ejecución pendiente)
 
@@ -92,3 +92,43 @@ No bloquear el trabajo técnico por estas preguntas: mantener los campos como pe
 ## Criterio de finalización
 
 El proyecto solo podrá etiquetarse como listo cuando las pruebas automatizadas se hayan ejecutado y pasado para el commit de release, el aislamiento multiusuario esté demostrado, el sandbox se haya probado, las integraciones externas se hayan conciliado en modo de pruebas, las migraciones estén revisadas y exista un despliegue aprobado y verificable. La documentación o la existencia de código no sustituyen esas evidencias.
+
+
+## Revisión estática ampliada del runtime y sandbox (6 de noviembre de 2026)
+
+Esta sección registra una inspección adicional de `api/workspace_routes.py`, `agent/coding_agent.py`, `agent/run_store.py`, `agent/approval_gate.py`, `agent/approval_store.py`, `agent/toolset.py`, `agent/workspace.py`, `agent/git.py`, `sandbox/executor.py`, `sandbox/policy.py`, `sandbox/backends.py`, `sandbox/runner.py` y `sandbox/snapshot.py`. Es una revisión de código, no una prueba de ejecución.
+
+### Hallazgos concretos del runtime
+
+- `CodingAgent` ya implementa un bucle de modelo/herramienta, validación de argumentos, observaciones redactadas, límites de pasos/repeticiones y eventos.
+- Las herramientas mutables de archivos y Git se representan como propuestas; el agente pausa en `awaiting_approval` y valida el hash antes de aplicar.
+- `RunStore` persiste ejecuciones y acciones por proyecto, evita reutilizar un hash con otra carga útil y marca acciones reclamadas como `running`. Una acción que quedó en ese estado requiere reconciliación humana y no se repite automáticamente.
+- `DbApprovalGate` ofrece aprobación persistente con expiración, decisión condicional y canje de un solo uso ligado al hash.
+- La ruta HTTP `POST /workspace/agent/tasks` todavía llama al planificador y crea una aprobación de plan; no instancia ni ejecuta `CodingAgent`. Las rutas de aprobación HTTP actualizan registros, pero devuelven expresamente `execution: not_executed`. Por tanto, el runtime existe como componentes, pero el flujo web end-to-end aún no está conectado.
+- No se encontró en las rutas workspace revisadas una operación HTTP para iniciar, reanudar, cancelar o reconciliar una ejecución del `CodingAgent`. La cancelación y la recuperación operacional siguen pendientes.
+- Debe verificarse en el punto de composición de la aplicación que la misma instancia/configuración persistente de `DbApprovalGate` se comparte entre el runtime y las decisiones HTTP. No asumir que el registro aprobado por la API es visible para una puerta en memoria.
+
+### Hallazgos concretos del sandbox
+
+- `SandboxExecutor` trabaja sobre una copia temporal del proyecto; el snapshot excluye archivos sensibles/ignorados, omite symlinks y tiene límites predeterminados de 200 MB y 20.000 archivos.
+- `DockerBackend` aplica límites de CPU, memoria, PIDs, tiempo y salida; usa root filesystem de solo lectura, usuario no root, capacidades eliminadas, `no-new-privileges` y red Docker `none`.
+- El backend Docker rechaza explícitamente cualquier configuración de egress porque no existe una política de salida de red verificada. Los comandos que requieren red no deben considerarse ejecutables en el backend de producción.
+- `LocalBackend` no aísla el sistema de archivos y exige un opt-in explícito de desarrollo. No es un backend aceptable para producción.
+- La política de comandos bloquea comandos privilegiados, Docker, Git, shells y rutas absolutas/traversal; los comandos no reconocidos o con red requieren aprobación, pero la aprobación no elimina las restricciones del backend.
+- Estos controles son prometedores en el código, pero faltan pruebas de integración del backend Docker real, comprobaciones de configuración efectiva, pruebas de escape/aislamiento y auditoría del entorno donde se ejecutaría.
+
+### Próximos trabajos técnicos priorizados
+
+1. Inspeccionar el punto de composición/DI de FastAPI y las fábricas de runtime para demostrar que `Workspace`, `GitManager`, `SandboxExecutor`, `RunStore` y `DbApprovalGate` se construyen por proyecto y con la misma persistencia.
+2. Diseñar una capa de servicio de ejecuciones que derive el proyecto y el actor exclusivamente de la sesión autenticada; no aceptar rutas de workspace ni identidades arbitrarias del cliente.
+3. Añadir endpoints autenticados para crear, consultar, reanudar y cancelar ejecuciones solo después de definir la semántica de concurrencia, idempotencia y reconciliación.
+4. Unificar las aprobaciones de plan legado y las aprobaciones de acciones del runtime, o documentar claramente sus contratos separados. No permitir que una aprobación de plan autorice una herramienta.
+5. Añadir pruebas de integración que cubran: proyecto ajeno, actor sin rol, CSRF, aprobación expirada, hash incorrecto, doble canje, reinicio con acción `running`, reanudación tras aprobación y ausencia de reejecución duplicada.
+6. Añadir pruebas del sandbox para red deshabilitada, límites de recursos, timeout, truncamiento, limpieza de contenedor/snapshot, symlinks, archivos sensibles y backend local rechazado por defecto.
+7. Solo tras esas pruebas, conectar las vistas de AXION STUDIO al ciclo real de ejecución.
+
+### Estado de CI revisado en esta pasada
+
+- La rama `main` tiene como commits más recientes `89c3922` (documentación) y `f5f1927` (chat de AXION STUDIO).
+- La consulta de estados de commit no devolvió status checks para ninguno de esos dos commits. Esto no demuestra éxito ni fallo de GitHub Actions; el resultado debe quedar como **CI no confirmado** hasta consultar los runs y sus jobs.
+- No se ejecutaron pruebas locales ni se construyó una imagen Docker durante esta revisión.
