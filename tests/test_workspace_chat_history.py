@@ -48,11 +48,18 @@ class WorkspaceChatHistoryTests(unittest.IsolatedAsyncioTestCase):
                 await workspace_chat_history(project_id="project-a", user={"id": "user-a"})
         get_history.assert_not_called()
 
-    def test_save_rejects_more_than_100_messages_before_database_access(self):
-        with patch("api.workspace_routes.engine.begin") as begin:
-            with self.assertRaises(ValueError):
-                _save_chat_history("user-a", "project-a", [{"role": "user", "content": "x"}] * 101)
-        begin.assert_not_called()
+    def test_save_trims_oldest_messages_to_100_before_database_write(self):
+        conn = MagicMock()
+        conn.execute.return_value.first.return_value.updated_at = "now"
+        context = MagicMock()
+        context.__enter__.return_value = conn
+        messages = [{"role": "user", "content": str(index)} for index in range(101)]
+        with patch("api.workspace_routes.engine.begin", return_value=context):
+            _save_chat_history("user-a", "project-a", messages)
+        import json
+        saved = json.loads(conn.execute.call_args.args[1]["messages"])
+        self.assertEqual(len(saved), 100)
+        self.assertEqual(saved[0]["content"], "1")
 
     def test_save_bounds_total_characters_by_dropping_oldest_messages(self):
         conn = MagicMock()
