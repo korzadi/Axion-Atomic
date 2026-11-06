@@ -4,6 +4,8 @@ No crea órdenes, no verifica pagos y no expone operaciones administrativas.
 """
 from __future__ import annotations
 
+from datetime import timedelta
+
 from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query
@@ -28,7 +30,7 @@ def _limit_reads(user: dict) -> None:
         engine=engine,
         bucket_key=rate_limit_key("billing:read:user", str(user["id"])),
         limit=120,
-        window_seconds=60,
+        window=timedelta(minutes=1),
     )
     if not decision.allowed:
         raise HTTPException(
