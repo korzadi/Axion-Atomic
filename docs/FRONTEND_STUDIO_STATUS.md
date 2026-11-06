@@ -1,9 +1,9 @@
 # Estado de AXION STUDIO — frontend web
 
-**Rama:** `feat/axion-studio-frontend-auth-admin`  
-**Estado:** primera interfaz pública y shell del workspace añadidos; integración parcial, no apta todavía para publicación como SaaS.
+**Rama de referencia:** `main`  
+**Estado:** shell web integrado y servido por FastAPI desde el directorio estático; autenticación y módulos siguen sujetos a las limitaciones indicadas aquí. No equivale a un SaaS listo para producción.
 
-## Incluido en esta entrega
+## Incluido
 
 - Página pública responsive con identidad AXION ATOMIC.
 - Formulario de registro por correo y contraseña, con nombre visible y aceptación de términos en la interfaz.
@@ -12,9 +12,12 @@
 - Validación posterior de sesión mediante `GET /auth/me`.
 - Cierre de sesión mediante `POST /auth/logout`, cookie de sesión HttpOnly y encabezado CSRF leído desde la cookie no HttpOnly.
 - Navegación visual del workspace para chat, modelos, agentes, Atomic Code, Atomic Video, proyectos, conocimiento y administración.
+- Vista **Proyectos** conectada a `GET /auth/projects` y `POST /auth/projects`; la creación asigna la membresía `owner` en el backend.
 - Los proveedores Google y GitHub permanecen deshabilitados. No hay flujo OAuth implementado ni credenciales confirmadas.
+- FastAPI sirve `frontend/index.html` desde `/` mediante `StaticFiles`, montado después de las rutas API para no interceptar `/auth`, `/workspace`, `/health` ni `/v1`.
+- El `Dockerfile` incluye el directorio `frontend/` en la imagen. Esta modificación de código no implica que se haya construido o desplegado una imagen.
 
-## Contrato backend verificado
+## Contrato backend verificado estáticamente
 
 - Registro requiere `email`, `password` (mínimo 12 caracteres) y `display_name`; devuelve HTTP 202 y deja la cuenta en `pending_verification`.
 - Login devuelve `user`, `csrf_token` y `expires_in`; crea cookies `axion_session` y `axion_csrf`.
@@ -25,37 +28,24 @@
 
 ## Límites de seguridad y funcionalidad
 
-- La interfaz no activa `AUTH_ENABLED`; el backend debe seguir cerrado por defecto.
+- `AUTH_ENABLED` continúa deshabilitado por defecto. No se cambió ninguna variable de entorno ni se habilitó el registro.
 - El registro no puede iniciar sesión hasta que una verificación real de correo active la cuenta.
 - No existe todavía verificación/envío de correo, recuperación de contraseña, MFA ni rate limiting distribuido.
 - Google y GitHub no están conectados; los botones no simulan autenticación.
-- La vista Administración es únicamente una pantalla informativa. No existe API de administración global ni RBAC global/superadmin verificado. No se muestra ni concede privilegio administrativo.
-- Los módulos del workspace que no tienen una integración frontend completa no deben presentar datos ficticios ni afirmar que están operativos.
-- Las rutas legacy `/v1/*` no son una API multiusuario para el navegador.
+- La vista Administración es únicamente informativa. No existe API de administración global ni RBAC global/superadmin verificado.
+- Chat, modelos, agentes, Atomic Code, Atomic Video y Conocimiento conservan estados informativos cuando no tienen integración frontend/backend completa; no deben presentar datos ficticios ni afirmar que están operativos.
+- Las rutas legacy `/v1/*` siguen protegidas por API key de servicio y no constituyen una API multiusuario para el navegador.
+- El montaje estático depende de que exista el directorio `frontend/`; el Dockerfile ahora lo copia, pero el comportamiento empaquetado aún requiere CI y prueba de imagen en un entorno autorizado.
 
 ## Siguiente trabajo requerido
 
-1. Completar la seguridad de identidad descrita en `IDENTITY_SECURITY_DESIGN.md` antes de habilitar registro público.
-2. Implementar y probar OAuth Google/GitHub solo después de definir callback URLs y configurar secretos fuera del repositorio.
-3. Diseñar roles globales separados de los roles por proyecto; implementar autorización server-side, auditoría y pruebas negativas antes de exponer un panel superadmin.
-4. Conectar cada módulo del workspace con endpoints autenticados existentes, respetando CSRF y membresía de proyecto.
-5. Añadir pruebas frontend/backend y verificación de build en CI.
+1. Añadir pruebas de entrega de `/` y de precedencia de rutas API; verificar CI tras los commits de integración.
+2. Completar verificación/envío de correo, recuperación, rate limiting y controles antiabuso antes de habilitar `AUTH_ENABLED`.
+3. Implementar OAuth Google/GitHub solo después de definir callback URLs y configurar secretos fuera del repositorio.
+4. Diseñar roles globales separados de los roles por proyecto; implementar autorización server-side, auditoría y pruebas negativas antes de exponer un panel superadmin.
+5. Conectar selección de proyecto al chat/workspace y conectar cada módulo únicamente a endpoints autenticados existentes, respetando CSRF y membresía.
+6. Validar la imagen y el despliegue en un entorno de pruebas, con aprobación expresa del operador; no ejecutar esa operación como parte de cambios de código.
 
-## Estado de publicación
+## Estado operativo
 
-Esta rama no se ha fusionado con `main` ni desplegado. No se han ejecutado migraciones, cambiado variables de entorno, reiniciado servicios ni modificado el VPS.
-
-
-## Actualización — 2026-11-06
-
-Se conectó la vista **Proyectos** del frontend a las rutas existentes de identidad:
-
-- `GET /auth/projects` para listar únicamente los proyectos vinculados al usuario autenticado.
-- `POST /auth/projects` para crear un proyecto y asignar su membresía `owner` en la transacción del backend.
-- La creación envía `X-CSRF-Token` desde la cookie `axion_csrf`; la cookie de sesión sigue siendo HttpOnly.
-- Los errores del backend se muestran en la interfaz; no se inventan proyectos ni datos de actividad.
-- La vista vuelve a consultar la lista después de crear un proyecto.
-
-**Límites sin cambios:** `AUTH_ENABLED=false` por defecto. Por tanto, esta integración solo podrá usarse cuando el operador habilite el servicio después de completar verificación de correo, rate limiting distribuido, pruebas de aislamiento y revisión de seguridad. No se activó el registro ni se ejecutaron migraciones.
-
-**Pendiente:** conectar selección de proyecto al chat/workspace, implementar correo de verificación y recuperación, y construir el panel administrativo únicamente después de definir roles globales y endpoints de administración protegidos en servidor. Google/GitHub continúan deshabilitados hasta configurar y probar OAuth real.
+La integración se ha realizado en el repositorio y rama `main`. No se ha desplegado, construido ni reiniciado Docker; no se ha accedido al VPS, ejecutado migraciones, cambiado variables de entorno ni modificado servicios o datos.
