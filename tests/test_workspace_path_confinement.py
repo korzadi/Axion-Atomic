@@ -40,7 +40,7 @@ class WorkspacePathConfinementTests(unittest.TestCase):
             self.ws.propose_write("external-link", "overwritten", "regression test")
         self.assertEqual(self.external_file.read_text(encoding="utf-8"), "outside secret")
 
-    def test_allows_symlink_target_inside_project(self):
+    def test_rejects_symlink_target_inside_project(self):
         target = self.root / "safe.txt"
         target.write_text("inside", encoding="utf-8")
         link = self.root / "inside-link"
@@ -48,7 +48,18 @@ class WorkspacePathConfinementTests(unittest.TestCase):
             link.symlink_to(target)
         except (OSError, NotImplementedError):
             self.skipTest("El sistema de archivos no permite crear symlinks")
-        self.assertEqual(self.ws.read("inside-link"), "inside")
+        with self.assertRaises(PathViolation):
+            self.ws.read("inside-link")
+
+    def test_rejects_symlink_parent_directory(self):
+        target_dir = Path(self.outside.name)
+        link_dir = self.root / "linked-dir"
+        try:
+            link_dir.symlink_to(target_dir, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("El sistema de archivos no permite crear symlinks")
+        with self.assertRaises(PathViolation):
+            self.ws.read("linked-dir/secret.txt")
 
 
 if __name__ == "__main__":
