@@ -76,9 +76,7 @@ async function ownerCanUploadAndRefreshKnowledge() {
   });
   assert.equal(await page.locator("#knowledgeUpload").isEnabled(), true);
   await page.locator("#knowledgeUpload").click();
-  await page.getByText("Documento indexado correctamente", { exact: false }).waitFor().catch(async () => {
-    await page.getByText("manual.txt", { exact: true }).waitFor();
-  });
+  await page.locator("#knowledgeUploadNotice").getByText(/Documento indexado:/).waitFor();
   assert.ok(uploadRequest, "La interfaz no envió la solicitud HTTP de carga");
   assert.equal(uploadRequest.method(), "POST");
   assert.equal(uploadRequest.headers()["x-csrf-token"], "csrf-browser-test");
