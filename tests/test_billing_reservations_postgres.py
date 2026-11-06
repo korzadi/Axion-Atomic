@@ -74,8 +74,9 @@ def _reserve(user_id, project_id, *, key, amount, request_id=None, digest=None, 
 
 def test_reservation_is_idempotent_and_partial_settlement_releases_unused_quota():
     user_id, project_id = _account(quota=20)
-    first = _reserve(user_id, project_id, key="idem-partial", amount=8)
-    repeated = _reserve(user_id, project_id, key="idem-partial", amount=8)
+    request_id = str(uuid.uuid4())
+    first = _reserve(user_id, project_id, key="idem-partial", amount=8, request_id=request_id)
+    repeated = _reserve(user_id, project_id, key="idem-partial", amount=8, request_id=request_id)
     assert repeated.idempotent is True
     assert repeated.reservation_id == first.reservation_id
 
@@ -108,6 +109,16 @@ def test_reservation_is_idempotent_and_partial_settlement_releases_unused_quota(
     assert {row.event_type: row.n for row in entries} == {
         "reserve": 1, "consume": 1, "release": 1,
     }
+
+
+def test_same_idempotency_key_rejects_changed_request_or_reservation_amount():
+    user_id, project_id = _account(quota=30)
+    request_id = str(uuid.uuid4())
+    _reserve(user_id, project_id, key="idem-binding", amount=8, request_id=request_id)
+    with pytest.raises(IdempotencyConflict):
+        _reserve(user_id, project_id, key="idem-binding", amount=9, request_id=request_id)
+    with pytest.raises(IdempotencyConflict):
+        _reserve(user_id, project_id, key="idem-binding", amount=8, request_id=str(uuid.uuid4()))
 
 
 def test_same_idempotency_key_with_different_payload_is_rejected():
@@ -331,10 +342,10 @@ def _execution_budget():
     )
 
 
-def _execute_reserved(user_id, project_id, key, inference_call):
+def _execute_reserved(user_id, project_id, key, inference_call, request_id=None):
     return asyncio.run(execute_reserved_inference(
         engine=engine, user_id=user_id, project_id=project_id,
-        request_id=str(uuid.uuid4()), idempotency_key=key,
+        request_id=request_id or str(uuid.uuid4()), idempotency_key=key,
         payload_sha256="d" * 64, budget=_execution_budget(),
         expected_runtime_model="atomic-code:16k-8k",
         inference_call=inference_call,
@@ -382,7 +393,8 @@ def test_execution_orchestrator_retry_does_not_repeat_provider_call():
             usage_source="ollama_response",
         )
 
-    first = _execute_reserved(user_id, project_id, "orchestrator-idempotent", inference)
+    request_id = str(uuid.uuid4())
+    first = _execute_reserved(user_id, project_id, "orchestrator-idempotent", inference, request_id=request_id)
     assert first.settlement.state == "settled"
     repeated_calls = []
 
@@ -390,7 +402,7 @@ def test_execution_orchestrator_retry_does_not_repeat_provider_call():
         repeated_calls.append(True)
 
     with pytest.raises(DuplicateExecution):
-        _execute_reserved(user_id, project_id, "orchestrator-idempotent", must_not_run)
+        _execute_reserved(user_id, project_id, "orchestrator-idempotent", must_not_run, request_id=request_id)
     assert repeated_calls == []
 
 
