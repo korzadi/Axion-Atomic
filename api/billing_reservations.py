@@ -327,3 +327,126 @@ def mark_reservation_unknown(*, engine: Engine, user_id: str, reservation_id: st
         """), {"id": reservation_uuid, "user_id": user_id})
         if result.rowcount != 1:
             raise ReservationStateError("La reserva no existe o ya no está en estado held")
+
+
+@dataclass(frozen=True)
+class ReconciliationResult:
+    reservation_id: str
+    state: str
+    idempotent: bool = False
+
+
+def reconcile_confirmed_no_execution(
+    *,
+    engine: Engine,
+    user_id: str,
+    reservation_id: str,
+    actor_user_id: str,
+    reason: str,
+    idempotency_key: str,
+) -> ReconciliationResult:
+    """Libera una reserva unknown/review solo tras confirmación auditada de no ejecución.
+
+    La identidad del actor y su rol administrativo deben verificarse en la capa
+    superior. Esta función no expone una ruta HTTP ni interpreta expiración como
+    prueba de no ejecución.
+    """
+    if not user_id or not actor_user_id:
+        raise ValueError("user_id y actor_user_id son obligatorios")
+    if not isinstance(reason, str) or len(reason.strip()) < 10 or len(reason) > 1000:
+        raise ValueError("reason debe describir la evidencia (10-1000 caracteres)")
+    if not isinstance(idempotency_key, str) or not 1 <= len(idempotency_key) <= 200:
+        raise ValueError("idempotency_key debe tener entre 1 y 200 caracteres")
+    reservation_uuid = str(uuid.UUID(reservation_id))
+
+    with engine.begin() as conn:
+        conn.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"axion-reconcile:{idempotency_key}"},
+        )
+        prior = conn.execute(text("""
+            SELECT reservation_id, user_id, resolution
+            FROM billing_reservation_reconciliations
+            WHERE idempotency_key=:key
+        """), {"key": idempotency_key}).mappings().first()
+        if prior:
+            if (str(prior["reservation_id"]) != reservation_uuid
+                    or prior["user_id"] != user_id
+                    or prior["resolution"] != "confirmed_no_execution"):
+                raise IdempotencyConflict("La clave de conciliación ya pertenece a otra decisión")
+            return ReconciliationResult(reservation_uuid, "released", True)
+
+        reservation = conn.execute(text("""
+            SELECT id, state FROM billing_usage_reservations
+            WHERE id=CAST(:id AS UUID) AND user_id=:user_id
+            FOR UPDATE
+        """), {"id": reservation_uuid, "user_id": user_id}).mappings().first()
+        if reservation is None:
+            raise ReservationNotFound("Reserva inexistente")
+        if reservation["state"] not in ("unknown", "review"):
+            raise ReservationStateError(
+                "Solo se concilian reservas unknown o review; no se libera una reserva held"
+            )
+
+        allocations = conn.execute(text("""
+            SELECT id, source, quota_period_id, credit_lot_id, allocated_credits
+            FROM billing_reservation_allocations
+            WHERE reservation_id=CAST(:id AS UUID)
+            ORDER BY CASE source WHEN 'daily_free' THEN 0 WHEN 'subscription' THEN 1 ELSE 2 END,
+                     quota_period_id NULLS LAST, credit_lot_id NULLS LAST, id
+            FOR UPDATE
+        """), {"id": reservation_uuid}).mappings().all()
+        if not allocations:
+            raise ReservationStateError("La reserva no tiene asignaciones que conciliar")
+
+        conn.execute(text("""
+            INSERT INTO billing_reservation_reconciliations
+                (id, reservation_id, user_id, actor_user_id, resolution,
+                 idempotency_key, reason)
+            VALUES (CAST(:id AS UUID), CAST(:reservation_id AS UUID), :user_id,
+                    :actor_user_id, 'confirmed_no_execution', :key, :reason)
+        """), {
+            "id": str(uuid.uuid4()), "reservation_id": reservation_uuid,
+            "user_id": user_id, "actor_user_id": actor_user_id,
+            "key": idempotency_key, "reason": reason.strip(),
+        })
+
+        for item in allocations:
+            amount = item["allocated_credits"]
+            purchased = item["source"] == "purchased"
+            if purchased:
+                conn.execute(text("""
+                    UPDATE billing_credit_lots
+                    SET reserved_credits=reserved_credits-:amount,
+                        available_credits=available_credits+:amount
+                    WHERE id=CAST(:id AS UUID) AND reserved_credits >= :amount
+                """), {"amount": amount, "id": str(item["credit_lot_id"])})
+            else:
+                conn.execute(text("""
+                    UPDATE billing_quota_periods
+                    SET reserved_credits=reserved_credits-:amount
+                    WHERE id=CAST(:id AS UUID) AND reserved_credits >= :amount
+                """), {"amount": amount, "id": str(item["quota_period_id"])})
+            ledger = conn.execute(text("""
+                INSERT INTO billing_credit_ledger
+                    (id, user_id, credit_lot_id, reservation_id, event_type,
+                     available_delta, reserved_delta, consumed_delta,
+                     idempotency_key, reason, actor_user_id)
+                VALUES (CAST(:id AS UUID), :user_id, CAST(:lot_id AS UUID),
+                        CAST(:reservation_id AS UUID), 'release', :available_delta,
+                        :reserved_delta, 0, :ledger_key, :reason, :actor_user_id)
+            """), {
+                "id": str(uuid.uuid4()), "user_id": user_id,
+                "lot_id": item["credit_lot_id"], "reservation_id": reservation_uuid,
+                "available_delta": amount if purchased else 0,
+                "reserved_delta": -amount,
+                "ledger_key": f"reconcile-release:{reservation_uuid}:{item['id']}",
+                "reason": "Liberación conciliada: ejecución confirmada como no realizada",
+                "actor_user_id": actor_user_id,
+            })
+        conn.execute(text("""
+            UPDATE billing_usage_reservations SET state='released'
+            WHERE id=CAST(:id AS UUID)
+        """), {"id": reservation_uuid})
+
+    return ReconciliationResult(reservation_uuid, "released")
