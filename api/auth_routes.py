@@ -1,6 +1,7 @@
 """Rutas de sesión web. Permanecen cerradas por defecto hasta habilitar controles antiabuso."""
 from datetime import timedelta
-\nfrom fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
+
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.exc import IntegrityError
 
 from api.auth import (
@@ -10,7 +11,9 @@ from api.auth import (
 from api.config import settings
 from api.schemas import LoginRequest, RegisterRequest, ProjectCreateRequest
 from api.project_creation import create_owned_project_with_workspace
-from api.projects import list_user_projects\nfrom api.database import engine\nfrom api.rate_limit import consume_rate_limit, rate_limit_key
+from api.projects import list_user_projects
+from api.database import engine
+from api.rate_limit import consume_rate_limit, rate_limit_key
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 SESSION_MAX_AGE = 12 * 60 * 60
