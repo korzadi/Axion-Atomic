@@ -46,8 +46,17 @@ def claim_execution(*, engine: Engine, user_id: str, reservation_id: str) -> Exe
         """), {"id": rid, "user_id": user_id}).mappings().first()
         if reservation is None:
             raise ExecutionStoreError("Reserva inexistente")
+        existing = conn.execute(text("""
+            SELECT id, state FROM billing_inference_executions
+            WHERE reservation_id=CAST(:reservation_id AS UUID) AND user_id=:user_id
+            FOR UPDATE
+        """), {"reservation_id": rid, "user_id": user_id}).mappings().first()
+        if existing is not None:
+            # Permite recuperar completed incluso si la liquidación ya se confirmó;
+            # started/unknown/review nunca se reclaman de nuevo.
+            return ExecutionClaim(str(existing["id"]), existing["state"], False)
         if reservation["state"] != "held":
-            raise ExecutionStoreError("Solo una reserva held puede reclamar una ejecución")
+            raise ExecutionStoreError("Solo una reserva held sin ejecución previa puede reclamar")
         inserted = conn.execute(text("""
             INSERT INTO billing_inference_executions
                 (id, reservation_id, user_id, state)
