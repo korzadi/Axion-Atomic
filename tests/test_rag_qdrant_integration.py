@@ -16,7 +16,7 @@ class RagQdrantIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.checked_ref = service._collection_checked_at
         service.client = self.client
         service.settings.qdrant_collection = self.collection
-        service._collection_checked_at = 0.0
+        service._collection_checked_at = -service._COLLECTION_CHECK_INTERVAL_SECONDS
         self.embedding = [1.0] + [0.0] * (service.settings.embed_dimension - 1)
         self.embed_patch = patch.object(service, "embed", new=AsyncMock(return_value=self.embedding))
         self.embed_patch.start()
