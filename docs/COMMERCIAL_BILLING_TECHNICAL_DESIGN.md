@@ -184,6 +184,18 @@ Cada migración nueva necesita:
 
 No ejecutar migraciones reales en VPS como parte de esta fase.
 
+## 8.1 Auditoría de rollback y política de reversión
+
+La carpeta `migrations/rollback/` contiene actualmente:
+
+- `002_down.sql`: elimina `project_memories`, `rag_chunks` y `rag_files`, y borra la versión 002 de `schema_migrations`. Su propio encabezado advierte que es destructiva.
+- `003_down.sql`: elimina `audit_chain_head`, `audit_log` y `action_approvals`, y borra la versión 003 de `schema_migrations`. También es destructiva.
+- No se identificaron scripts down para 001, 004 ni 005.
+
+**Conclusión:** estos scripts no son rollback seguro para producción. Su ejecución podría destruir memoria RAG, aprobaciones y registros de auditoría. No deben ejecutarse como rutina de despliegue ni usarse para revertir migraciones comerciales. Para billing se priorizarán migraciones aditivas y correcciones forward-only; cualquier rollback de esquema deberá demostrar que no elimina datos económicos. Los movimientos contables nunca se revierten borrándolos: se usan asientos compensatorios.
+
+El migrador `api/migrate.py` confirma checksum, lock consultivo PostgreSQL y transacción por migración. El lock se libera en `finally`; el archivo de migración aplicado no se debe editar. No se ejecutó el migrador ni ningún script down.
+
 ## 9. Orden recomendado de construcción
 
 1. Contratos y adaptador de inferencia tipado con metadatos de uso (sin facturar).
