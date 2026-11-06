@@ -70,7 +70,7 @@ async function ownerCanUploadAndRefreshKnowledge() {
     });
   });
   await page.locator('[data-view="knowledge"]').click();
-  await page.locator('#knowledgeProject option[value="project-browser"]').waitFor();
+  await page.locator('#knowledgeProject option[value="project-browser"]').waitFor({ state: "attached" });
   await page.locator("#knowledgeFile").setInputFiles({
     name: "manual.txt", mimeType: "text/plain", buffer: Buffer.from("Contenido de prueba para AXION.")
   });
@@ -94,7 +94,7 @@ async function viewerCannotUpload() {
     body: JSON.stringify({ sources: [], truncated: false })
   }));
   await page.locator('[data-view="knowledge"]').click();
-  await page.locator('#knowledgeProject option[value="project-browser"]').waitFor();
+  await page.locator('#knowledgeProject option[value="project-browser"]').waitFor({ state: "attached" });
   await page.locator("#knowledgeFile").setInputFiles({
     name: "manual.txt", mimeType: "text/plain", buffer: Buffer.from("Solo lectura.")
   });
