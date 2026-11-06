@@ -74,5 +74,5 @@ jobs:
         run: python -m api.migrate
       - name: Verify migration idempotency
         run: python -m api.migrate
-      - name: Verify PostgreSQL schema
-        run: python -m pytest -q tests/test_postgres_migrations.py
+      - name: Verify PostgreSQL schema and billing transactions
+        run: python -m pytest -q tests/test_postgres_migrations.py tests/test_billing_reservations_postgres.py
