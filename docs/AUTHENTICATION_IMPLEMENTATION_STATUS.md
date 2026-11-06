@@ -43,3 +43,10 @@ La primitiva `api/email_verification.py` y la migración 011 están implementada
 La migración 012 añade almacenamiento separado para tokens de recuperación. El módulo api/password_reset.py emite tokens aleatorios de 30 minutos únicamente para cuentas activas, guarda solo SHA-256 e invalida tokens anteriores. La confirmación valida la nueva contraseña con Argon2id, consume el token una sola vez, actualiza la contraseña y revoca todas las sesiones existentes en una misma transacción. Las direcciones inexistentes o cuentas no activas producen el mismo resultado vacío en la primitiva de emisión para que la capa HTTP pueda responder sin revelar si existe una cuenta.
 
 Esta entrega es una primitiva de servicio y esquema, NO un flujo público: todavía faltan endpoint, correo transaccional, rate limiting distribuido, notificación posterior al cambio y pruebas end-to-end. AUTH_ENABLED sigue desactivado.
+
+
+## Rate limiting distribuido: primitiva PostgreSQL
+
+La migración 013 crea buckets con clave SHA-256, ventana fija y expiración. `api/rate_limit.py` realiza incrementos atómicos mediante UPSERT y solo permite hasta el límite configurado; devuelve el tiempo restante de bloqueo y ofrece limpieza por lotes acotados. No depende de memoria local y no almacena el identificador original en claro.
+
+Esta entrega todavía NO aplica límites automáticamente a rutas HTTP. Antes de habilitar autenticación deben conectarse límites por IP y por cuenta a registro, login, verificación y recuperación; configurar límites operativos, proxy de confianza y limpieza periódica; y ejecutar pruebas de concurrencia real con varias instancias. No activar `AUTH_ENABLED` todavía.
