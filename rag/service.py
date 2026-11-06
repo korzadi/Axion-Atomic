@@ -31,7 +31,7 @@ def _project_filter(project_id: str):
 
 
 async def ingest_text(text, source, project_id: str):
-    project_filter = _project_filter(project_id)
+    _project_filter(project_id)  # Validar antes de acceder a Qdrant.
     ensure_collection()
     points = []
     for index, chunk in enumerate(chunk_text(text)):
@@ -40,12 +40,7 @@ async def ingest_text(text, source, project_id: str):
             models.PointStruct(
                 id=str(uuid.uuid4()),
                 vector=vector,
-                payload={
-                    "text": chunk,
-                    "source": source,
-                    "project_id": project_id,
-                    "chunk": index,
-                },
+                payload={"text": chunk, "source": source, "project_id": project_id, "chunk": index},
             )
         )
     if points:
@@ -67,12 +62,11 @@ async def retrieve(query: str, project_id: str, limit: int = 5):
             limit=limit,
             with_payload=True,
         ).points
-        return "\\n\\n".join(
-            "[Source: " + str(h.payload.get("source", "unknown")) + "]\\n"
+        return "\n\n".join(
+            "[Source: " + str(h.payload.get("source", "unknown")) + "]\n"
             + str(h.payload.get("text", ""))
             for h in hits
             if h.payload and h.payload.get("project_id") == project_id
         )
     except Exception:
-        # No devolver contexto de otro proyecto ni ocultar la consulta sin aviso.
         return ""
