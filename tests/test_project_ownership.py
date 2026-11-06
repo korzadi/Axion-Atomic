@@ -46,9 +46,10 @@ class ProjectOwnershipTests(unittest.TestCase):
         membership_sql, membership_params = fake.connection.calls[1]
         self.assertIn("INSERT INTO projects", project_sql)
         self.assertIn("INSERT INTO project_memberships", membership_sql)
+        self.assertIn("'owner'", membership_sql)
+        self.assertNotIn("role", membership_params)
         self.assertEqual(membership_params["user_id"], "user-1")
         self.assertEqual(membership_params["created_by"], "user-1")
-        self.assertEqual(membership_params["role"], "owner")
         self.assertEqual(project_params["id"], created["id"])
 
     def test_project_listing_is_scoped_to_authenticated_user(self):
