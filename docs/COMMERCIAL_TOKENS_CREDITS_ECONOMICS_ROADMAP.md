@@ -300,3 +300,14 @@ Se inspeccionaron los dos archivos existentes en `migrations/rollback/`:
 Ambos scripts existentes son destructivos por diseño y no representan una reversión segura para producción. En particular, podrían borrar datos de proyecto, memoria, aprobaciones o auditoría. **No se ejecutaron.** Las futuras migraciones comerciales serán forward-only por defecto; si se necesita corregir esquema, se añadirá una migración compensatoria que preserve datos. El ledger económico jamás se revertirá borrando movimientos: se utilizarán asientos compensatorios.
 
 El migrador actual verifica checksum, usa advisory lock PostgreSQL y ejecuta cada migración en transacción. No se ejecutó ninguna migración.
+
+
+## 15. Contrato de inferencia y alcance de medición (6 de noviembre de 2026)
+
+La inspección directa de las rutas y del adaptador de Ollama confirma que el adaptador actual devuelve solo el texto y descarta los contadores de uso. La ruta autenticada `/workspace/chat/completions` compone system prompt y contexto RAG del lado servidor antes de inferir. Por ello, el input real debe medirse desde `prompt_eval_count` de Ollama y no estimarse sumando textos en la API. El output debe venir de `eval_count`. Campos ausentes quedan NULL, nunca cero.
+
+La API heredada `/v1` utiliza una clave compartida y no puede atribuir consumo a una persona; permanece fuera de billing individual. Streaming sigue deshabilitado.
+
+Se especificó el contrato `InferenceResult` y la primera fase de código en modo **shadow**: capturar identidad, proyecto, modelo, contadores y duración sin bloquear solicitudes, sin descontar créditos, sin crear saldo y sin cobrar. El fallo de telemetría no debe hacer fallar una inferencia que ya fue exitosa.
+
+**Estado:** contrato y criterios documentados; todavía no hay implementación de medición, migración ni pruebas ejecutadas.
