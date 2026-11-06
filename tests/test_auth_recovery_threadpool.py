@@ -66,5 +66,32 @@ class AuthRecoveryThreadpoolTests(unittest.TestCase):
         self.assertIs(calls[1], consume)
 
 
+    def test_resend_email_delivery_helper_runs_in_threadpool_when_configured(self):
+        calls = []
+        with patch("api.auth_recovery_routes.settings.auth_enabled", True), \
+             patch("api.auth_recovery_routes.email_delivery_configured", return_value=True), \
+             patch("api.auth_recovery_routes.settings.oauth_public_base_url", "https://axion.example"), \
+             patch("api.auth_recovery_routes.run_in_threadpool", side_effect=self.threadpool_runner(calls)), \
+             patch("api.auth_recovery_routes.consume_rate_limit", return_value=self.rate_limit_decision()), \
+             patch("api.auth_recovery_routes._resend_verification_if_pending") as delivery:
+            result = asyncio.run(resend_verification(EmailAddressRequest(email="user@example.com"), self.request()))
+        self.assertEqual(result["status"], "accepted")
+        self.assertEqual(calls[:2], [_limit, _limit])
+        self.assertIs(calls[2], delivery)
+
+    def test_password_reset_email_delivery_helper_runs_in_threadpool_when_configured(self):
+        calls = []
+        with patch("api.auth_recovery_routes.settings.auth_enabled", True), \
+             patch("api.auth_recovery_routes.email_delivery_configured", return_value=True), \
+             patch("api.auth_recovery_routes.settings.oauth_public_base_url", "https://axion.example"), \
+             patch("api.auth_recovery_routes.run_in_threadpool", side_effect=self.threadpool_runner(calls)), \
+             patch("api.auth_recovery_routes.consume_rate_limit", return_value=self.rate_limit_decision()), \
+             patch("api.auth_recovery_routes._send_password_reset_if_active") as delivery:
+            result = asyncio.run(forgot_password(EmailAddressRequest(email="user@example.com"), self.request()))
+        self.assertEqual(result["status"], "accepted")
+        self.assertEqual(calls[:2], [_limit, _limit])
+        self.assertIs(calls[2], delivery)
+
+
 if __name__ == "__main__":
     unittest.main()
