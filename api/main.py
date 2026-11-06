@@ -2,6 +2,8 @@ from pathlib import Path
 
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
+from sqlalchemy.exc import TimeoutError as SQLAlchemyPoolTimeout
 from fastapi.staticfiles import StaticFiles
 import httpx
 from sqlalchemy import text
@@ -33,6 +35,20 @@ async def inference_capacity_exceeded(request, exc: CapacityExceeded):
     )
 
 
+@app.exception_handler(SQLAlchemyPoolTimeout)
+async def database_pool_exhausted(request, exc: SQLAlchemyPoolTimeout):
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "La base de datos está ocupada. Inténtalo de nuevo en unos segundos."},
+        headers={"Retry-After": "3"},
+    )
+
+
+def _database_health_check():
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+
+
 @app.on_event("shutdown")
 async def close_redis_cache():
     await close_cache()
@@ -51,8 +67,7 @@ async def health():
     if settings.redis_cache_enabled:
         checks["redis"] = "unavailable"
     try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+        await run_in_threadpool(_database_health_check)
         checks["database"] = "ok"
     except Exception:
         pass
