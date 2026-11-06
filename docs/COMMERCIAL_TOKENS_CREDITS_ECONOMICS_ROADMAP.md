@@ -167,3 +167,52 @@ Añadir pruebas de doble webhook, repetición de petición, timeout tras inferen
 ## 9. Próxima acción
 
 Continuar completando la auditoría estática de todos los módulos de API, composición de dependencias, pruebas y migraciones; después presentar el diseño de datos y el flujo transaccional de reservas/créditos para revisión antes de escribir código económico.
+
+
+## 10. Auditoría ampliada de API, identidad e interfaz (6 de noviembre de 2026)
+
+Esta ampliación se basa en lectura estática de los archivos indicados en GitHub. No se ejecutó el backend, no se conectó a PostgreSQL/Ollama, no se ejecutaron pruebas y no se inspeccionó el VPS.
+
+### Composición HTTP y rutas
+
+- `api/main.py` registra `auth_router` y `workspace_router`; el frontend estático se monta al final. No se observó un router de administración económica ni de billing en esta composición.
+- `POST /workspace/chat/completions` autentica sesión, valida CSRF y comprueba membresía de proyecto. Después llama a la inferencia sin registrar uso económico ni reservar cuota/créditos.
+- `POST /v1/chat/completions` y las rutas heredadas `/v1/knowledge/*` y `/v1/agent/*` dependen de `require_api_key`. `api/security.py` rechaza la API heredada cuando `legacy_api_enabled=false`; si se habilitara, la clave compartida seguiría sin identificar a un usuario ni delimitar por sí sola el proyecto.
+- Las rutas de workspace implementan autorización de membresía por proyecto. Los roles `owner/admin/editor/viewer` son roles de proyecto; no son un rol administrativo global para gestionar tarifas, planes, saldos o usuarios.
+- Las rutas de aprobaciones de proyecto devuelven explícitamente `execution: not_executed` al registrar decisiones. No constituyen un mecanismo de facturación ni de ejecución automática.
+
+### Identidad, registro y sesiones
+
+- `api/auth.py` implementa hash de contraseña Argon2, sesiones opacas almacenadas como digest SHA-256, expiración de 12 horas, revocación y validación CSRF.
+- El registro inserta usuarios con estado `pending_verification`. En los archivos de rutas inspeccionados no aparece un endpoint de verificación de correo ni un flujo de emisión/consumo de tokens de verificación. La autenticación solo acepta usuarios `active`.
+- `auth_enabled` está deshabilitado por defecto en `api/config.py`; las rutas web fallan de forma cerrada mientras siga desactivado.
+- No se observó limitación de intentos de login ni rate limiting en los módulos de autenticación inspeccionados. Antes de habilitar registro/login se debe auditar e implementar protección antiabuso distribuida y controles de recuperación/verificación.
+- La cookie de sesión es HttpOnly; la cookie CSRF se expone al frontend para enviarla como header. La cookie segura depende de `auth_cookie_secure`, configurada a true por defecto.
+
+### Contrato de chat y medición
+
+- `api/schemas.py` permite roles `user/assistant`, mensajes de 1 a 20.000 caracteres, hasta 100 mensajes, `max_tokens` de 1 a 8.192 y `stream=false` por defecto. El campo `model` tiene un valor por defecto, pero no se usa para seleccionar el modelo en las rutas revisadas.
+- `api/ollama.py` solicita el modelo fijado en configuración, contexto `num_ctx`, `num_predict` y respuesta no streaming. La función descarta el resto del JSON y retorna solo `message.content`; debe evolucionar a un resultado tipado que conserve modelo devuelto, contadores, duración, estado y metadatos disponibles.
+- La ruta de chat informa `settings.chat_model` como modelo de respuesta. Ese dato es el modelo configurado solicitado, no una prueba independiente del modelo realmente servido por el motor.
+- El límite de salida del esquema no sustituye las cuotas económicas: actualmente no existe reserva previa, contador por usuario, ni reconciliación de consumo real.
+
+### Persistencia, migraciones y administración
+
+- `api/database.py` crea un engine SQLAlchemy compartido desde `database_url`; el archivo inspeccionado no contiene un gestor de migraciones.
+- La migración `migrations/001_initial.sql` inspeccionada contiene tablas de proyectos, aprobaciones, tareas, acciones, fuentes de conocimiento y versiones de modelos. No contiene tablas económicas.
+- `api/projects.py` y `api/project_creation.py` operan proyectos/membresías y workspace; no son servicios de suscripción ni de saldo.
+- No se encontró una ruta de administración global en `api/main.py` ni en los routers inspeccionados. La vista Admin de `frontend/index.html` indica que necesita endpoints administrativos y RBAC verificado; la interfaz no otorga privilegios.
+- El frontend es una SPA estática en `frontend/index.html`. La vista de chat llama a la ruta real de workspace; las vistas de modelos, agentes, vídeo y administración se presentan como módulos pendientes de integración, no como paneles económicos ya funcionales.
+- Se verificó el archivo `tests/test_auth_routes.py`, que contiene pruebas unitarias de la puerta de autenticación y validación básica de esquemas. No se verificó en esta lectura una suite completa de billing, medición, cuotas, créditos, pagos o concurrencia. La existencia de otros tests no se infiere a partir de los archivos consultados.
+
+### Impacto en el plan económico
+
+1. La medición y el cobro deben integrarse en el límite común de inferencia utilizado por las rutas web y cualquier API futura con identidad individual; no deben duplicarse reglas de negocio dentro de cada endpoint.
+2. Antes de crear reservas económicas, hay que definir identidad canónica (usuario, organización/workspace y proyecto), idempotency key, ciclo de vida de la petición y cómo se vinculan una reserva y su reconciliación.
+3. El futuro RBAC administrativo debe ser global y separado de los roles de proyecto. Nunca se debe inferir que un `owner` de proyecto puede editar precios o saldos.
+4. El flujo de verificación de correo, recuperación de cuenta y rate limiting debe resolverse antes de habilitar el registro público o comercial.
+5. Las tablas de uso, tarifas, reservas, créditos y auditoría deben añadirse mediante migraciones nuevas, aditivas y revisables; no alterar la migración inicial ni ejecutar migraciones como parte de esta fase.
+
+### Estado actualizado de Fase 1
+
+**Auditoría estática ampliada de la ruta principal de chat, autenticación, seguridad de API, persistencia, composición HTTP y SPA: completada para los archivos enumerados.** La auditoría integral del repositorio sigue pendiente de inventario exhaustivo de módulos, migraciones, pruebas, proveedores de pago y costes operativos. No se ejecutaron pruebas, migraciones ni inferencias.
