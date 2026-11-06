@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from agent.project_workspace import build_project_toolset, project_workspace
 from agent.workspace import PathViolation
+from sandbox.backends import DockerBackend
 
 
 class ProjectWorkspaceFactoryTests(unittest.TestCase):
@@ -76,19 +77,18 @@ class ProjectWorkspaceFactoryTests(unittest.TestCase):
                 build_project_toolset(tmp, "project_A", backend=LocalLikeBackend())
 
     def test_container_backend_is_passed_to_project_scoped_executor(self):
-        class ContainerBackend:
-            isolation = "container"
+        backend = object.__new__(DockerBackend)
 
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "project_A").mkdir()
             with patch("sandbox.executor.SandboxExecutor") as executor:
                 workspace, tools = build_project_toolset(
-                    tmp, "project_A", backend=ContainerBackend()
+                    tmp, "project_A", backend=backend
                 )
 
             executor.assert_called_once()
             self.assertIs(executor.call_args.kwargs["ws"], workspace)
-            self.assertIs(executor.call_args.kwargs["backend"].__class__, ContainerBackend)
+            self.assertIs(executor.call_args.kwargs["backend"], backend)
             self.assertIn("run_tests", tools)
 
 
