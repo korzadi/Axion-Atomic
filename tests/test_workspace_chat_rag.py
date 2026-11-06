@@ -47,7 +47,7 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
         ):
             response = await workspace_chat(request, {"id": "user-a"})
 
-        authorize.assert_called_once_with("user-a", "project-a", ("owner", "admin", "editor", "viewer"))
+        authorize.assert_called_once_with({"id": "user-a"}, "project-a", ("owner", "admin", "editor", "viewer"))
         rate_limit.assert_called_once()
         save_history.assert_called_once()
         retrieve.assert_awaited_once_with("Resume la documentación", project_id="project-a", limit=5)
