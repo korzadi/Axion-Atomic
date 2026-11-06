@@ -21,7 +21,7 @@ def test_all_expected_migrations_are_registered():
         versions = conn.execute(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).scalars().all()
-    assert versions == ["001", "002", "003", "004", "005", "006"]
+    assert versions == ["001", "002", "003", "004", "005", "006", "007"]
 
 
 def test_core_postgresql_tables_exist():
@@ -41,6 +41,11 @@ def test_core_postgresql_tables_exist():
         "agent_runs",
         "agent_run_actions",
         "inference_usage_events",
+        "billing_quota_periods",
+        "billing_credit_lots",
+        "billing_usage_reservations",
+        "billing_reservation_allocations",
+        "billing_credit_ledger",
     }
     assert expected <= tables
 
@@ -138,3 +143,53 @@ def test_inference_usage_event_schema_is_durable_and_nullable():
     assert "prompt_tokens" in joined
     assert "output_tokens" in joined
     assert "ollama_response" in joined
+
+
+
+def test_billing_reservation_and_ledger_schema_constraints_exist():
+    inspector = inspect(engine)
+    expected_tables = {
+        "billing_quota_periods",
+        "billing_credit_lots",
+        "billing_usage_reservations",
+        "billing_reservation_allocations",
+        "billing_credit_ledger",
+    }
+    assert expected_tables <= set(inspector.get_table_names())
+
+    reservation_columns = {
+        item["name"] for item in inspector.get_columns("billing_usage_reservations")
+    }
+    assert {
+        "user_id", "project_id", "request_id", "idempotency_key",
+        "payload_sha256", "requested_credits", "state", "policy_version",
+    } <= reservation_columns
+
+    reservation_uniques = inspector.get_unique_constraints("billing_usage_reservations")
+    assert any(
+        set(item.get("column_names", [])) == {"user_id", "idempotency_key"}
+        for item in reservation_uniques
+    )
+    reservation_fks = inspector.get_foreign_keys("billing_usage_reservations")
+    assert any(item.get("referred_table") == "users" for item in reservation_fks)
+    assert any(item.get("referred_table") == "projects" for item in reservation_fks)
+
+    ledger_columns = {
+        item["name"] for item in inspector.get_columns("billing_credit_ledger")
+    }
+    assert {
+        "event_type", "available_delta", "reserved_delta", "consumed_delta",
+        "idempotency_key", "related_entry_id", "reason",
+    } <= ledger_columns
+    ledger_uniques = inspector.get_unique_constraints("billing_credit_ledger")
+    assert any(
+        "idempotency_key" in item.get("column_names", [])
+        for item in ledger_uniques
+    )
+
+    lot_indexes = {item["name"] for item in inspector.get_indexes("billing_credit_lots")}
+    assert "idx_billing_credit_lots_fefo" in lot_indexes
+    reservation_indexes = {
+        item["name"] for item in inspector.get_indexes("billing_usage_reservations")
+    }
+    assert "idx_billing_reservations_recovery" in reservation_indexes
