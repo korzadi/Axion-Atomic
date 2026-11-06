@@ -200,14 +200,14 @@ El migrador `api/migrate.py` confirma checksum, lock consultivo PostgreSQL y tra
 
 La lectura de `api/ollama.py`, `api/workspace_routes.py`, `api/schemas.py` y `api/main.py` confirma:
 
-- `chat()` devuelve únicamente `message.content` y descarta metadatos de uso de Ollama.
+- `chat_with_usage()` devuelve un `InferenceResult` tipado con texto, modelo solicitado/devuelto, contadores y duraciones; el wrapper `chat()` conserva compatibilidad y devuelve solo `message.content`.
 - La ruta autenticada `/workspace/chat/completions` compone un system prompt del servidor con contexto RAG antes de llamar a Ollama.
 - El esquema del cliente solo admite mensajes `user/assistant`; el cliente no puede suministrar el system prompt.
 - El campo `model` del request no selecciona el motor. El adaptador usa `settings.chat_model`; la respuesta actual informa el modelo configurado, no verifica el campo `model` devuelto por Ollama.
 - La API heredada `/v1/chat/completions` usa una API key compartida, no identifica un usuario económico y queda excluida de billing individual mientras no exista identidad individual verificable.
 - Streaming no está implementado y debe permanecer deshabilitado.
 
-### Resultado tipado propuesto
+### Resultado tipado implementado en Shadow Mode
 
 El adaptador debe evolucionar de devolver un string a devolver un objeto inmutable equivalente a:
 
@@ -223,7 +223,7 @@ InferenceResult(
     load_duration_ns: int | None,
     prompt_eval_duration_ns: int | None,
     eval_duration_ns: int | None,
-    usage_source: Literal["ollama_response", "estimated", "unavailable"],
+    usage_source: Literal["ollama_response", "unavailable"],
 )
 ```
 
@@ -233,19 +233,19 @@ Validaciones obligatorias: contadores enteros no negativos; no convertir campos 
 
 El input facturable debe corresponder al prompt que realmente recibe el motor, incluyendo system prompt de AXION, historial enviado, contexto RAG y cualquier mensaje/herramienta incorporado antes de la inferencia. La fuente primaria es `prompt_eval_count` de Ollama; no se deben sumar manualmente las longitudes de mensajes porque eso duplicaría/estimaría tokens. El output primario es `eval_count`.
 
-### Primera fase de código: shadow mode
+### Primera fase de código: Shadow Mode publicada
 
-La primera implementación de medición debe operar sin alterar el comportamiento económico:
+La primera implementación está publicada en `main` y mantiene el comportamiento económico sin cambios:
+1. `api/ollama.py` define `InferenceResult` y `chat_with_usage()` para conservar contadores y duraciones de Ollama.
+2. La función `chat()` sigue devolviendo texto para compatibilidad con consumidores existentes.
+3. La ruta autenticada `/workspace/chat/completions` usa el resultado tipado y emite un evento JSON con identidad, proyecto, modelos, contadores y duraciones.
+4. El evento no incluye prompts ni respuestas; la respuesta pública del endpoint conserva su estructura.
+5. La ruta heredada `/v1` permanece fuera de medición individual.
+6. Los contadores inválidos o ausentes quedan como `None`; no se inventan valores ni se realiza cobro.
 
-1. Obtener el resultado tipado del adaptador.
-2. Continuar devolviendo `content` como hoy.
-3. Registrar en telemetría solo identidad autenticada, proyecto, modelo solicitado/devuelto, contadores disponibles, fuente, duración, estado y correlation/request ID.
-4. No crear saldo, reservar cuota, bloquear peticiones, cobrar, vender créditos ni aplicar límites.
-5. Si falla la escritura de telemetría, no convertir una inferencia exitosa en error para el usuario; registrar el fallo de forma segura y no filtrar datos.
-6. Mantener la ruta heredada `/v1` fuera de la telemetría individual hasta resolver identidad.
-7. Añadir pruebas unitarias para payloads Ollama completos, campos ausentes, tipos inválidos, fallo HTTP, timeout y compatibilidad del contrato público.
+Las pruebas añadidas cubren parsing, payload HTTP no streaming, timeout, wrapper de compatibilidad y contrato HTTP de workspace. **La ejecución de pytest y CI sigue pendiente de confirmación.**
 
-La salida de shadow mode será un inventario de precisión real del contador y volumen de uso. Solo después de verificarlo se diseñarán reservas y cuotas activas. La telemetría de shadow mode no es un libro contable y no debe usarse para cobrar.
+Shadow Mode no crea registros persistentes en PostgreSQL, saldos, créditos, reservas, cuotas ni costes. La telemetría de logs no es un libro contable ni puede utilizarse para cobrar.
 
 ## 9. Orden recomendado de construcción
 
