@@ -33,3 +33,15 @@ No se debe adaptar `MetaStore` creando una conexión DB-API global tomada del po
 - Las rutas de lectura de ejecuciones no inician ni reanudan ejecuciones.
 - No se han ejecutado pruebas, migraciones, imágenes Docker ni despliegues como parte de esta revisión.
 - Este documento describe el estado del código; no constituye una certificación de seguridad ni una declaración de preparación para producción.
+
+
+## Adaptador de persistencia incorporado
+
+- Se añadió `agent/sqlalchemy_meta.py`: adapta el contrato DB-API de `MetaStore` a un SQLAlchemy Engine.
+- Cada operación obtiene una conexión DB-API del pool, crea y cierra su cursor, confirma o revierte y devuelve la conexión al pool.
+- No mantiene una conexión global compartida entre peticiones.
+- `agent/runtime.py` incorpora `build_coding_agent_from_engine(...)` para construir el runtime con ese adaptador.
+- Se añadió `tests/test_sqlalchemy_meta_store.py` para comprobar el ciclo de vida de conexión, conversión de placeholders y rollback mediante dobles de prueba.
+- Estas pruebas se añadieron, pero no se han ejecutado en este entorno. El adaptador no equivale a una validación de integración contra PostgreSQL real.
+
+El adaptador no autentica ni autoriza usuarios, no determina el directorio de trabajo, no crea un sandbox y no habilita endpoints HTTP. La conexión del runtime a la API sigue bloqueada hasta completar y probar el aislamiento de workspace, el backend Docker y el ciclo de aprobación/reconciliación.
