@@ -3,7 +3,7 @@ import json
 import logging
 import uuid
 from starlette.concurrency import run_in_threadpool
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Cookie, Depends, File, Header, HTTPException, Query, UploadFile
 from sqlalchemy import text
 from api.database import engine
 from api.rate_limit import consume_rate_limit, rate_limit_key
@@ -15,6 +15,7 @@ from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest
 from api.ollama import chat_with_usage
 from api.usage_events import persist_shadow_usage_event
 from rag.service import EmbeddingServiceUnavailable, KnowledgeStoreUnavailable, SensitiveContentError, delete_source, ingest_text, list_sources, replace_source, retrieve
+from rag.document_loader import DocumentLoadError, extract_document
 from agent.planner import create_plan
 from agent.approvals import create_approval
 from agent.project_runtime import ProjectAgentRuntime
@@ -349,6 +350,38 @@ async def workspace_ingest(req: IngestRequest, user=Depends(_csrf_user)):
     except (KnowledgeStoreUnavailable, EmbeddingServiceUnavailable) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     return {"status": "indexed", "project_id": req.project_id, "source_id": source_id, "chunks": count}
+
+
+@router.post("/knowledge/upload")
+async def workspace_upload_knowledge_document(
+    project_id: str = Query(min_length=1, max_length=200),
+    file: UploadFile = File(...),
+    user=Depends(_csrf_user),
+):
+    await run_in_threadpool(_project_role, user, project_id, ("owner", "admin", "editor"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], project_id, "knowledge_ingest",
+        user_limit=10, project_limit=30, window=timedelta(hours=1),
+    )
+    try:
+        content = await file.read(5 * 1024 * 1024 + 1)
+        text_content, source_name = await run_in_threadpool(
+            extract_document, file.filename or "", content
+        )
+        source_id = str(uuid.uuid4())
+        count = await ingest_text(text_content, source_name, project_id, source_id=source_id)
+    except DocumentLoadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except SensitiveContentError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except (KnowledgeStoreUnavailable, EmbeddingServiceUnavailable) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    finally:
+        await file.close()
+    return {"status": "indexed", "project_id": project_id, "source_id": source_id,
+            "source": source_name, "chunks": count}
 
 
 @router.put("/knowledge/sources/{source_id}")

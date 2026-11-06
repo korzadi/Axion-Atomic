@@ -10,3 +10,5 @@ redis==5.2.1
 pytest==8.3.4
 argon2-cffi==23.1.0
 cryptography>=43,<47
+python-multipart==0.0.20
+pypdf==5.4.0
