@@ -1,3 +1,4 @@
+import threading
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -45,6 +46,31 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
             await service.ingest_text("x" * (service.MAX_MANUAL_INGEST_CHARS + 1), "manual", "project-a")
         with self.assertRaises(ValueError):
             await service.ingest_text("texto válido", "manual", " ")
+
+    async def test_qdrant_sync_calls_run_outside_event_loop_thread(self):
+        loop_thread = threading.get_ident()
+        call_threads = []
+
+        def record_ensure():
+            call_threads.append(threading.get_ident())
+
+        def record_upsert(**kwargs):
+            call_threads.append(threading.get_ident())
+
+        embed = AsyncMock(return_value=[0.1, 0.2, 0.3, 0.4])
+        with patch.object(service, "ensure_collection", side_effect=record_ensure), patch.object(service, "embed", embed), patch.object(service.client, "upsert", side_effect=record_upsert):
+            await service.ingest_text("Texto de documentación segura", "manual", "project-a")
+
+        self.assertEqual(len(call_threads), 2)
+        self.assertTrue(all(thread_id != loop_thread for thread_id in call_threads))
+
+    async def test_retrieval_store_failure_is_observable_not_empty_context(self):
+        embed = AsyncMock(return_value=[0.1, 0.2, 0.3, 0.4])
+        with patch.object(service, "ensure_collection"), patch.object(service, "embed", embed), patch.object(service.client, "query_points", side_effect=RuntimeError("internal endpoint details")):
+            with self.assertRaises(service.KnowledgeStoreUnavailable) as caught:
+                await service.retrieve("consulta", "project-a")
+        self.assertEqual(str(caught.exception), "El almacén de conocimiento no está disponible")
+        self.assertNotIn("internal endpoint details", str(caught.exception))
 
 
 if __name__ == "__main__":

@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import uuid
 
 from agent.secrets import find_secrets
@@ -7,6 +9,7 @@ from api.ollama import embed
 from rag.chunking import chunk_text
 
 client = QdrantClient(url=settings.qdrant_url)
+logger = logging.getLogger(__name__)
 
 MAX_MANUAL_INGEST_CHARS = 100_000
 MAX_MANUAL_SOURCE_CHARS = 500
@@ -14,6 +17,10 @@ MAX_MANUAL_SOURCE_CHARS = 500
 
 class SensitiveContentError(ValueError):
     """El contenido parece contener credenciales; nunca incluye el valor detectado."""
+
+
+class KnowledgeStoreUnavailable(RuntimeError):
+    """El almacén de conocimiento no pudo completar una operación."""
 
 
 def validate_manual_ingest(text: str, source: str, project_id: str) -> None:
@@ -60,7 +67,7 @@ def _project_filter(project_id: str):
 
 async def ingest_text(text, source, project_id: str):
     validate_manual_ingest(text, source, project_id)  # Antes de Qdrant y del embedder.
-    ensure_collection()
+    await asyncio.to_thread(ensure_collection)
     points = []
     for index, chunk in enumerate(chunk_text(text)):
         vector = await embed(chunk)
@@ -72,7 +79,7 @@ async def ingest_text(text, source, project_id: str):
             )
         )
     if points:
-        client.upsert(collection_name=settings.qdrant_collection, points=points)
+        await asyncio.to_thread(client.upsert, collection_name=settings.qdrant_collection, points=points)
     return len(points)
 
 
@@ -81,20 +88,23 @@ async def retrieve(query: str, project_id: str, limit: int = 5):
     if not query.strip():
         return ""
     try:
-        ensure_collection()
+        await asyncio.to_thread(ensure_collection)
         vector = await embed(query)
-        hits = client.query_points(
+        result = await asyncio.to_thread(
+            client.query_points,
             collection_name=settings.qdrant_collection,
             query=vector,
             query_filter=project_filter,
             limit=limit,
             with_payload=True,
-        ).points
-        return "\n\n".join(
-            "[Source: " + str(h.payload.get("source", "unknown")) + "]\n"
+        )
+        return "\\n\\n".join(
+            "[Source: " + str(h.payload.get("source", "unknown")) + "]\\n"
             + str(h.payload.get("text", ""))
-            for h in hits
+            for h in result.points
             if h.payload and h.payload.get("project_id") == project_id
         )
     except Exception:
-        return ""
+        # No convertir una caída del almacén en una respuesta aparentemente válida sin contexto.
+        logger.error("RAG retrieval failed; knowledge store is unavailable")
+        raise KnowledgeStoreUnavailable("El almacén de conocimiento no está disponible") from None
