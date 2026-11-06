@@ -1,1 +1,0 @@
-{"messages":[{"role":"user","content":"Explica por qué una prueba unitaria puede ser inestable."},{"role":"assistant","content":"Puede depender del tiempo, estado compartido, orden de ejecución o servicios externos. Aísla dependencias y usa fixtures deterministas."}]}
