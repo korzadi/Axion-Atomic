@@ -106,7 +106,7 @@ class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(action_params["action_hash"], "hash-1")
         self.assertEqual(action_params["state"], "approved")
 
-    async def test_approval_rolls_back_when_no_matching_pending_run_action(self):
+    async def test_approval_returns_conflict_when_run_action_does_not_match(self):
         from contextlib import contextmanager
 
         class Result:
