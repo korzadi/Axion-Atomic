@@ -82,3 +82,31 @@ def test_document_loader_sanitizes_windows_path_and_bounds_display_name():
     assert name == "manual.txt"
     _, long_name = extract_document(("a" * 600) + ".txt", b"ok")
     assert len(long_name) == 500
+
+
+def test_docx_rejects_excessive_uncompressed_archive_size():
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "word/document.xml",
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            '<w:body><w:p><w:r><w:t>Texto válido</w:t></w:r></w:p></w:body></w:document>',
+        )
+        archive.writestr("word/media/payload.bin", b"x" * (20 * 1024 * 1024 + 1))
+    # El archivo comprimido cabe en el límite HTTP, pero su contenido expandido no.
+    assert len(stream.getvalue()) < 5 * 1024 * 1024
+    with pytest.raises(DocumentLoadError, match="límite interno"):
+        extract_document("bomb.docx", stream.getvalue())
+
+
+def test_docx_rejects_extracted_text_over_limit():
+    stream = io.BytesIO()
+    oversized = "x" * 100_001
+    xml = (
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:body><w:p><w:r><w:t>' + oversized + '</w:t></w:r></w:p></w:body></w:document>'
+    )
+    with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("word/document.xml", xml)
+    with pytest.raises(DocumentLoadError, match="100000 caracteres"):
+        extract_document("oversized.docx", stream.getvalue())
