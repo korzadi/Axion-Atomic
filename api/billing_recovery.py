@@ -92,6 +92,7 @@ def recover_completed_billing_executions(
     engine: Engine,
     cipher,
     limit: int = 100,
+    reservation_id: str | None = None,
 ) -> BillingRecoveryBatch:
     """Liquida resultados cifrados completed/held sin repetir inferencia.
 
@@ -110,11 +111,12 @@ def recover_completed_billing_executions(
             JOIN billing_inference_executions e
               ON e.reservation_id = r.id AND e.user_id = r.user_id
             WHERE r.state = 'held' AND e.state = 'completed'
+              AND (:reservation_id IS NULL OR r.id = CAST(:reservation_id AS UUID))
               AND (e.recovery_next_attempt_at IS NULL
                    OR e.recovery_next_attempt_at <= now())
             ORDER BY e.recovery_next_attempt_at NULLS FIRST, e.completed_at, e.id
             LIMIT :limit
-        """), {"limit": limit}).mappings().all()
+        """), {"limit": limit, "reservation_id": reservation_id}).mappings().all()
 
     items: list[BillingRecoveryItem] = []
     settled = review = failed = skipped = 0
