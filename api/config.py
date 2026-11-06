@@ -1,3 +1,7 @@
+import ipaddress
+from urllib.parse import urlsplit
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +15,30 @@ class Settings(BaseSettings):
     embed_dimension: int = 768
     # Qdrant Cloud: configurar URL HTTPS del cluster y API key por entorno.
     qdrant_url: str = "https://YOUR-CLUSTER.qdrant.io"
+
+    @field_validator("qdrant_url")
+    @classmethod
+    def require_managed_qdrant_endpoint(cls, value: str) -> str:
+        """Reject local/insecure endpoints; the application store is Qdrant Cloud only."""
+        parsed = urlsplit(value.strip())
+        host = (parsed.hostname or "").rstrip(".").lower()
+        if parsed.scheme != "https" or not host:
+            raise ValueError("QDRANT_URL debe ser una URL HTTPS de Qdrant Cloud")
+        if parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise ValueError("QDRANT_URL no debe contener credenciales, query ni fragmentos")
+        if parsed.path not in ("", "/"):
+            raise ValueError("QDRANT_URL debe apuntar a la raíz del clúster")
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("QDRANT_URL debe usar el hostname del clúster, no una IP")
+        if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
+            raise ValueError("QDRANT_URL no puede apuntar a un servicio local")
+        if "." not in host:
+            raise ValueError("QDRANT_URL debe usar un hostname público")
+        return value.strip()
     qdrant_api_key: str | None = None
     qdrant_collection: str = "qwen_knowledge"
     database_url: str = "postgresql+psycopg://axion:change-me@localhost:5433/axion_atomic"
