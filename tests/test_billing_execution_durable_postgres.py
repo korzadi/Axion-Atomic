@@ -1,0 +1,136 @@
+"""Durable billing recovery integration tests (PostgreSQL CI only)."""
+import asyncio
+import json
+import os
+import uuid
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import pytest
+from sqlalchemy import create_engine, text
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL or not DATABASE_URL.startswith(("postgresql://", "postgresql+")):
+    pytest.skip("Requiere PostgreSQL del job postgres-migrations", allow_module_level=True)
+
+engine = create_engine(DATABASE_URL, future=True, pool_pre_ping=True)
+
+from api.billing_budget import InferenceBudget
+from api.billing_execution_durable import execute_durable_reserved_inference
+from api.billing_result_crypto import AesGcmResultCipher
+
+
+class TestKeyProvider:
+    def active_key(self):
+        return "integration-v1", b"K" * 32
+
+    def get_key(self, key_id):
+        assert key_id == "integration-v1"
+        return b"K" * 32
+
+
+def _account():
+    user_id, project_id = str(uuid.uuid4()), str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO users (id, email, email_normalized, password_hash, display_name, status)
+            VALUES (:id, :email, :email, 'integration-test-hash', 'Durable billing test', 'active')
+        """), {"id": user_id, "email": f"{user_id}@example.invalid"})
+        conn.execute(text("INSERT INTO projects (id, name) VALUES (:id, 'Durable billing test')"),
+                     {"id": project_id})
+        conn.execute(text("""
+            INSERT INTO billing_quota_periods
+              (id,user_id,quota_kind,period_start,period_end,timezone_name,limit_credits,policy_version)
+            VALUES (CAST(:id AS UUID),:user_id,'daily_free',:start,:end,'UTC',200,'atomic-code-budget-v1')
+        """), {"id": str(uuid.uuid4()), "user_id": user_id,
+               "start": now-timedelta(minutes=1), "end": now+timedelta(days=1)})
+    return user_id, project_id
+
+
+def _budget():
+    return InferenceBudget(
+        policy_version="atomic-code-budget-v1", runtime_model="atomic-code:16k-8k",
+        tokenizer_contract="qwen2_byte_fallback", input_tokens_upper_bound=100,
+        output_tokens_upper_bound=50, input_weight=1, output_weight=1,
+        reserved_credits=150, context_window=16384,
+    )
+
+
+def _serialize(result):
+    return json.dumps(vars(result), sort_keys=True).encode("utf-8")
+
+
+def _deserialize(payload):
+    return SimpleNamespace(**json.loads(payload.decode("utf-8")))
+
+
+def _execute(user_id, project_id, request_id, inference):
+    return asyncio.run(execute_durable_reserved_inference(
+        engine=engine, user_id=user_id, project_id=project_id,
+        request_id=request_id, idempotency_key="durable-recovery-key",
+        payload_sha256="f"*64, budget=_budget(),
+        expected_runtime_model="atomic-code:16k-8k",
+        inference_call=inference,
+        reservation_expires_at=datetime.now(timezone.utc)+timedelta(minutes=5),
+        cipher=AesGcmResultCipher(TestKeyProvider()),
+        serialize_result=_serialize, deserialize_result=_deserialize,
+    ))
+
+
+def test_persisted_result_recovers_after_settlement_failure_without_second_inference():
+    user_id, project_id = _account()
+    request_id = str(uuid.uuid4())
+    calls = []
+
+    async def inference():
+        calls.append("called")
+        return SimpleNamespace(
+            requested_model="atomic-code:16k-8k",
+            returned_model="atomic-code:16k-8k",
+            done=True, usage_source="ollama_response",
+            prompt_eval_count=12, eval_count=8,
+            response_text="durable-result-secret-marker",
+        )
+
+    with patch(
+        "api.billing_execution_durable.settle_reservation",
+        side_effect=RuntimeError("simulated database settlement outage"),
+    ):
+        with pytest.raises(RuntimeError, match="settlement outage"):
+            _execute(user_id, project_id, request_id, inference)
+
+    with engine.connect() as conn:
+        execution = conn.execute(text("""
+            SELECT e.state, e.result_ciphertext, e.result_nonce, e.result_key_id,
+                   r.state AS reservation_state
+            FROM billing_inference_executions e
+            JOIN billing_usage_reservations r ON r.id=e.reservation_id
+            WHERE e.user_id=:user_id
+        """), {"user_id": user_id}).mappings().one()
+    assert execution["state"] == "completed"
+    assert execution["reservation_state"] == "held"
+    assert b"durable-result-secret-marker" not in bytes(execution["result_ciphertext"])
+
+    recovered = _execute(user_id, project_id, request_id, inference)
+    assert recovered.recovered is True
+    assert recovered.inference.response_text == "durable-result-secret-marker"
+    assert recovered.settlement.state == "settled"
+    assert calls == ["called"]
+
+    with engine.connect() as conn:
+        balances = conn.execute(text("""
+            SELECT reserved_credits, consumed_credits
+            FROM billing_quota_periods WHERE user_id=:user_id
+        """), {"user_id": user_id}).one()
+        states = conn.execute(text("""
+            SELECT r.state, e.state AS execution_state
+            FROM billing_usage_reservations r
+            JOIN billing_inference_executions e ON e.reservation_id=r.id
+            WHERE r.user_id=:user_id
+        """), {"user_id": user_id}).one()
+    assert balances.reserved_credits == 0
+    assert balances.consumed_credits == 20
+    assert states.state == "settled"
+    assert states.execution_state == "completed"
