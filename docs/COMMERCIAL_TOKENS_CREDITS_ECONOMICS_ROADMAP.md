@@ -281,8 +281,8 @@ El propietario autorizó expresamente al equipo a resolver las seis decisiones d
 ### Próximas tareas técnicas
 
 - Completar revisión de los scripts de rollback y de los módulos de autenticación/administración antes de diseñar las migraciones definitivas.
-- Añadir una máquina de estados y un contrato tipado de inferencia que conserve contadores reales de Ollama sin introducir cobro todavía.
-- Diseñar e implementar primero la medición en modo observación (shadow mode): registrar uso sin bloquear solicitudes ni descontar créditos.
+- Revisar y cerrar las pruebas de contrato/CI del adaptador tipado y Shadow Mode.
+- Diseñar persistencia append-only en PostgreSQL para observaciones, con idempotencia, permisos y privacidad, sin introducir cobro.
 - Incorporar pruebas de contrato y PostgreSQL para medición, idempotencia, transacciones y concurrencia antes de activar reservas.
 - No publicar planes/precios como activos, no habilitar pagos ni ejecutar migraciones de producción hasta superar las pruebas y la revisión comercial/legal.
 
@@ -304,11 +304,11 @@ El migrador actual verifica checksum, usa advisory lock PostgreSQL y ejecuta cad
 
 ## 15. Contrato de inferencia y alcance de medición (6 de noviembre de 2026)
 
-La inspección directa de las rutas y del adaptador de Ollama confirma que el adaptador actual devuelve solo el texto y descarta los contadores de uso. La ruta autenticada `/workspace/chat/completions` compone system prompt y contexto RAG del lado servidor antes de inferir. Por ello, el input real debe medirse desde `prompt_eval_count` de Ollama y no estimarse sumando textos en la API. El output debe venir de `eval_count`. Campos ausentes quedan NULL, nunca cero.
+La inspección directa de las rutas y del adaptador de Ollama confirmó que la implementación anterior devolvía solo texto y descartaba los contadores. Esa brecha ya se corrigió en Shadow Mode: el adaptador conserva prompt_eval_count y eval_count reportados por Ollama. La ruta autenticada `/workspace/chat/completions` compone system prompt y contexto RAG del lado servidor antes de inferir. Por ello, el input real se mide desde prompt_eval_count y no se estima sumando textos en la API. Los campos ausentes quedan NULL, nunca cero.
 
 La API heredada `/v1` utiliza una clave compartida y no puede atribuir consumo a una persona; permanece fuera de billing individual. Streaming sigue deshabilitado.
 
-Se especificó el contrato `InferenceResult` y la primera fase de código en modo **shadow**: capturar identidad, proyecto, modelo, contadores y duración sin bloquear solicitudes, sin descontar créditos, sin crear saldo y sin cobrar. El fallo de telemetría no debe hacer fallar una inferencia que ya fue exitosa.
+El contrato `InferenceResult` y la primera fase de código en modo **shadow** están publicados: capturan identidad, proyecto, modelo, contadores y duración sin bloquear solicitudes, sin descontar créditos, sin crear saldo y sin cobrar. El fallo de telemetría no debe hacer fallar una inferencia que ya fue exitosa.
 
 **Estado actualizado:** el contrato tipado y la medición inicial en Shadow Mode ya están publicados en `api/ollama.py` y `api/workspace_routes.py`; las pruebas focalizadas están añadidas en `tests/test_ollama_usage.py` y `tests/test_workspace_role_matrix_http.py`, pero su ejecución y el CI siguen pendientes de verificación. No existe todavía persistencia PostgreSQL, facturación, ledger, reservas, cuotas activas ni cobros.
 
@@ -323,3 +323,7 @@ La implementación inicial de Shadow Mode se publicó en `main`:
 **Verificación:** los archivos de prueba están publicados, pero no se ha confirmado todavía una ejecución satisfactoria de pytest ni de GitHub Actions. La actualización de pruebas evita depender de `pytest-asyncio`, que no figura entre las dependencias fijadas del proyecto.
 
 **Siguiente paso:** confirmar CI; después añadir pruebas de fallo de telemetría y persistencia append-only en PostgreSQL de prueba. No activar reservas, cuotas ni cobros.
+
+## 17. Diseño de persistencia Shadow Mode (6 de noviembre de 2026)
+
+Se publicó `docs/SHADOW_USAGE_POSTGRESQL_DESIGN.md` como propuesta técnica para almacenar observaciones de inferencia en PostgreSQL. Define una tabla append-only con identidad individual, atribución opcional al proyecto, request_id idempotente, contadores y duraciones de Ollama, permisos de solo inserción/lectura y pruebas PostgreSQL requeridas. No crea migraciones ni tablas y no activa facturación. El siguiente paso es cerrar CI y validar el contrato en PostgreSQL efímero de CI antes de crear la migración 006.
