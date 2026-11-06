@@ -50,7 +50,7 @@ class ApiHealthTests(unittest.IsolatedAsyncioTestCase):
         ):
             result = await main.health()
         self.assertEqual(result["status"], "ok")
-        self.assertEqual(set(result["checks"].values()), {"ok"})
+        self.assertEqual(result, {"status": "ok"})
 
     async def test_health_returns_503_when_dependency_is_down(self):
         with patch.object(main, "engine", FakeEngine()), patch.object(
