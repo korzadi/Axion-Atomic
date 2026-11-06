@@ -73,6 +73,12 @@ class DockerArgvTests(unittest.TestCase):
             with self.assertRaises(SandboxUnavailable):
                 b.run(["pip", "install", "x"], "/tmp", ResourceLimits(), True)
 
+    def test_rejects_configuration_that_attempts_to_enable_unverified_egress(self):
+        with self.assertRaises(SandboxUnavailable):
+            DockerBackend({"default": "x:1"}, allow_egress=True)
+        with self.assertRaises(SandboxUnavailable):
+            DockerBackend({"default": "x:1"}, egress_network="axion-sandbox-egress")
+
     def test_refuses_to_run_as_root(self):
         b = DockerBackend({"default": "x:1"})
         with mock.patch("os.getuid", return_value=0):
