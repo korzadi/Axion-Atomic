@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     ollama_base_url: str = "http://localhost:11434"
-    chat_model: str = "qwen2.5-coder:7b-instruct"
+    chat_model: str = "hf.co/Korzadi/Atomic-Code-1.1:Q4_K_M"
     embed_model: str = "nomic-embed-text"
     embed_dimension: int = 768
     qdrant_url: str = "http://localhost:6333"
