@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     # Pool PostgreSQL acotado para evitar crecimiento ilimitado de conexiones.
     db_pool_size: int = 5
     db_max_overflow: int = 5
-    db_pool_timeout_seconds: float = 10.0
+    db_pool_timeout_seconds: float = 3.0
     db_pool_recycle_seconds: int = 1800
 
 
