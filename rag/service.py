@@ -118,7 +118,7 @@ async def ingest_text(text, source, project_id: str, source_id: str | None = Non
         try:
             await asyncio.to_thread(client.upsert, collection_name=settings.qdrant_collection, points=points)
         except Exception:
-            logger.error("RAG ingestion failed; knowledge store is unavailable")
+            logger.exception("RAG ingestion failed while ensuring the Qdrant collection")
             raise KnowledgeStoreUnavailable("El almacén de conocimiento no está disponible") from None
     return len(points)
 
