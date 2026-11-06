@@ -32,8 +32,6 @@ def _require_auth_feature():
 
 
 def _authenticated_user(axion_session: str | None = Cookie(default=None, alias=COOKIE_NAME)):
-    # Comprobar primero el interruptor global: no revelar un 401 de sesión
-    # cuando el servicio completo de autenticación está deshabilitado.
     _require_auth_feature()
     return current_user(axion_session)
 
@@ -67,8 +65,6 @@ def _create_oauth_session(user_id: str):
 
 
 def _enforce_rate_limit(request: Request, *, namespace: str, limit: int, window: timedelta, subject: str | None = None):
-    # No confiar en X-Forwarded-For: solo usar la IP del socket hasta configurar
-    # explícitamente una lista de proxies de confianza.
     client = request.client
     if client is None or not client.host:
         raise HTTPException(status_code=503, detail="No se pudo validar el origen de la solicitud")
@@ -76,8 +72,6 @@ def _enforce_rate_limit(request: Request, *, namespace: str, limit: int, window:
     try:
         decision = consume_rate_limit(engine=engine, bucket_key=key, limit=limit, window=window)
     except Exception as exc:
-        # Fail closed: si el almacenamiento distribuido no está disponible,
-        # no aceptar operaciones sensibles sin control antiabuso.
         raise HTTPException(status_code=503, detail="Protección temporalmente no disponible") from exc
     if not decision.allowed:
         raise HTTPException(
@@ -102,7 +96,6 @@ async def register(req: RegisterRequest, request: Request):
     try:
         user_id = await run_in_threadpool(create_user, req.email, req.password, req.display_name, terms_accepted_at=datetime.now(timezone.utc))
     except IntegrityError:
-        # No revelar si una dirección ya está registrada.
         pass
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -175,7 +168,6 @@ async def oauth_callback(provider: str, code: str | None = None,
         profile = await run_in_threadpool(provider_profile, provider, code, state_data["nonce"], settings)
         user = await run_in_threadpool(resolve_user, engine, provider, profile, terms_accepted=state_data["terms_accepted"])
     except Exception:
-        # Nunca mostrar ni registrar códigos, tokens ni respuestas del proveedor.
         result = RedirectResponse("/?oauth_error=failed", status_code=303)
         result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
         return result
@@ -215,7 +207,13 @@ async def projects(user=Depends(_authenticated_user)):
 
 
 @router.post("/projects", status_code=201)
-async def create_project(req: ProjectCreateRequest, user=Depends(_csrf_guard)):
+async def create_project(req: ProjectCreateRequest, request: Request, user=Depends(_csrf_guard)):
+    # Evita abuso de disco y creación ilimitada de workspaces por una cuenta.
+    await run_in_threadpool(
+        _enforce_rate_limit, request,
+        namespace="auth:projects:create:user", subject=user["id"],
+        limit=10, window=timedelta(hours=1),
+    )
     try:
         project = await run_in_threadpool(create_owned_project_with_workspace, user["id"], req.name)
     except ValueError as exc:
