@@ -47,21 +47,37 @@ class ApiHealthTests(unittest.IsolatedAsyncioTestCase):
     async def test_health_reports_all_real_dependencies(self):
         with patch.object(main, "engine", FakeEngine()), patch.object(
             main.httpx, "AsyncClient", FakeHttpClient
-        ):
+        ), patch.object(main.settings, "redis_cache_enabled", False):
             result = await main.health()
         self.assertEqual(result["status"], "ok")
-        self.assertEqual(result, {"status": "ok"})
+        self.assertEqual(result["checks"], {
+            "database": "ok", "ollama": "ok", "qdrant": "ok"
+        })
 
     async def test_health_returns_503_when_dependency_is_down(self):
         with patch.object(main, "engine", FakeEngine()), patch.object(
             main.httpx, "AsyncClient",
             lambda timeout=3.0: FakeHttpClient(timeout, qdrant_ok=False)
-        ):
+        ), patch.object(main.settings, "redis_cache_enabled", False):
             with self.assertRaises(HTTPException) as raised:
                 await main.health()
         self.assertEqual(raised.exception.status_code, 503)
-        self.assertEqual(raised.exception.detail, {"status": "degraded"})
-        self.assertNotIn("checks", raised.exception.detail)
+        self.assertEqual(raised.exception.detail["status"], "degraded")
+        self.assertEqual(raised.exception.detail["checks"]["qdrant"], "unavailable")
+
+    async def test_optional_redis_outage_degrades_but_does_not_fail_health(self):
+        with patch.object(main, "engine", FakeEngine()), patch.object(
+            main.httpx, "AsyncClient", FakeHttpClient
+        ), patch.object(main.settings, "redis_cache_enabled", True), patch.object(
+            main, "ping_cache", return_value=False
+        ):
+            result = await main.health()
+        self.assertEqual(result["status"], "degraded")
+        self.assertEqual(result["checks"]["redis"], "degraded")
+        self.assertEqual(result["checks"]["database"], "ok")
+
+    async def test_liveness_does_not_depend_on_external_services(self):
+        self.assertEqual(await main.health_live(), {"status": "alive"})
 
 
 if __name__ == "__main__":
