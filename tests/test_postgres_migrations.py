@@ -21,7 +21,7 @@ def test_all_expected_migrations_are_registered():
         versions = conn.execute(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).scalars().all()
-    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016", "017"]
+    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016", "017", "018"]
 
 
 def test_core_postgresql_tables_exist():
@@ -261,3 +261,16 @@ def test_billing_execution_results_are_ciphertext_only_and_recoverable():
             WHERE tgrelid='billing_inference_executions'::regclass AND NOT tgisinternal
         """)).scalars().all()
     assert not triggers
+
+    recovery_columns = {
+        item["name"] for item in inspector.get_columns("billing_inference_executions")
+    }
+    assert {
+        "recovery_attempts", "recovery_next_attempt_at",
+        "recovery_last_attempt_at", "recovery_last_error_code",
+        "recovery_settled_at",
+    } <= recovery_columns
+    recovery_indexes = {
+        item["name"] for item in inspector.get_indexes("billing_inference_executions")
+    }
+    assert "idx_billing_execution_recovery_due" in recovery_indexes
