@@ -197,19 +197,43 @@ No ejecutar migraciones reales en VPS como parte de esta fase.
 9. Costes de infraestructura y reportes de rentabilidad.
 10. UI de usuario/admin después de que APIs estén probadas.
 
-## 10. Preguntas de política que deben cerrarse antes de migrar
+## 10. Decisiones de política autorizadas por el propietario
 
-Estas decisiones no se pueden inferir del código actual:
+**Estado:** decisiones aprobadas para orientar la primera implementación. El propietario autorizó expresamente al equipo a resolver las seis decisiones pendientes. Se adoptan las reglas siguientes como valores iniciales versionados y editables por administración autorizada; no son todavía precios activos ni habilitan cobros.
 
-1. ¿La cuota incluida en el plan se consume antes que los créditos comprados, o los créditos comprados tienen prioridad?
-2. ¿Los créditos incluidos en suscripción caducan al renovar o se acumulan?
-3. ¿La cuota FREE diaria se restablece por zona horaria local del usuario o por una zona horaria global del servicio?
-4. Si la petición supera la cuota incluida, ¿se rechaza o se permite consumir créditos comprados?
-5. ¿Se factura input y output con la misma unidad de crédito (1 crédito/token) para todos los modelos?
-6. ¿Las suscripciones iniciales se vinculan al usuario individual o se necesita desde el inicio una cuenta de organización?
+| # | Decisión | Regla inicial aprobada |
+|---|---|---|
+| 1 | Prioridad de consumo | Primero cuota gratuita diaria vigente; después cuota incluida en la suscripción; por último créditos comprados, de los lotes con vencimiento más próximo (FEFO). El orden se guarda en la versión de política y puede configurarse por plan. |
+| 2 | Caducidad | Cuotas gratuitas diarias expiran al cierre de su ventana. Cuota/bolsa incluida en suscripción expira al final del ciclo y no se acumula inicialmente. Créditos comprados no expiran durante los primeros 12 meses desde la compra; al cumplirse ese plazo pasan a vencimiento, sujeto a que la política legal/comercial aplicable lo permita. No se activarán ventas hasta revisar términos y requisitos de reembolso/expiración. |
+| 3 | Zona horaria | UTC como zona horaria comercial inicial y predeterminada para reset diario y periodos mensuales. Guardar siempre zona IANA y límites UTC exactos de cada periodo. La arquitectura permitirá zona horaria por usuario cuando exista una preferencia explícita y se prueben cambios/DST; nunca usar el huso del servidor. |
+| 4 | Sobreconsumo | Al agotar la cuota incluida, permitir continuar solo si el usuario tiene créditos comprados disponibles y la política de su plan permite expresamente ese fallback. No generar deuda ni saldo negativo. El comportamiento predeterminado será rechazar con error de cuota agotada cuando no haya créditos comprados suficientes. |
+| 5 | Conversión y modelos | Mantener 1 crédito por token contabilizado como unidad interna de consumo, pero aplicar ponderadores configurables por modelo y por tipo de token (input/output) para que el coste comercial no sea idéntico entre modelos si sus tarifas difieren. Para Atomic Code, los valores iniciales de simulación serán 1 crédito/token input y 1 crédito/token output hasta que se aprueben tarifas comerciales; otros modelos no heredan automáticamente esa tarifa. Guardar siempre la versión de ponderadores aplicada. |
+| 6 | Titularidad | Primera versión individual por `user_id`; `project_id` solo atribuye uso. Organizaciones y saldos compartidos quedan para una fase posterior, sin simular organizaciones ni migrar titulares. |
 
-Hasta resolverlas, se pueden finalizar contratos y prototipos no persistentes, pero no conviene fijar constraints o migraciones irreversibles basadas en supuestos.
+### Reglas complementarias para evitar ambigüedades
 
+- **Cuota y créditos son dos fuentes distintas:** la cuota incluida se consume primero; los créditos comprados solo cubren el exceso permitido. No se convierte automáticamente la cuota no usada en créditos.
+- **Créditos gratuitos:** se conceden como lotes separados, con vencimiento diario y sin transferibilidad. La cuota FREE diaria propuesta no se duplica como otro lote gratuito; se registra como entitlement/cuota para evitar doble contabilización.
+- **Créditos de suscripción:** se mantienen separados de los créditos comprados. En la primera versión la asignación incluida se limita por periodo y vence al cierre del ciclo; no se acumula ni se reembolsa como efectivo.
+- **Créditos comprados:** no se consumen antes de cuotas incluidas. Se consumen FEFO entre lotes comprados. Los reembolsos se registran mediante movimientos compensatorios y solo si el estado de consumo permite el ajuste.
+- **Tokens:** input y output se registran separadamente. El total de consumo es input + output; el coste y los créditos pueden usar ponderadores diferentes por modelo. Tokens de historial, system prompt, herramientas y RAG que efectivamente entren al contexto del motor forman parte de input cuando el motor los cuenta. No se debe facturar contenido rechazado antes de inferencia.
+- **Conteo no disponible:** no convertir NULL en cero ni emitir cobro definitivo estimado sin política visible. Mantener reserva y marcar conciliación pendiente hasta recuperar contador o aplicar un fallback estimado explícitamente permitido y auditado.
+- **Planes y precios:** los importes y límites del roadmap siguen siendo valores de referencia. Deben publicarse como versiones de plan/tarifa después de pruebas, revisión de costes y aprobación comercial; no se hardcodean ni se activan por defecto.
+- **Cambios de política:** toda modificación crea una nueva versión con fecha efectiva. Una solicitud conserva la versión de plan, ponderadores y tarifas que tenía al reservarse.
+
+## 11. Criterios de aceptación de Fase 2
+
+- Diagrama lógico de entidades y relaciones aprobado.
+- Semántica exacta de estados e idempotencia documentada.
+- Fórmula de reservas y conciliación definida para éxito, fallo, parcial y resultado desconocido.
+- Reglas de prioridad/expiración de créditos decididas y versionables.
+- Ventanas de cuota y zona horaria decididas, con UTC como predeterminado.
+- Modelo de administración global definido y separado de roles de proyecto.
+- Contrato QvaPay alineado con el documento de integración, sin secretos.
+- Plan de pruebas y migraciones PostgreSQL definido.
+- Ningún pago, cobro, crédito o migración activado por este documento.
+
+**Estado de salida:** diseño técnico actualizado con las decisiones iniciales autorizadas; implementación económica aún no iniciada.
 ## 11. Criterios de aceptación de Fase 2
 
 - Diagrama lógico de entidades y relaciones aprobado.
