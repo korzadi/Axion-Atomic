@@ -14,7 +14,7 @@ from api.config import settings
 from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest
 from api.ollama import chat_with_usage
 from api.usage_events import persist_shadow_usage_event
-from rag.service import KnowledgeStoreUnavailable, SensitiveContentError, ingest_text, retrieve
+from rag.service import EmbeddingServiceUnavailable, KnowledgeStoreUnavailable, SensitiveContentError, ingest_text, retrieve
 from agent.planner import create_plan
 from agent.approvals import create_approval
 from agent.project_runtime import ProjectAgentRuntime
@@ -345,6 +345,8 @@ async def workspace_ingest(req: IngestRequest, user=Depends(_csrf_user)):
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
+    except (KnowledgeStoreUnavailable, EmbeddingServiceUnavailable) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
     return {"status": "indexed", "project_id": req.project_id, "chunks": count}
 
 
