@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     # Desactivado hasta incorporar rate limiting distribuido y verificación de correo.
     auth_enabled: bool = False
     auth_cookie_secure: bool = True
+    oauth_public_base_url: str | None = None
+    google_oauth_client_id: str | None = None
+    google_oauth_client_secret: str | None = None
+    github_oauth_client_id: str | None = None
+    github_oauth_client_secret: str | None = None
 
 
 settings = Settings()
