@@ -77,16 +77,44 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
             )
             self.assertEqual(decision.status_code, 404)
 
-    def test_owner_and_admin_pass_the_approval_role_gate(self):
+    def test_owner_and_admin_can_decide_plan_approval_without_execution(self):
         for role in ("owner", "admin"):
             with self.subTest(role=role):
                 self.role = role
-                with patch("api.workspace_routes._project_role", side_effect=enforce_role):
-                    # No se toca la base de datos: se prueba el gate de autorización
-                    # aislando el endpoint en la función de política.
-                    self.assertEqual(enforce_role(
-                        {"role": role}, "project-a", ("owner", "admin")
-                    ), role)
+                conn = unittest.mock.MagicMock()
+                conn.execute.return_value.first.return_value = {"id": 7}
+                transaction = unittest.mock.MagicMock()
+                transaction.__enter__.return_value = conn
+                with patch("api.workspace_routes._project_role", side_effect=enforce_role), \\
+                     patch("api.workspace_routes.engine.begin", return_value=transaction):
+                    response = self._post(
+                        "/workspace/agent/plan-approvals/7?project_id=project-a",
+                        {"approved": True, "note": "revisión humana"},
+                    )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["status"], "approved")
+                self.assertEqual(response.json()["execution"], "not_executed")
+
+    def test_run_from_another_project_is_not_disclosed_over_http(self):
+        from api.workspace_routes import _enabled_user
+
+        app.dependency_overrides[_enabled_user] = lambda: {
+            "id": "user-test", "email": "user@example.test", "role": "viewer",
+        }
+        conn = unittest.mock.MagicMock()
+        conn.execute.return_value.mappings.return_value.first.return_value = None
+        db_context = unittest.mock.MagicMock()
+        db_context.__enter__.return_value = conn
+        with patch("api.workspace_routes._project_role", side_effect=enforce_role), \\
+             patch("api.workspace_routes.engine.connect", return_value=db_context):
+            response = self.client.get(
+                "/workspace/agent/runs/run-owned-by-project-a?project_id=project-b"
+            )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            conn.execute.call_args.args[1],
+            {"run_id": "run-owned-by-project-a", "project_id": "project-b"},
+        )
 
 
 if __name__ == "__main__":
