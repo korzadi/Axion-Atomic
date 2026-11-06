@@ -25,6 +25,7 @@ def test_collection_readiness_check_is_cached_across_concurrent_requests(monkeyp
     monkeypatch.setattr(service, "client", fake)
     monkeypatch.setattr(service.settings, "qdrant_collection", "axion-test")
     monkeypatch.setattr(service, "_collection_checked_at", 0.0)
+    monkeypatch.setattr(service.time, "monotonic", lambda: 100.0)
 
     threads = [threading.Thread(target=service.ensure_collection) for _ in range(12)]
     for thread in threads:
