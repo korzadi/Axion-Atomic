@@ -54,7 +54,8 @@ class RunStoreTests(unittest.TestCase):
         self.assertEqual(second["proposal_id"], "approval1")
         self.assertTrue(self.store.transition_action("r1", "hash1", ("pending",), "running"))
         self.assertFalse(self.store.transition_action("r1", "hash1", ("pending",), "running"))
-        self.assertFalse(self.store.transition_action("r1", "hash1", ("running",), "applied") is False)
+        self.assertTrue(self.store.transition_action("r1", "hash1", ("running",), "applied"))
+        self.assertFalse(self.store.transition_action("r1", "hash1", ("running",), "applied"))
 
     def test_running_action_is_not_claimed_twice(self):
         class Run:
