@@ -83,5 +83,21 @@ class RunStoreTests(unittest.TestCase):
         self.assertEqual(self.store.get_project_action("p1", "same-hash")["run_id"], "r1")
 
 
+    def test_secrets_are_not_persisted_in_goals_or_action_payloads(self):
+        fake_key = "AKIAABCDEFGHIJKLMNOP"
+        class Run:
+            id, project_id = "r-secret", "p1"
+            goal = "Revisar " + fake_key
+            status, final, error = "running", None, None
+            messages, pending, steps, parse_failures = [], [], 0, 0
+        run = Run()
+        self.store.create_run(run)
+        saved = self.store.get_run("r-secret", "p1")
+        self.assertNotIn(fake_key, saved["goal"])
+        with self.assertRaises(RunStoreError):
+            self.store.record_action("r-secret", "p1", "write_file",
+                                     {"content": fake_key}, "secret-hash", "approval", "no guardar")
+
+
 if __name__ == "__main__":
     unittest.main()
