@@ -38,6 +38,7 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
     def test_viewer_can_chat_but_cannot_ingest_or_create_tasks(self):
         with (
             patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.settings.chat_model", "atomic-code"),
             patch("api.workspace_routes.retrieve", return_value=""),
             patch("api.workspace_routes.persist_shadow_usage_event") as persist_usage,
             patch("api.workspace_routes.chat_with_usage", new_callable=AsyncMock, return_value=InferenceResult(
@@ -88,6 +89,7 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
         )
         with (
             patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.settings.chat_model", "atomic-code"),
             patch("api.workspace_routes.retrieve", return_value=""),
             patch("api.workspace_routes.chat_with_usage", new_callable=AsyncMock, return_value=result),
             patch("api.workspace_routes.persist_shadow_usage_event", side_effect=RuntimeError("db unavailable")),
@@ -296,6 +298,7 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
     def test_chat_retrieval_receives_authorized_project_id(self):
         with (
             patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.settings.chat_model", "atomic-code"),
             patch("api.workspace_routes.retrieve", return_value="") as retrieve_mock,
             patch("api.workspace_routes.chat_with_usage", new_callable=AsyncMock, return_value=InferenceResult(
                 content="respuesta", requested_model="atomic-code", returned_model="atomic-code",
