@@ -131,3 +131,74 @@ def test_concurrent_reservations_cannot_overspend_a_quota_period():
         """), {"user_id": user_id}).one()
     assert row.reserved_credits == 7
     assert row.reserved_credits + row.consumed_credits <= row.limit_credits
+
+
+
+def test_purchased_lots_reserve_and_settle_in_fefo_order():
+    user_id, project_id = _account(quota=0)
+    now = datetime.now(timezone.utc)
+    earlier_id, later_id = str(uuid.uuid4()), str(uuid.uuid4())
+    with engine.begin() as conn:
+        for lot_id, expiry, reference in (
+            (earlier_id, now + timedelta(days=2), "fefo-earlier"),
+            (later_id, now + timedelta(days=5), "fefo-later"),
+        ):
+            conn.execute(text("""
+                INSERT INTO billing_credit_lots
+                    (id, user_id, source, source_reference, granted_credits,
+                     available_credits, expires_at)
+                VALUES (CAST(:id AS UUID), :user_id, 'purchased', :reference,
+                        5, 5, :expiry)
+            """), {
+                "id": lot_id, "user_id": user_id,
+                "reference": reference, "expiry": expiry,
+            })
+
+    reservation = _reserve(user_id, project_id, key="fefo-reserve", amount=8)
+    with engine.connect() as conn:
+        reserved = conn.execute(text("""
+            SELECT credit_lot_id, allocated_credits
+            FROM billing_reservation_allocations
+            WHERE reservation_id=CAST(:id AS UUID)
+            ORDER BY created_at, id
+        """), {"id": reservation.reservation_id}).all()
+    assert {str(row.credit_lot_id): row.allocated_credits for row in reserved} == {
+        earlier_id: 5, later_id: 3,
+    }
+
+    settle_reservation(
+        engine=engine, user_id=user_id, reservation_id=reservation.reservation_id,
+        actual_credits=4,
+    )
+    with engine.connect() as conn:
+        balances = conn.execute(text("""
+            SELECT id, available_credits, reserved_credits, consumed_credits
+            FROM billing_credit_lots WHERE user_id=:user_id
+        """), {"user_id": user_id}).all()
+    result = {
+        str(row.id): (row.available_credits, row.reserved_credits, row.consumed_credits)
+        for row in balances
+    }
+    assert result[earlier_id] == (1, 0, 4)
+    assert result[later_id] == (5, 0, 0)
+
+
+def test_usage_above_reservation_enters_review_without_extra_debit():
+    user_id, project_id = _account(quota=10)
+    reservation = _reserve(user_id, project_id, key="over-reservation", amount=5)
+    result = settle_reservation(
+        engine=engine, user_id=user_id, reservation_id=reservation.reservation_id,
+        actual_credits=6,
+    )
+    assert result.state == "review"
+    assert result.charged_credits is None
+    with engine.connect() as conn:
+        row = conn.execute(text("""
+            SELECT q.reserved_credits, q.consumed_credits, r.state
+            FROM billing_quota_periods q
+            JOIN billing_usage_reservations r ON r.user_id=q.user_id
+            WHERE q.user_id=:user_id
+        """), {"user_id": user_id}).one()
+    assert row.state == "review"
+    assert row.reserved_credits == 5
+    assert row.consumed_credits == 0
