@@ -242,6 +242,10 @@ def test_unknown_provider_result_keeps_credits_reserved():
     mark_reservation_unknown(
         engine=engine, user_id=user_id, reservation_id=reservation.reservation_id,
     )
+    # Repetir la notificación del proveedor no debe liberar ni alterar el saldo.
+    mark_reservation_unknown(
+        engine=engine, user_id=user_id, reservation_id=reservation.reservation_id,
+    )
     with engine.connect() as conn:
         row = conn.execute(text("""
             SELECT q.reserved_credits, q.consumed_credits, r.state
