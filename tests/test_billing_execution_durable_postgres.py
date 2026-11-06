@@ -299,3 +299,65 @@ def test_recovery_decrypt_failure_sets_backoff_and_is_not_retried_immediately():
     )
     assert repeated.examined == 0
     assert repeated.failed == 0
+
+
+def test_recovery_stops_after_ten_failures_and_marks_manual_review():
+    user_id, project_id = _account()
+    request_id = str(uuid.uuid4())
+
+    async def inference():
+        return SimpleNamespace(
+            requested_model="atomic-code:16k-8k",
+            returned_model="atomic-code:16k-8k",
+            done=True, usage_source="ollama_response",
+            prompt_eval_count=12, eval_count=8, content="terminal-review-marker",
+        )
+
+    with patch(
+        "api.billing_execution_durable.settle_reservation",
+        side_effect=RuntimeError("simulated settlement outage"),
+    ):
+        with pytest.raises(RuntimeError, match="settlement outage"):
+            _execute(user_id, project_id, request_id, inference)
+
+    with engine.begin() as conn:
+        row = conn.execute(text("""
+            SELECT r.id, e.id AS execution_id
+            FROM billing_usage_reservations r
+            JOIN billing_inference_executions e ON e.reservation_id=r.id
+            WHERE r.user_id=:user_id
+        """), {"user_id": user_id}).mappings().one()
+        conn.execute(text("""
+            UPDATE billing_inference_executions
+            SET recovery_attempts=9, recovery_next_attempt_at=now()
+            WHERE id=:execution_id
+        """), {"execution_id": row["execution_id"]})
+
+    class BrokenCipher:
+        def decrypt(self, *args, **kwargs):
+            raise ValueError("permanently invalid ciphertext")
+
+    batch = recover_completed_billing_executions(
+        engine=engine, cipher=BrokenCipher(), limit=10,
+        reservation_id=str(row["id"]),
+    )
+    assert batch.examined == 1
+    assert batch.failed == 1
+
+    with engine.connect() as conn:
+        state = conn.execute(text("""
+            SELECT recovery_attempts, recovery_next_attempt_at,
+                   recovery_requires_review, recovery_last_error_code
+            FROM billing_inference_executions WHERE id=:execution_id
+        """), {"execution_id": row["execution_id"]}).mappings().one()
+
+    assert state["recovery_attempts"] == 10
+    assert state["recovery_next_attempt_at"] is None
+    assert state["recovery_requires_review"] is True
+    assert state["recovery_last_error_code"] == "ValueError"
+
+    repeated = recover_completed_billing_executions(
+        engine=engine, cipher=BrokenCipher(), limit=10,
+        reservation_id=str(row["id"]),
+    )
+    assert repeated.examined == 0
