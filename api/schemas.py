@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal
 
 
@@ -23,6 +23,13 @@ class ChatRequest(BaseModel):
     temperature: float = Field(0.2, ge=0, le=2)
     max_tokens: int = Field(2048, ge=1, le=8192)
     stream: bool = False
+
+    @model_validator(mode="after")
+    def total_message_content_is_bounded(self):
+        total_chars = sum(len(message.content) for message in self.messages)
+        if total_chars > 40000:
+            raise ValueError("La conversación supera el límite de 40000 caracteres")
+        return self
 
     @field_validator("project_id")
     @classmethod

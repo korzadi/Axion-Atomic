@@ -37,6 +37,24 @@ class ChatRequestSchemaTests(unittest.TestCase):
                 messages=[{"role": "user", "content": "ok"}] * 101,
             )
 
+    def test_total_conversation_content_is_bounded(self):
+        with self.assertRaises(ValidationError):
+            ChatRequest(
+                project_id="project-1",
+                messages=[
+                    {"role": "user", "content": "a" * 20000},
+                    {"role": "assistant", "content": "b" * 20001},
+                ],
+            )
+        request = ChatRequest(
+            project_id="project-1",
+            messages=[
+                {"role": "user", "content": "a" * 20000},
+                {"role": "assistant", "content": "b" * 20000},
+            ],
+        )
+        self.assertEqual(sum(len(message.content) for message in request.messages), 40000)
+
     def test_blank_chat_content_and_project_id_are_rejected(self):
         with self.assertRaises(ValidationError):
             ChatRequest(project_id="project-1", messages=[{"role": "user", "content": "   \n\t"}])
