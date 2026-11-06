@@ -1,4 +1,5 @@
 """Integration tests for transactional credit reservations (PostgreSQL CI only)."""
+import asyncio
 import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -8,6 +9,8 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from api.billing_policy import InsufficientCredits
+from api.billing_budget import InferenceBudget
+from api.billing_execution import DuplicateExecution, execute_reserved_inference
 from api.billing_reservations import (
     IdempotencyConflict,
     mark_reservation_unknown,
@@ -312,3 +315,100 @@ def test_held_reservation_cannot_be_released_by_reconciliation():
             actor_user_id=user_id, reason="No ejecución confirmada por proveedor.",
             idempotency_key="admin-reconcile-held",
         )
+
+
+def _execution_budget():
+    return InferenceBudget(
+        policy_version="atomic-code-budget-v1",
+        runtime_model="atomic-code:16k-8k",
+        tokenizer_contract="qwen2_byte_fallback",
+        input_tokens_upper_bound=100,
+        output_tokens_upper_bound=50,
+        input_weight=1,
+        output_weight=1,
+        reserved_credits=150,
+        context_window=16384,
+    )
+
+
+def _execute_reserved(user_id, project_id, key, inference_call):
+    return asyncio.run(execute_reserved_inference(
+        engine=engine, user_id=user_id, project_id=project_id,
+        request_id=str(uuid.uuid4()), idempotency_key=key,
+        payload_sha256="d" * 64, budget=_execution_budget(),
+        expected_runtime_model="atomic-code:16k-8k",
+        inference_call=inference_call,
+        reservation_expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    ))
+
+
+def test_execution_orchestrator_reserves_then_infers_and_settles_postgres():
+    user_id, project_id = _account(quota=200)
+    calls = []
+
+    async def inference():
+        calls.append("inference")
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            requested_model="atomic-code:16k-8k",
+            returned_model="atomic-code:16k-8k",
+            done=True, prompt_eval_count=12, eval_count=8,
+            usage_source="ollama_response",
+        )
+
+    result = _execute_reserved(user_id, project_id, "orchestrator-success", inference)
+    assert calls == ["inference"]
+    assert result.reservation.state == "held"
+    assert result.settlement.state == "settled"
+    assert result.settlement.charged_credits == 20
+    with engine.connect() as conn:
+        quota = conn.execute(text("""
+            SELECT reserved_credits, consumed_credits
+            FROM billing_quota_periods WHERE user_id=:user_id
+        """), {"user_id": user_id}).one()
+    assert quota.reserved_credits == 0
+    assert quota.consumed_credits == 20
+
+
+def test_execution_orchestrator_retry_does_not_repeat_provider_call():
+    user_id, project_id = _account(quota=200)
+    from types import SimpleNamespace
+
+    async def inference():
+        return SimpleNamespace(
+            requested_model="atomic-code:16k-8k",
+            returned_model="atomic-code:16k-8k",
+            done=True, prompt_eval_count=12, eval_count=8,
+            usage_source="ollama_response",
+        )
+
+    first = _execute_reserved(user_id, project_id, "orchestrator-idempotent", inference)
+    assert first.settlement.state == "settled"
+    repeated_calls = []
+
+    async def must_not_run():
+        repeated_calls.append(True)
+
+    with pytest.raises(DuplicateExecution):
+        _execute_reserved(user_id, project_id, "orchestrator-idempotent", must_not_run)
+    assert repeated_calls == []
+
+
+def test_execution_orchestrator_timeout_keeps_postgres_reservation_unknown():
+    user_id, project_id = _account(quota=200)
+
+    async def timeout():
+        raise TimeoutError("simulated provider timeout")
+
+    with pytest.raises(TimeoutError):
+        _execute_reserved(user_id, project_id, "orchestrator-timeout", timeout)
+    with engine.connect() as conn:
+        row = conn.execute(text("""
+            SELECT q.reserved_credits, q.consumed_credits, r.state
+            FROM billing_quota_periods q
+            JOIN billing_usage_reservations r ON r.user_id=q.user_id
+            WHERE q.user_id=:user_id
+        """), {"user_id": user_id}).one()
+    assert row.state == "unknown"
+    assert row.reserved_credits == 150
+    assert row.consumed_credits == 0
