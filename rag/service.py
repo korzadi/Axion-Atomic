@@ -74,6 +74,14 @@ def ensure_collection():
                     size=settings.embed_dimension, distance=models.Distance.COSINE
                 ),
             )
+        # Qdrant Cloud puede exigir índices keyword para filtrar payloads.
+        # Se crean idempotentemente también en colecciones preexistentes.
+        for field_name in ("project_id", "source_id"):
+            client.create_payload_index(
+                collection_name=settings.qdrant_collection,
+                field_name=field_name,
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
         _collection_checked_at = time.monotonic()
 
 
