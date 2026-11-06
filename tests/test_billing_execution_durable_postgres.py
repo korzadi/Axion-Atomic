@@ -19,6 +19,10 @@ engine = create_engine(DATABASE_URL, future=True, pool_pre_ping=True)
 from api.billing_budget import InferenceBudget
 from api.billing_execution_durable import execute_durable_reserved_inference
 from api.billing_result_crypto import AesGcmResultCipher
+from api.billing_execution_envelope import (
+    serialize_billing_execution_result,
+    deserialize_billing_execution_result,
+)
 
 
 class TestKeyProvider:
@@ -59,11 +63,17 @@ def _budget():
 
 
 def _serialize(result):
-    return json.dumps(vars(result), sort_keys=True).encode("utf-8")
+    return serialize_billing_execution_result(
+        result,
+        expected_model="atomic-code:16k-8k",
+        policy_version="atomic-code-budget-v1",
+        input_weight=1,
+        output_weight=1,
+    )
 
 
 def _deserialize(payload):
-    return SimpleNamespace(**json.loads(payload.decode("utf-8")))
+    return deserialize_billing_execution_result(payload)
 
 
 def _execute(user_id, project_id, request_id, inference):
@@ -91,7 +101,7 @@ def test_persisted_result_recovers_after_settlement_failure_without_second_infer
             returned_model="atomic-code:16k-8k",
             done=True, usage_source="ollama_response",
             prompt_eval_count=12, eval_count=8,
-            response_text="durable-result-secret-marker",
+            content="durable-result-secret-marker",
         )
 
     with patch(
@@ -115,7 +125,7 @@ def test_persisted_result_recovers_after_settlement_failure_without_second_infer
 
     recovered = _execute(user_id, project_id, request_id, inference)
     assert recovered.recovered is True
-    assert recovered.inference.response_text == "durable-result-secret-marker"
+    assert recovered.inference.content == "durable-result-secret-marker"
     assert recovered.settlement.state == "settled"
     assert calls == ["called"]
 
