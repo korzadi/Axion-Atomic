@@ -90,14 +90,23 @@ def reserve_credits(
             {"lock_key": lock_key},
         )
         existing = conn.execute(text("""
-            SELECT id, state, requested_credits, payload_sha256
+            SELECT id, state, requested_credits, payload_sha256,
+                   project_id, request_id, policy_version
             FROM billing_usage_reservations
             WHERE user_id=:user_id AND idempotency_key=:idempotency_key
             FOR UPDATE
         """), {"user_id": user_id, "idempotency_key": idempotency_key}).mappings().first()
         if existing:
-            if existing["payload_sha256"].strip() != payload_sha256:
-                raise IdempotencyConflict("La clave idempotente ya pertenece a otra solicitud")
+            if (
+                existing["payload_sha256"].strip() != payload_sha256
+                or existing["requested_credits"] != required_credits
+                or existing["project_id"] != project_id
+                or str(existing["request_id"]) != request_uuid
+                or existing["policy_version"] != policy_version
+            ):
+                raise IdempotencyConflict(
+                    "La clave idempotente ya pertenece a otra solicitud o política"
+                )
             return ReservationResult(
                 str(existing["id"]), existing["state"], existing["requested_credits"], True
             )
