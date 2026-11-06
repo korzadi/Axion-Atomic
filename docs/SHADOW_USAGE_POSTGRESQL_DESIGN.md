@@ -80,7 +80,7 @@ No crear índices por cada columna ni particionar prematuramente. Revisar volume
 2. El adaptador devuelve InferenceResult con contadores reales o None.
 3. Si la inferencia finaliza, la ruta intenta insertar un evento usando el mismo request_id mediante `api/usage_events.py`.
 4. La inserción se hace en una transacción breve e independiente; no mantener una transacción PostgreSQL abierta mientras Ollama genera.
-5. Un conflicto UNIQUE se interpreta como evento ya persistido y no duplica la observación.
+5. `ON CONFLICT (request_id) DO NOTHING` hace idempotente la repetición de la misma observación.
 6. Si PostgreSQL falla, la respuesta de inferencia sigue siendo exitosa. Se registra una métrica/log operacional sin incluir contenido sensible y se marca la persistencia como no confirmada.
 7. En esta fase no existe cola de reintentos duradera. Antes de prometer entrega garantizada se deberá diseñar outbox/cola durable, límites de reintentos y reconciliación.
 
