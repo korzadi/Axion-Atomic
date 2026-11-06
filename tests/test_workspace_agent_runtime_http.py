@@ -77,3 +77,12 @@ class WorkspaceAgentRuntimeHttpTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    async def test_start_and_resume_routes_require_csrf_dependency():
+        import inspect
+        from api.workspace_routes import workspace_agent_resume, workspace_agent_start
+
+        start_user = inspect.signature(workspace_agent_start).parameters["user"].default
+        resume_user = inspect.signature(workspace_agent_resume).parameters["user"].default
+        self.assertEqual(start_user.dependency.__name__, "_csrf_user")
+        self.assertEqual(resume_user.dependency.__name__, "_csrf_user")
