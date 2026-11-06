@@ -35,7 +35,7 @@ class EncryptedExecutionResult:
 
 
 def claim_execution(*, engine: Engine, user_id: str, reservation_id: str) -> ExecutionClaim:
-    """Crea un único derecho de ejecución por reserva; jamás roba una ejecución."""
+    """Crea un único derecho de ejecución por reserva held; jamás roba una ejecución."""
     rid = str(uuid.UUID(reservation_id))
     execution_id = str(uuid.uuid4())
     with engine.begin() as conn:
