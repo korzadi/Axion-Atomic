@@ -126,20 +126,25 @@ async def execute_durable_reserved_inference(
         except BaseException:
             # Si persistencia tuvo éxito y una excepción posterior ocurre,
             # no se marca unknown a ciegas; un retry verá el estado completed.
+            execution_marked_unknown = False
             try:
                 await asyncio.to_thread(
                     mark_execution_unknown, engine=engine, user_id=user_id,
                     execution_id=claim.execution_id,
                 )
+                execution_marked_unknown = True
             except Exception:
+                # Si el commit de persistencia fue exitoso pero la respuesta DB
+                # se perdió, el estado completed debe permanecer recuperable.
                 pass
-            try:
-                await asyncio.to_thread(
-                    mark_reservation_unknown, engine=engine, user_id=user_id,
-                    reservation_id=reservation.reservation_id,
-                )
-            except Exception:
-                pass
+            if execution_marked_unknown:
+                try:
+                    await asyncio.to_thread(
+                        mark_reservation_unknown, engine=engine, user_id=user_id,
+                        reservation_id=reservation.reservation_id,
+                    )
+                except Exception:
+                    pass
             raise
 
     if (
