@@ -181,7 +181,7 @@ preflight(){
 deploy(){
   [[ -t 0 ]] || die "--deploy requiere confirmación interactiva."
   preflight
-  printf 'Se iniciarán PostgreSQL/Redis, se respaldará la DB, se migrará y se iniciará la API.\nEscribe DEPLOY AXYRON ATOMIC: '
+  printf 'Se iniciarán PostgreSQL/Redis, se respaldará la DB, se migrará y se iniciarán frontend y API independientes.\nEscribe DEPLOY AXYRON ATOMIC: '
   read -r answer
   [[ "$answer" == "DEPLOY AXYRON ATOMIC" ]] || die "Cancelado; no se desplegó."
   cd "$ROOT"
@@ -202,16 +202,16 @@ deploy(){
   [[ -s "$BACKUP" ]] || die "Backup vacío; se cancela antes de migrar."
   chmod 600 "$BACKUP"
   log "Backup PostgreSQL previo guardado en $BACKUP."
-  "${C[@]}" build api
+  "${C[@]}" build api frontend
   "${C[@]}" run --rm --no-deps api python -m api.migrate
-  "${C[@]}" up -d api
+  "${C[@]}" up -d api frontend
   LIVE=0
   for _ in $(seq 1 45); do
     if curl -fsS http://127.0.0.1:8070/health/live >/dev/null 2>&1; then LIVE=1; break; fi
     sleep 2
   done
   [[ "$LIVE" == 1 ]] || die "API no responde. Se conservan datos y backup; no hay rollback destructivo."
-  log "API viva en 127.0.0.1:8070."
+  log "Frontend independiente y proxy API respondiendo en 127.0.0.1:8070."
   if curl -fsS http://127.0.0.1:8070/health >/dev/null 2>&1; then log "Health integral OK."
   else log "AVISO: health integral degradado; revisa Ollama/modelos y Qdrant. No se declara producción."; fi
   log "Contenedores levantados. Proxy HTTPS/DNS y activación de auth se validan aparte."
