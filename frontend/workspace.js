@@ -169,8 +169,11 @@
           : " Estado de facturación no confirmado.";
       setStatus(historyStatus + billingStatus);
     } catch (error) {
+      // Mantiene intactos history, payload y clave idempotente: si el servidor
+      // completó la inferencia pero se perdió la respuesta HTTP, el reintento
+      // debe recuperar esa misma ejecución y nunca crear una nueva.
       prompt.value = content;
-      try { await loadHistory(); } catch (_) { /* Preserve the original inference error. */ }
+      renderHistory(history);
       setStatus(error.message);
     } finally { setBusy(false); }
   });
