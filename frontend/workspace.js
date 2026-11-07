@@ -41,6 +41,14 @@
     (items || []).forEach((item) => say(item.content, item.role));
   }
   function setStatus(text) { status.textContent = text; }
+  function setBusy(value) {
+    busy = Boolean(value);
+    send.disabled = busy;
+    projectSelect.disabled = busy;
+    $("ws-create-project").disabled = busy;
+    $("ws-new-project").disabled = busy;
+    form.setAttribute("aria-busy", busy ? "true" : "false");
+  }
   async function loadHistory() {
     if (!currentProject) return;
     const data = await request("/workspace/chat/history?project_id=" + encodeURIComponent(currentProject));
@@ -104,7 +112,7 @@
     event.preventDefault();
     const content = prompt.value.trim();
     if (!currentUser || !currentProject || !content || busy) return;
-    busy = true; send.disabled = true;
+    setBusy(true);
     const nextHistory = history.concat([{ role: "user", content }]);
     say(content, "user"); prompt.value = "";
     setStatus("Axyron está consultando Atomic Code…");
@@ -122,6 +130,6 @@
       prompt.value = content;
       try { await loadHistory(); } catch (_) { /* Preserve the original inference error. */ }
       setStatus(error.message);
-    } finally { busy = false; send.disabled = false; }
+    } finally { setBusy(false); }
   });
 })();
