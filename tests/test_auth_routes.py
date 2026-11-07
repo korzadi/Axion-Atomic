@@ -58,7 +58,6 @@ class AuthRouteGateTests(unittest.TestCase):
         request = Mock(spec=Request)
         request.client.host = "198.51.100.13"
         with patch("api.auth_routes.settings.auth_enabled", True), \\
-             patch("api.auth_routes._enforce_rate_limit"):
             response = asyncio.run(oauth_callback(
                 "google", request, code="authorization-code", state="provider-state",
                 browser_state="different-browser-state",
