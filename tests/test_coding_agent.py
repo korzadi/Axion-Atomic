@@ -123,6 +123,19 @@ class AgentTests(AgentBase):
         for fragment in ("denegado", "sale del proyecto", "Herramienta desconocida", "Falta el argumento"):
             self.assertIn(fragment, joined)
 
+    async def test_unexpected_tool_failure_closes_run_without_leaking_details(self):
+        from agent.toolset import Tool
+        def explode(_args):
+            raise RuntimeError("private backend detail")
+        tools = {"explode": Tool("explode", "fallo de prueba", {}, run=explode)}
+        a = self.agent([act("explode")])
+        a.tools = tools
+        run = await a.run("ejecuta herramienta")
+        self.assertEqual(run.status, "failed")
+        self.assertIn("herramienta del agente falló", run.error)
+        self.assertNotIn("private backend detail", run.error)
+        self.assertEqual(run.steps, 1)
+
     async def test_inference_failure_closes_run_without_leaking_exception_details(self):
         a = self.agent([])
         async def unavailable(_messages):
