@@ -333,7 +333,7 @@ async def workspace_chat(
         ) from None
     billing_result = None
     if settings.billing_enforcement_enabled:
-        idempotency_key = (idempotency_key_header or "").strip()
+        idempotency_key = idempotency_key_header.strip() if isinstance(idempotency_key_header, str) else ""
         if not idempotency_key or len(idempotency_key) > 200:
             raise HTTPException(
                 status_code=400,
@@ -509,7 +509,7 @@ async def workspace_chat(
         "id": f"chatcmpl-{request_id}", "object": "chat.completion", "created": 0,
         "model": req.model,
         "history_saved": history_saved,
-        # Transparencia explícita: el chat aún no reserva ni descuenta créditos.
+        # Se informa el modo real de contabilización de esta inferencia.
         "usage_billing": (
             {
                 "mode": "ledger",
