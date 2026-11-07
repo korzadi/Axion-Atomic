@@ -140,7 +140,12 @@ def test_chat_with_usage_propagates_transport_timeout(monkeypatch):
 
 
 def test_legacy_chat_wrapper_still_returns_only_text(monkeypatch):
-    mocked = AsyncMock(return_value=type("Result", (), {"content": "solo texto"})())
+    mocked = AsyncMock(return_value=type("Result", (), {
+        "content": "solo texto",
+        "requested_model": "atomic-code:1.1",
+        "returned_model": "atomic-code:1.1",
+        "done": True,
+    })())
     monkeypatch.setattr("api.ollama.chat_with_usage", mocked)
 
     result = asyncio.run(chat([{"role": "user", "content": "hola"}]))
