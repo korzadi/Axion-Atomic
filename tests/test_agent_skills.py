@@ -48,6 +48,22 @@ class SkillRegistryTests(unittest.TestCase):
         (self.skills / "linked").symlink_to(outside, target_is_directory=True)
         self.assertEqual(SkillRegistry(self.root).discover(), [])
 
+    def test_project_toolset_discovers_bundled_skills_outside_user_workspace(self):
+        from agent.project_workspace import build_project_toolset
+        workspace_root = self.root / "workspaces"
+        project = workspace_root / "project-a"
+        project.mkdir(parents=True)
+        project.chmod(0o700)
+
+        _workspace, tools = build_project_toolset(
+            workspace_root,
+            "project-a",
+        )
+        listing = tools["list_skills"].run({})
+        self.assertIn("programming-workflow", listing)
+        self.assertIn("gravity-ui", listing)
+        self.assertIn("agent-skills", listing)
+
     def test_system_prompt_requires_relevant_engineering_skills(self):
         ws = Workspace(self.root, "p1")
         tools = build_tools(ws, GitManager(ws))
