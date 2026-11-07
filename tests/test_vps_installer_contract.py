@@ -16,6 +16,55 @@ class VpsInstallerContractTests(unittest.TestCase):
         for token in ("--prepare", "--check", "--deploy", "DEPLOY AXYRON ATOMIC"):
             self.assertIn(token, self.script)
 
+    def test_new_env_database_url_uses_configured_postgres_identity(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            (scripts / "install_vps.sh").write_text(self.script, encoding="utf-8")
+            (root / "compose.yaml").write_text("services: {}", encoding="utf-8")
+            (root / ".env.example").write_text(
+                "POSTGRES_DB=atomic_custom\\n"
+                "POSTGRES_USER=atomic_user\\n"
+                "POSTGRES_PASSWORD=CHANGE_THIS\\n"
+                "DATABASE_URL=postgresql+psycopg://old:old@postgres:5432/old\\n"
+                "API_KEY=REPLACE_ME\\n",
+                encoding="utf-8",
+            )
+            for name in ("workspace", "knowledge", "backups"):
+                (root / name).mkdir()
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            docker = fake_bin / "docker"
+            docker.write_text(
+                "#!/usr/bin/env sh\\n"
+                "if [ \"$1\" = compose ] && [ \"$2\" = version ]; then exit 0; fi\\n"
+                "exit 0\\n",
+                encoding="utf-8",
+            )
+            docker.chmod(0o755)
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+            completed = subprocess.run(
+                ["bash", str(scripts / "install_vps.sh"), "--prepare"],
+                cwd=root, env=env, text=True, capture_output=True,
+                check=False, timeout=10,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            values = dict(
+                line.split("=", 1)
+                for line in (root / ".env").read_text(encoding="utf-8").splitlines()
+                if "=" in line and not line.startswith("#")
+            )
+            self.assertTrue(values["DATABASE_URL"].startswith(
+                "postgresql+psycopg://atomic_user:"
+            ))
+            self.assertTrue(values["DATABASE_URL"].endswith(
+                "@postgres:5432/atomic_custom"
+            ))
+            self.assertNotIn("CHANGE_THIS", values["DATABASE_URL"])
+            self.assertEqual((root / ".env").stat().st_mode & 0o777, 0o600)
+
     def test_backup_is_created_before_database_migrations(self):
         self.assertLess(self.script.index("pg_dump"), self.script.index("python -m api.migrate"))
         self.assertIn("pre-migration-", self.script)
