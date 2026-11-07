@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from api import ollama
 
@@ -30,7 +30,7 @@ class FakeAsyncClient:
     async def post(self, url, json):
         FakeAsyncClient.last_request = {"url": url, "json": json, "timeout": self.timeout}
         if url.endswith("/api/chat"):
-            return FakeResponse({"message": {"content": "ok"}})
+            return FakeResponse({"model": json["model"], "done": True, "message": {"content": "ok"}})
         return FakeResponse({"embedding": [0.1, 0.2]})
 
 
@@ -39,7 +39,7 @@ class OllamaClientTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(ollama, "settings") as settings, patch.object(
             ollama.httpx, "AsyncClient", FakeAsyncClient
         ):
-            settings.chat_model = "atomic-code:16k-8k"
+            settings.chat_model = "atomic-code:1.1"
             settings.num_ctx = 16384
             settings.ollama_base_url = "http://ollama:11434"
             result = await ollama.chat([{"role": "user", "content": "hola"}], max_tokens=512)
@@ -47,9 +47,39 @@ class OllamaClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "ok")
         request = FakeAsyncClient.last_request
         self.assertEqual(request["url"], "http://ollama:11434/api/chat")
-        self.assertEqual(request["json"]["model"], "atomic-code:16k-8k")
+        self.assertEqual(request["json"]["model"], "atomic-code:1.1")
         self.assertEqual(request["json"]["options"]["num_ctx"], 16384)
         self.assertEqual(request["json"]["options"]["num_predict"], 512)
+
+    async def test_chat_rejects_unexpected_model_identity(self):
+        from api.ollama import InferenceResult
+        invalid = InferenceResult(
+            content="respuesta", requested_model="atomic-code:1.1", returned_model="other-model",
+            done=True, prompt_eval_count=1, eval_count=1, total_duration_ns=1,
+            load_duration_ns=None, prompt_eval_duration_ns=None, eval_duration_ns=None,
+            usage_source="ollama_response",
+        )
+        with patch.object(ollama, "settings") as settings, patch.object(
+            ollama, "chat_with_usage", new=AsyncMock(return_value=invalid)
+        ):
+            settings.chat_model = "atomic-code:1.1"
+            with self.assertRaisesRegex(RuntimeError, "no coincide"):
+                await ollama.chat([{"role": "user", "content": "hola"}])
+
+    async def test_chat_rejects_incomplete_inference(self):
+        from api.ollama import InferenceResult
+        invalid = InferenceResult(
+            content="respuesta", requested_model="atomic-code:1.1", returned_model="atomic-code:1.1",
+            done=False, prompt_eval_count=1, eval_count=1, total_duration_ns=1,
+            load_duration_ns=None, prompt_eval_duration_ns=None, eval_duration_ns=None,
+            usage_source="ollama_response",
+        )
+        with patch.object(ollama, "settings") as settings, patch.object(
+            ollama, "chat_with_usage", new=AsyncMock(return_value=invalid)
+        ):
+            settings.chat_model = "atomic-code:1.1"
+            with self.assertRaisesRegex(RuntimeError, "no terminó"):
+                await ollama.chat([{"role": "user", "content": "hola"}])
 
     async def test_embeddings_use_configured_embedding_model(self):
         with patch.object(ollama, "settings") as settings, patch.object(
