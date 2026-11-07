@@ -47,7 +47,7 @@
     history = Array.isArray(data.messages) ? data.messages : [];
     renderHistory(history);
   }
-  async function loadProjects() {
+  async function loadProjects(preferredProjectId = null) {
     const data = await request("/auth/projects");
     const items = Array.isArray(data.items) ? data.items : [];
     projectSelect.replaceChildren();
@@ -63,7 +63,8 @@
       messages.replaceChildren();
       return;
     }
-    currentProject = String(items[0].id);
+    const preferred = preferredProjectId == null ? null : String(preferredProjectId);
+    currentProject = items.some((item) => String(item.id) === preferred) ? preferred : String(items[0].id);
     projectSelect.value = currentProject;
     await loadHistory();
     setStatus("Proyecto listo. Atomic Code está conectado al backend.");
@@ -93,9 +94,9 @@
     const name = $("ws-new-project").value.trim();
     if (name.length < 2) { setStatus("Escribe un nombre de al menos 2 caracteres."); return; }
     try {
-      await request("/auth/projects", { method: "POST", body: JSON.stringify({ name }) });
+      const created = await request("/auth/projects", { method: "POST", body: JSON.stringify({ name }) });
       $("ws-new-project").value = "";
-      await loadProjects();
+      await loadProjects(created.project && created.project.id);
       setStatus("Proyecto creado correctamente.");
     } catch (error) { setStatus(error.message); }
   });
@@ -118,7 +119,8 @@
       say(answer, "assistant");
       setStatus(data.history_saved === false ? "Respuesta recibida; el historial no pudo guardarse." : "Respuesta recibida y guardada.");
     } catch (error) {
-      // Keep the typed user turn visible but don't add it to the saved client history on failure.
+      prompt.value = content;
+      try { await loadHistory(); } catch (_) { /* Preserve the original inference error. */ }
       setStatus(error.message);
     } finally { busy = false; send.disabled = false; }
   });
