@@ -50,6 +50,9 @@ def main():
     workspace_script = frontend / "workspace.js"
     subprocess.run(["node", "--check", str(workspace_script)], text=True, check=True)
     print("Workspace JS: sintaxis válida")
+    studio_script = frontend / "studio.js"
+    subprocess.run(["node", "--check", str(studio_script)], text=True, check=True)
+    print("Axyron Studio SPA JS: sintaxis válida")
 
 
 if __name__ == "__main__":
