@@ -122,7 +122,7 @@ async def completions(req: ChatRequest):
         req.max_tokens,
     )
     return {
-        "id": "axion-atomic-local",
+        "id": "axyron-atomic-local",
         "object": "chat.completion",
         "created": 0,
         "model": settings.chat_model,
@@ -163,4 +163,4 @@ async def approve(approval_id: int, req: ApprovalRequest, project_id: str = Quer
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 if FRONTEND_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="axion-studio")
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="axyron-studio")
