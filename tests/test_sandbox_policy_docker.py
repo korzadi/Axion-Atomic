@@ -59,7 +59,7 @@ class DockerArgvTests(unittest.TestCase):
     def test_limits_validated_and_image_mapping(self):
         with self.assertRaises(ValueError): ResourceLimits(memory_mb=1)
         b = DockerBackend({"default": "registry.example/default@sha256:" + "a" * 64, "python": "registry.example/python@sha256:" + "b" * 64, "node": "registry.example/node@sha256:" + "c" * 64})
-        self.assertEqual([b.image_for(e) for e in ("pytest", "npm", "gcc", "go")], ["py", "nd", "d", "d"])
+        self.assertEqual([b.image_for(e) for e in ("pytest", "npm", "gcc", "go")], ["registry.example/python@sha256:" + "b" * 64, "registry.example/node@sha256:" + "c" * 64, "registry.example/default@sha256:" + "a" * 64, "registry.example/default@sha256:" + "a" * 64])
         with self.assertRaises(ValueError): DockerBackend({})
 
     def test_backend_rejects_mutable_image_tags(self):
@@ -81,9 +81,9 @@ class DockerArgvTests(unittest.TestCase):
 
     def test_rejects_configuration_that_attempts_to_enable_unverified_egress(self):
         with self.assertRaises(SandboxUnavailable):
-            DockerBackend({"default": "x:1"}, allow_egress=True)
+            DockerBackend({"default": "registry.example/x@sha256:" + "a" * 64}, allow_egress=True)
         with self.assertRaises(SandboxUnavailable):
-            DockerBackend({"default": "x:1"}, egress_network="axion-sandbox-egress")
+            DockerBackend({"default": "registry.example/x@sha256:" + "a" * 64}, egress_network="axion-sandbox-egress")
 
     def test_refuses_to_run_as_root(self):
         b = DockerBackend({"default": "registry.example/x@sha256:" + "a" * 64})
