@@ -1,4 +1,7 @@
 from pathlib import Path
+import os
+import subprocess
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -61,6 +64,41 @@ class VpsInstallerContractTests(unittest.TestCase):
             "docker inspect .*Config.Env",
         ):
             self.assertNotIn(forbidden, inventory)
+
+    def test_read_only_inventory_runs_with_empty_docker_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fake_bin = Path(temp) / "bin"
+            fake_bin.mkdir()
+            docker = fake_bin / "docker"
+            docker.write_text(
+                "#!/usr/bin/env bash\\n"
+                "case \"$1 $2\" in\\n"
+                "  'info ') exit 0 ;;\\n"
+                "  'ps -a') exit 0 ;;\\n"
+                "  'volume inspect') exit 1 ;;\\n"
+                "  'network ls') exit 0 ;;\\n"
+                "  *) exit 0 ;;\\n"
+                "esac\\n",
+                encoding="utf-8",
+            )
+            docker.chmod(0o755)
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+            completed = subprocess.run(
+                ["bash", str(ROOT / "scripts/inspect_vps_state.sh")],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=10,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn("REPOSITORIO", completed.stdout)
+            self.assertIn("CONTENEDORES DE LOS PROYECTOS AXYRON", completed.stdout)
+            self.assertIn("VOLUMEN POSTGRESQL PERSISTENTE", completed.stdout)
+            self.assertIn("REDES DE LOS PROYECTOS AXYRON", completed.stdout)
+            self.assertIn("Inventario de solo lectura terminado", completed.stdout)
 
     def test_workspace_permissions_are_checked_before_deploy(self):
         self.assertIn("WORKSPACE_META", self.script)

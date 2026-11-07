@@ -32,7 +32,7 @@ printf '.env: '
 
 section "CONTENEDORES DE LOS PROYECTOS AXYRON"
 for project in "${PROJECTS[@]}"; do
-  printf '-- Proyecto Compose: %s --\n' "$project"
+  printf -- '-- Proyecto Compose: %s --\n' "$project"
   rows="$(docker ps -a --filter "label=com.docker.compose.project=$project" \
     --format 'ID={{.ID}} Name={{.Names}} Status={{.Status}} Image={{.Image}} Service={{.Label "com.docker.compose.service"}}' || true)"
   [[ -n "$rows" ]] && printf '%s\n' "$rows" || echo 'ningún contenedor encontrado'
@@ -54,7 +54,7 @@ fi
 
 section "REDES DE LOS PROYECTOS AXYRON"
 for project in "${PROJECTS[@]}"; do
-  printf '-- Proyecto Compose: %s --\n' "$project"
+  printf -- '-- Proyecto Compose: %s --\n' "$project"
   rows="$(docker network ls --filter "label=com.docker.compose.project=$project" \
     --format 'Name={{.Name}} Driver={{.Driver}}' || true)"
   [[ -n "$rows" ]] && printf '%s\n' "$rows" || echo 'ninguna red encontrada'
