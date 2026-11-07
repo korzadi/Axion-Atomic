@@ -111,3 +111,9 @@ def test_attested_fingerprint_changes_when_runtime_attestation_changes():
     assert _attested_fingerprint() != _attested_fingerprint(
         model_digest="sha256:another-model-digest"
     )
+
+ 
+@pytest.mark.parametrize("temperature", [-0.01, 2.01, True, float("inf"), float("-inf")])
+def test_payload_fingerprint_rejects_temperature_outside_api_contract(temperature):
+    with pytest.raises(ValueError):
+        _fingerprint(temperature=temperature)
