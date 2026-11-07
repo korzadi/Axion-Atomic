@@ -35,7 +35,7 @@ export default function () {
   const response = http.post(
     `${base}/workspace/chat/completions`,
     JSON.stringify({
-      model: "atomic-code:16k-8k",
+      model: "atomic-code",
       project_id: project,
       messages: [{ role: "user", content: "Responde brevemente: prueba de capacidad." }],
       stream: false,
