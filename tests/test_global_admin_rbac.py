@@ -39,6 +39,13 @@ class GlobalAdminRbacTests(unittest.TestCase):
    self.assertEqual(global_roles_for_user("user-1"), ("billing_readonly",))
   self.assertIn("revoked_at IS NULL", str(conn.execute.call_args.args[0]))
 
+ def test_unknown_database_roles_are_ignored(self):
+  conn=MagicMock()
+  conn.execute.return_value.scalars.return_value.all.return_value=["unexpected_role", "billing_readonly"]
+  ctx=MagicMock(); ctx.__enter__.return_value=conn
+  with patch("api.global_admin.engine.connect", return_value=ctx):
+   self.assertEqual(global_roles_for_user("user-1"), ("billing_readonly",))
+
  def test_denies_unassigned_user(self):
   dep=require_global_permission("billing.manage")
   with patch("api.global_admin.global_roles_for_user", return_value=()):
