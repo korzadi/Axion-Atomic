@@ -41,6 +41,14 @@ def test_spa_uses_only_existing_backend_routes_for_available_modules():
         assert '"' + section + '"' in source
 
 
+def test_studio_dashboard_uses_full_readiness_not_liveness_only():
+    source = (FRONTEND / "studio.js").read_text(encoding="utf-8")
+    assert 'api("/health")' in source
+    assert 'readiness.status==="ok"?"Servicios operativos":"Servicios degradados"' in source
+    assert 'api("/health/live")' not in source
+    assert 'class="st-pill '+healthClass+'' in source
+
+
 def test_integrations_and_extensions_are_explicitly_future_features():
     source = (FRONTEND / "studio.js").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
