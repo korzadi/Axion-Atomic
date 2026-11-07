@@ -7,7 +7,8 @@ from fastapi import APIRouter, Cookie, Depends, File, Header, HTTPException, Que
 from sqlalchemy import text
 from api.database import engine
 from api.rate_limit import consume_rate_limit, rate_limit_key
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
+import hashlib
 
 from api.auth import current_user, authorize_project, require_csrf, COOKIE_NAME, CSRF_COOKIE
 from api.config import settings
@@ -18,6 +19,18 @@ from api.billing_budget import (
     SUPPORTED_TOKENIZER_CONTRACT,
     calculate_preflight_budget,
 )
+from api.billing_policy import InsufficientCredits, UsageUnavailable, credits_for_usage
+from api.billing_execution_durable import (
+    DurableExecutionRecoveryRequired,
+    DurableUsageReviewRequired,
+    execute_durable_reserved_inference,
+)
+from api.billing_result_crypto import AesGcmResultCipher, EnvironmentResultKeyProvider, ResultEncryptionError
+from api.billing_execution_envelope import (
+    deserialize_billing_execution_result,
+    serialize_billing_execution_result,
+)
+from api.billing_reservations import IdempotencyConflict
 from api.usage_events import persist_shadow_usage_event
 from rag.service import EmbeddingServiceUnavailable, KnowledgeStoreUnavailable, SensitiveContentError, delete_source, ingest_text, list_sources, replace_source, retrieve
 from rag.document_loader import DocumentLoadError, extract_document
@@ -270,7 +283,11 @@ async def workspace_chat_history(
 
 
 @router.post("/chat/completions")
-async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
+async def workspace_chat(
+    req: ChatRequest,
+    user=Depends(_csrf_user),
+    idempotency_key_header: str | None = Header(default=None, alias="Idempotency-Key"),
+):
     await run_in_threadpool(_project_role, user, req.project_id, ("owner", "admin", "editor", "viewer"))
     if req.stream:
         raise HTTPException(status_code=400, detail="Streaming no está implementado")
@@ -294,13 +311,15 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
     try:
         # Rechaza prompts que no caben antes de consumir CPU/RAM en Ollama.
         # La cota incluye system prompt, historial, RAG, framing y salida máxima.
-        calculate_preflight_budget(
+        budget = calculate_preflight_budget(
             inference_messages,
             req.max_tokens,
             settings.num_ctx,
             runtime_model=settings.chat_model,
             expected_runtime_model=settings.chat_model,
             tokenizer_contract=SUPPORTED_TOKENIZER_CONTRACT,
+            input_weight=settings.billing_input_credit_weight,
+            output_weight=settings.billing_output_credit_weight,
         )
     except ContextBudgetExceeded:
         raise HTTPException(
@@ -312,17 +331,110 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
             status_code=503,
             detail="No se pudo validar de forma segura el presupuesto de contexto del modelo.",
         ) from None
-    try:
-        result = await chat_with_usage(
-            inference_messages,
-            req.temperature, req.max_tokens,
-        )
-    except Exception:
+    billing_result = None
+    if settings.billing_enforcement_enabled:
+        idempotency_key = (idempotency_key_header or "").strip()
+        if not idempotency_key or len(idempotency_key) > 200:
+            raise HTTPException(
+                status_code=400,
+                detail="La facturación requiere el encabezado Idempotency-Key (1-200 caracteres).",
+            )
+        # La clave estable evita ejecutar dos veces una petición reintentada por el cliente.
+        request_id = str(uuid.uuid5(
+            uuid.NAMESPACE_URL, f"axyron-billing:{user['id']}:{idempotency_key}"
+        ))
+        payload = json.dumps({
+            "model": settings.chat_model,
+            "project_id": req.project_id,
+            "messages": [message.model_dump() for message in req.messages],
+            "temperature": req.temperature,
+            "max_tokens": req.max_tokens,
+        }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        payload_sha256 = hashlib.sha256(payload).hexdigest()
+        key_provider = EnvironmentResultKeyProvider()
         try:
-            logger.warning("No se pudo completar la inferencia de chat")
+            # Validar la clave ANTES de reservar créditos o ejecutar el modelo.
+            key_provider.active_key()
+        except ResultEncryptionError:
+            raise HTTPException(
+                status_code=503,
+                detail="La facturación está activada, pero falta la clave dedicada de cifrado de resultados.",
+            ) from None
+        cipher = AesGcmResultCipher(key_provider)
+
+        async def _run_metered_inference():
+            return await chat_with_usage(inference_messages, req.temperature, req.max_tokens)
+
+        try:
+            billing_result = await execute_durable_reserved_inference(
+                engine=engine,
+                user_id=str(user["id"]),
+                project_id=req.project_id,
+                request_id=request_id,
+                idempotency_key=idempotency_key,
+                payload_sha256=payload_sha256,
+                budget=budget,
+                expected_runtime_model=settings.chat_model,
+                inference_call=_run_metered_inference,
+                reservation_expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+                cipher=cipher,
+                serialize_result=lambda value: serialize_billing_execution_result(
+                    value,
+                    expected_model=settings.chat_model,
+                    policy_version=budget.policy_version,
+                    input_weight=budget.input_weight,
+                    output_weight=budget.output_weight,
+                ),
+                deserialize_result=deserialize_billing_execution_result,
+                purchased_fallback_allowed=settings.billing_purchased_fallback_allowed,
+            )
+            result = billing_result.inference
+        except InsufficientCredits:
+            raise HTTPException(
+                status_code=402,
+                detail="No tienes créditos disponibles para completar esta solicitud.",
+            ) from None
+        except IdempotencyConflict:
+            raise HTTPException(
+                status_code=409,
+                detail="La clave Idempotency-Key ya se utilizó con otra solicitud.",
+            ) from None
+        except DurableExecutionRecoveryRequired:
+            raise HTTPException(
+                status_code=409,
+                detail="La ejecución anterior requiere conciliación; no se repetirá el consumo.",
+            ) from None
+        except DurableUsageReviewRequired:
+            raise HTTPException(
+                status_code=409,
+                detail="El consumo requiere revisión; el resultado se conserva de forma cifrada.",
+            ) from None
+        except UsageUnavailable:
+            raise HTTPException(
+                status_code=503,
+                detail="Ollama no proporcionó una medición verificable; no se entregó la respuesta.",
+            ) from None
         except Exception:
-            pass
-        raise HTTPException(status_code=503, detail="El servicio de inferencia no está disponible") from None
+            try:
+                logger.warning("No se pudo completar la ejecución facturada")
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=503,
+                detail="No se pudo completar de forma segura la ejecución facturada.",
+            ) from None
+    else:
+        try:
+            result = await chat_with_usage(
+                inference_messages,
+                req.temperature, req.max_tokens,
+            )
+        except Exception:
+            try:
+                logger.warning("No se pudo completar la inferencia de chat")
+            except Exception:
+                pass
+            raise HTTPException(status_code=503, detail="El servicio de inferencia no está disponible") from None
 
     # Telemetría sin prompts ni respuestas para observabilidad operativa.
     try:
@@ -398,7 +510,23 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
         "model": req.model,
         "history_saved": history_saved,
         # Transparencia explícita: el chat aún no reserva ni descuenta créditos.
-        "usage_billing": {"mode": "shadow", "charged": False, "credits_reserved": False},
+        "usage_billing": (
+            {
+                "mode": "ledger",
+                "charged": True,
+                "credits_reserved": False,
+                "credits_charged": credits_for_usage(
+                    result.prompt_eval_count,
+                    result.eval_count,
+                    input_weight=budget.input_weight,
+                    output_weight=budget.output_weight,
+                ),
+                "reservation_id": billing_result.reservation.reservation_id,
+                "recovered": billing_result.recovered,
+            }
+            if billing_result is not None
+            else {"mode": "shadow", "charged": False, "credits_reserved": False}
+        ),
         "choices": [{"index": 0, "message": {"role": "assistant", "content": result.content}, "finish_reason": "stop"}],
     }
 
