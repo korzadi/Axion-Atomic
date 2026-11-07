@@ -10,7 +10,8 @@ AXION ATOMIC dispone de controles implementados en el repositorio, pero **no est
 - Cookies de sesión HttpOnly y configuración Secure según entorno.
 - Protección CSRF para operaciones autenticadas.
 - Tokens de verificación de correo y recuperación de contraseña de un solo uso, almacenados como hashes y con expiración.
-- Rate limiting persistente para rutas de autenticación; los errores del almacén cierran la operación.
+- Rate limiting persistente para registro, inicio de sesión y comienzo/callback OAuth; los errores del almacén cierran la operación.
+- Los enlaces de verificación y recuperación se reciben en fragmentos URL y el frontend limpia el fragmento del historial antes de enviar el token a la API.
 - OAuth Google/GitHub con state de un solo uso, vinculación al navegador y validación de identidad/correo.
 - Autorización por proyecto y rol para recursos del workspace.
 - Qdrant Cloud mediante endpoint HTTPS; el código rechaza endpoints locales.
@@ -20,7 +21,7 @@ AXION ATOMIC dispone de controles implementados en el repositorio, pero **no est
 
 - Configurar y probar SMTP real en staging, incluyendo entrega, caducidad, reenvío y manejo de errores.
 - Configurar credenciales OAuth fuera del repositorio y verificar callbacks HTTPS definitivos.
-- Probar cookies Secure, CSRF, proxy de confianza y sesiones detrás de la infraestructura real.
+- Probar cookies Secure, CSRF, proxy de confianza y sesiones detrás de la infraestructura real. El rate limit usa `request.client.host`; confirmar en staging la IP efectiva del cliente detrás del proxy sin confiar en encabezados `X-Forwarded-*` no validados.
 - Completar revisión del rol administrativo global y MFA para operaciones sensibles.
 - Definir monitoreo, alertas, retención y limpieza de tokens/sesiones/rate limits expirados.
 - Revisar logs, telemetría y frontend para asegurar que no expongan tokens ni datos sensibles.
