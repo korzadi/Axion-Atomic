@@ -95,3 +95,13 @@ Son resultados de esos SHA, no del HEAD actual. La consulta de estados y runs as
 - **V1.0 desplegada y verificada:** despliegue autorizado y validación posterior en producción.
 
 El endpoint `/health` no sustituye ninguno de estos niveles.
+
+## Auditoría incremental de autorización por proyecto (7 de noviembre de 2026)
+
+- Se inspeccionaron `api/auth.py`, `api/auth_routes.py` y `api/workspace_routes.py`.
+- Las rutas de workspace comprueban primero el interruptor global de autenticación; las operaciones mutables requieren sesión y CSRF; la autorización consulta la membresía usando simultáneamente el ID autenticado y el ID del proyecto.
+- Matriz observada: owner/admin/editor/viewer pueden leer; editor puede escribir contenido y ejecutar flujos de agente; solo owner/admin pueden decidir aprobaciones. Los no miembros y roles insuficientes reciben 404 para no revelar la existencia de proyectos.
+- La API heredada con clave compartida está desactivada por defecto (`legacy_api_enabled=false` en el modelo de configuración); no debe habilitarse como sustituto de la sesión y membresía por proyecto.
+- Se amplió `tests/test_workspace_authorization.py` para cubrir lectura por los cuatro roles, denegación de escritura al viewer, denegación de decisiones al editor y respuesta indistinguible para no miembros/proyectos ajenos.
+- Commit de pruebas: `f3bf94101c90bff350bf1fd9d339bbf3d08114e3`.
+- Limitación: son pruebas unitarias de la política de autorización, no una matriz HTTP E2E contra PostgreSQL ni una prueba multiusuario real. La autorización de producción continúa sin habilitarse; CI del nuevo HEAD debe confirmarse antes de marcar SEC-04 como verificada.
