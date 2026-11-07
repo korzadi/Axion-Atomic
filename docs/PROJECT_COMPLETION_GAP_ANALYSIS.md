@@ -276,3 +276,17 @@ El instalador se detendrá intencionalmente ante recursos anteriores. El siguien
 ### Límite de la evidencia
 
 No se han realizado en este trabajo: despliegue, reinicios, migraciones sobre la base del VPS, cambios de Nginx/UFW, cambios de secretos ni pruebas contra servicios de producción. La imagen Docker construida por CI no prueba la instalación sobre el VPS existente.
+
+
+## Actualización de inventario VPS y prueba de ejecución (7 de noviembre de 2026)
+
+**Commit:** `8184cbd8b8d77cddf8ede6767ea04af030959efc`  
+**CI:** [42409925342](https://github.com/korzadi/Axion-Atomic/actions/runs/42409925342), **5/5 trabajos aprobados**.
+
+Durante la primera prueba de ejecución del inventario se detectó un error real que la validación sintáctica Bash no encontraba: dos llamadas a `printf` interpretaban el formato que comenzaba con `--` como una opción y el script terminaba antes de completar el inventario. Se corrigió usando el terminador de opciones de `printf` y se añadió una prueba de ejecución con un Docker simulado que representa un host sin contenedores ni volumen Axyron existente.
+
+Resultado Python: **698 passed, 9 skipped, 4 warnings**. También se aprobaron build/smoke test de imagen, migraciones PostgreSQL, integración Qdrant Cloud y Studio Browser E2E.
+
+La prueba usa un ejecutable Docker simulado; no representa una inspección del VPS real. El inventario sigue pendiente de ejecución por el propietario en el VPS. No se han iniciado ni modificado contenedores, redes, volúmenes, PostgreSQL, Nginx, UFW ni servicios del VPS.
+
+**Próxima acción operativa:** ejecutar `bash scripts/inspect_vps_state.sh` en el VPS y revisar su salida antes de diseñar una reconciliación. El instalador `--deploy` permanece bloqueado intencionalmente ante recursos/volúmenes existentes.
