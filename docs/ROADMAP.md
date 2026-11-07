@@ -18,8 +18,9 @@ Este documento separa lo implementado en el repositorio de lo que todavía requi
 - [x] Migraciones PostgreSQL y pruebas de navegador.
 
 ### Evidencia CI más reciente
-- Run [42321524733](https://github.com/korzadi/Axion-Atomic/actions/runs/42321524733), commit `176dbf01`: los cuatro jobs terminaron correctamente.
-- Python: 613 aprobadas, 8 omitidas, 3 advertencias.
+- Run [42324560749](https://github.com/korzadi/Axion-Atomic/actions/runs/42324560749), commit `54451588`: los cuatro jobs terminaron correctamente.
+- Python: 625 aprobadas, 9 omitidas, 3 advertencias.
+- PostgreSQL migrations, Qdrant Cloud integration y AXION STUDIO browser E2E: success.
 - PostgreSQL migrations: correcto.
 - Qdrant Cloud integration: correcto.
 - AXION STUDIO browser E2E: correcto.
@@ -81,15 +82,12 @@ Se integró MFA en login por contraseña y callback OAuth. Las cuentas con MFA a
 
 ### CI confirmado
 
-El run 42324288766 terminó **success** en el commit c5aff40043873f0ace54e0f5cec0aac2c716242b:
-- Python: 622 passed, 9 skipped, 3 warnings.
-- PostgreSQL: 46 passed, incluidas pruebas de persistencia MFA.
-- Migraciones e idempotencia: success.
-- Qdrant Cloud: success.
+El run 42324560749 terminó **success** en el commit `54451588a88fcfc5c801f3b1aa486876ccee6771`:
+- Python: 625 passed, 9 skipped, 3 warnings.
+- PostgreSQL migrations: success, incluidas migraciones e idempotencia y las pruebas PostgreSQL de MFA ya incorporadas.
+- Qdrant Cloud integration: success.
 - AXION STUDIO browser E2E: success.
 - JavaScript syntax y Python compile: success.
-
-El commit siguiente e2a6829a7856bc1c684fe2bf206d35900989ab2e agrega encabezados no-cache adicionales; debe completar su propio CI.
 
 ### Condiciones para cerrar Fase 1
 
