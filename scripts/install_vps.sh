@@ -223,9 +223,9 @@ upgrade_frontend(){
   validate_env_syntax
   docker compose --project-name "$PROJECT_NAME" -f "$ROOT/compose.yaml" --env-file "$ENV_FILE" config --quiet
   C=(docker compose --project-name "$PROJECT_NAME" -f "$ROOT/compose.yaml" --env-file "$ENV_FILE")
-  PG="$("\${C[@]}" ps -q postgres)"
-  REDIS="$("\${C[@]}" ps -q redis)"
-  API="$("\${C[@]}" ps -q api)"
+  PG="$("${C[@]}" ps -q postgres)"
+  REDIS="$("${C[@]}" ps -q redis)"
+  API="$("${C[@]}" ps -q api)"
   [[ -n "$PG" && -n "$REDIS" && -n "$API" ]] || die "No se reconoce el stack existente (postgres, redis y api). No se modificó nada."
   for container in "$PG" "$REDIS" "$API"; do
     PROJECT="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$container")"
@@ -242,13 +242,13 @@ upgrade_frontend(){
   [[ "$answer" == "ACTUALIZAR AXYRON FRONTEND" ]] || die "Cancelado; no se actualizó nada."
   install -d -m 700 "$BACKUPS"
   BACKUP="$BACKUPS/pre-frontend-upgrade-$(date -u +%Y%m%dT%H%M%SZ).dump"
-  "\${C[@]}" exec -T postgres pg_dump --no-owner --no-acl -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" -Fc > "$BACKUP"
+  "${C[@]}" exec -T postgres pg_dump --no-owner --no-acl -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" -Fc > "$BACKUP"
   [[ -s "$BACKUP" ]] || die "Backup vacío; no se actualizaron contenedores."
   chmod 600 "$BACKUP"
   log "Backup PostgreSQL previo guardado de forma privada."
   cd "$ROOT"
-  "\${C[@]}" build api frontend
-  "\${C[@]}" up -d --no-deps api frontend
+  "${C[@]}" build api frontend
+  "${C[@]}" up -d --no-deps api frontend
   LIVE=0
   for _ in $(seq 1 60); do
     if curl -fsS http://127.0.0.1:8070/health/live >/dev/null 2>&1; then LIVE=1; break; fi
