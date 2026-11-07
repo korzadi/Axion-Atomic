@@ -6,10 +6,10 @@
 
 ## Identidad y restricciones confirmadas
 
-- Producto: AXION ATOMIC.
-- Agente: AXION.
-- Modelo objetivo: ATOMIC CODE 1.1.
-- Interfaz propia: AXION STUDIO.
+- Producto: Axyron Atomic.
+- Agente: AXYRON.
+- Modelo objetivo: Atomic Code 1.1.
+- Interfaz propia: Axyron Studio.
 - Ollama existente se trata como servicio externo; no instalar, actualizar ni alterar sus datos.
 - No se integra ni depende de Open WebUI.
 - No se accede al VPS, no se despliega, no se ejecutan migraciones ni se modifican secretos.
@@ -42,7 +42,7 @@ El frontend ya existe como archivo estático `frontend/Axyron Atomic — Tu asis
 
 ### 3. Agente, ejecuciones y aprobaciones
 
-Las rutas `/workspace/agent/tasks` todavía crean un plan y una aprobación; esto no demuestra ejecución de herramientas. Existen rutas de lectura de ejecuciones persistidas y decisiones de aprobación, pero el ciclo de vida completo del `CodingAgent`/runtime —inicio, restauración, reanudación, cancelación, reconciliación y entrega de resultados— debe verificarse y conectarse de forma explícita. No afirmar ejecución real desde la API mientras no exista evidencia end-to-end. Las aprobaciones deben seguir vinculadas a payload/hash, proyecto, actor autorizado y expiración.
+Las rutas HTTP de ejecuciones persistentes ya incluyen inicio, lectura, aprobación y reanudación autenticada por proyecto. Esto no demuestra ejecución de comandos: la API no inyecta un backend Docker. La recuperación de acciones interrumpidas requiere reconciliación humana y no las repite automáticamente. La validación end-to-end de todos los estados sigue pendiente. Las aprobaciones deben permanecer vinculadas a payload/hash, proyecto, actor autorizado y expiración.
 
 ### 4. Aislamiento y sandbox
 
