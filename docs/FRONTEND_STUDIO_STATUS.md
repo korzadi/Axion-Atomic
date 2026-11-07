@@ -245,3 +245,30 @@ GitHub Actions `42401029175`, commit `62c1a0321622492d01b5c02f1f5089ef501dbda0`,
 - `frontend/admin.js`: separa el desafío MFA del formulario de contraseña y limpia el primer factor antes de pedir el código.
 - `tests/test_frontend_studio_spa.py`: cubre el contrato de transición MFA.
 - `tests/e2e/studio-browser.mjs`: prueba navegador del portal administrativo, logout, MFA y rechazo de cuentas sin rol global.
+
+
+## Actualización — 7 de noviembre de 2026: ecosistema extensible de Axyron Studio
+
+Se revisó el README principal y la implementación actual de `frontend/studio.js`. El módulo API e integraciones ya informaba de conectores pendientes, pero no explicaba de forma suficiente el alcance futuro de aplicaciones externas, plugins, skills, tools y protocolos.
+
+Se actualizó la sección **API e integraciones** con una presentación de producto futurista:
+- AXYRON CONNECT para aplicaciones y servicios externos.
+- App Connectors y autorización segura.
+- Plugin Hub, Skill Library y Tool Registry.
+- Evaluación de MCP, APIs HTTP y webhooks.
+- Control de permisos, auditoría, revocación y desconexión.
+- Centro de extensiones dentro de Herramientas.
+
+Todos estos elementos se identifican explícitamente como **Próxima actualización**. No se añadieron endpoints ficticios ni se habilitó ninguna integración que no exista en backend.
+
+El README principal conserva su contenido anterior y ahora contiene el roadmap del ecosistema extensible, estado real, criterios mínimos de seguridad y una advertencia explícita de que el catálogo/instalador aún no está operativo.
+
+Se añadió una prueba de contrato estático para verificar que la interfaz y README mantengan coherencia en estas promesas de roadmap.
+
+Archivos modificados:
+- `frontend/studio.js`
+- `README.md`
+- `tests/test_frontend_studio_spa.py`
+- `docs/FRONTEND_STUDIO_STATUS.md`
+
+La validación de CI de estos cambios queda pendiente. No se ha desplegado ni modificado el VPS.
