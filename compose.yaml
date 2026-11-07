@@ -33,7 +33,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports: ["127.0.0.1:5433:5432"]
-    volumes: ["axion_atomic_pgdata:/var/lib/postgresql/data"]
+    volumes: ["axyron_atomic_pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -55,4 +55,4 @@ services:
     mem_limit: 256m
     cpus: 0.25
 volumes:
-  axion_atomic_pgdata: {name: axion_atomic_pgdata}
+  axyron_atomic_pgdata: {name: axyron_atomic_pgdata}
