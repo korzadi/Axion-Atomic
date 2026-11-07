@@ -58,17 +58,23 @@ class DockerArgvTests(unittest.TestCase):
 
     def test_limits_validated_and_image_mapping(self):
         with self.assertRaises(ValueError): ResourceLimits(memory_mb=1)
-        b = DockerBackend({"default": "d", "python": "py", "node": "nd"})
+        b = DockerBackend({"default": "registry.example/default@sha256:" + "a" * 64, "python": "registry.example/python@sha256:" + "b" * 64, "node": "registry.example/node@sha256:" + "c" * 64})
         self.assertEqual([b.image_for(e) for e in ("pytest", "npm", "gcc", "go")], ["py", "nd", "d", "d"])
         with self.assertRaises(ValueError): DockerBackend({})
 
+    def test_backend_rejects_mutable_image_tags(self):
+        with self.assertRaisesRegex(ValueError, "digest SHA-256"):
+            DockerBackend({"default": "python:3.12-slim"})
+        with self.assertRaisesRegex(ValueError, "digest SHA-256"):
+            DockerBackend({"default": "registry.example/image:latest"})
+
     def test_docker_missing_is_reported_not_crashing(self):
-        b = DockerBackend({"default": "x:1"}, docker_bin="docker-no-existe")
+        b = DockerBackend({"default": "registry.example/x@sha256:" + "a" * 64}, docker_bin="docker-no-existe")
         with mock.patch("os.getuid", return_value=1000), mock.patch("os.getgid", return_value=1000):
             with self.assertRaises(SandboxUnavailable): b.run(["ls"], "/tmp", ResourceLimits(), False)
 
     def test_refuses_unverified_egress_by_default(self):
-        b = DockerBackend({"default": "x:1"})
+        b = DockerBackend({"default": "registry.example/x@sha256:" + "a" * 64})
         with mock.patch("os.getuid", return_value=1000), mock.patch("os.getgid", return_value=1000):
             with self.assertRaises(SandboxUnavailable):
                 b.run(["pip", "install", "x"], "/tmp", ResourceLimits(), True)
@@ -80,7 +86,7 @@ class DockerArgvTests(unittest.TestCase):
             DockerBackend({"default": "x:1"}, egress_network="axion-sandbox-egress")
 
     def test_refuses_to_run_as_root(self):
-        b = DockerBackend({"default": "x:1"})
+        b = DockerBackend({"default": "registry.example/x@sha256:" + "a" * 64})
         with mock.patch("os.getuid", return_value=0):
             with self.assertRaises(ValueError): b.run(["ls"], "/tmp", ResourceLimits(), False)
 
