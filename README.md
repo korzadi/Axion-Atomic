@@ -114,7 +114,7 @@ La SPA usa únicamente rutas ya existentes en el backend. Las capacidades no imp
 
 ## AXYRON Agent Skills y Google Antigravity
 
-AXYRON adopta el estándar abierto `SKILL.md` para descubrir workflows especializados instalados por workspace, incluyendo bundles compatibles con Google Antigravity. El runtime puede listar y cargar skills bajo demanda mediante herramientas de solo lectura; nunca ejecuta scripts de terceros incluidos en ellas. La compatibilidad de formato no implica dependencia de Antigravity ni habilita ejecución de terminal.
+AXYRON adopta el estándar abierto `SKILL.md` para descubrir workflows especializados del proyecto y skills confiables empaquetadas con la aplicación, incluyendo bundles compatibles con Google Antigravity. El runtime puede listar y cargar skills bajo demanda mediante herramientas de solo lectura; nunca ejecuta scripts de terceros incluidos en ellas. La compatibilidad de formato no implica dependencia de Antigravity ni habilita ejecución de terminal.
 
 - Pack de ingeniería de Addy Osmani: 25 skills (24 workflows + una meta-skill), licencia MIT.
 - Instalación fijada y verificada mediante `bash scripts/install_agent_skills.sh`; instrucciones y seguridad: [docs/AGENT_SKILLS_ANTIGRAVITY_INTEGRATION.md](docs/AGENT_SKILLS_ANTIGRAVITY_INTEGRATION.md).
@@ -124,14 +124,18 @@ AXYRON adopta el estándar abierto `SKILL.md` para descubrir workflows especiali
 
 ## Skills especializadas de AXYRON
 
-Las siguientes skills quedan versionadas dentro del repositorio y se descubren desde `.agents/skills/` mediante el registro Agent Skills del agente:
+Las skills versionadas dentro de `.agents/skills/` se empaquetan en la imagen de la API y se descubren automáticamente desde los workspaces aislados mediante el registro Agent Skills. También se pueden añadir skills locales por proyecto:
 
 - **Gravity UI** (`.agents/skills/gravity-ui/`): guía técnica para el ecosistema React `@gravity-ui/*`; ayuda a elegir paquetes, consultar APIs según la versión instalada, aplicar temas y evitar componentes o propiedades inventados. No instala dependencias ni convierte Gravity UI en el diseño obligatorio de Axyron Studio.
 - **Codebase Summary** (`.agents/skills/codebase-summary/`): análisis general del repositorio en tres fases (explorar, sintetizar y validar). Genera y mantiene el contexto persistente en `.agents/project-context/SUMMARY.md` y `.agents/project-context/summary.json`, con arquitectura, tecnologías, módulos, flujos, interfaces/API, configuración y brechas verificadas.
 
 Para generar el mapa inicial del proyecto, solicita a AXYRON: **«Usa la skill codebase-summary para analizar todo este repositorio y guardar/actualizar el contexto del proyecto»**. Para refrescarlo tras cambios importantes, vuelve a solicitar el análisis. AXYRON debe leer el resumen al comenzar trabajos de ingeniería, contrastarlo con el código vigente y nunca tratarlo como sustituto de la fuente.
 
-Ambas skills son guías de solo lectura durante su análisis; no habilitan ejecución de scripts de terceros, instalaciones, despliegues ni acciones fuera de las aprobaciones existentes. No deben incluir secretos ni valores de variables de entorno en los informes.
+- **Agent Skills** (`.agents/skills/agent-skills/`): creación, validación, organización y mantenimiento seguro de skills compatibles con el estándar abierto.
+
+El conjunto versionado contiene **20 skills**: 17 de ingeniería, Gravity UI, Codebase Summary y Agent Skills. Las skills globales se leen desde la raíz confiable de la aplicación; no se copian a las carpetas de los usuarios.
+
+Estas skills son guías; durante el análisis de código, Codebase Summary es de solo lectura; no habilitan ejecución de scripts de terceros, instalaciones, despliegues ni acciones fuera de las aprobaciones existentes. No deben incluir secretos ni valores de variables de entorno en los informes.
 
 
 ## AXYRON Engineering Skills — programación integral
@@ -161,6 +165,6 @@ Las skills son guías de trabajo, no plugins ejecutables. El agente debe consult
 
 ### Activación automática de Agent Skills
 
-El runtime carga automáticamente `programming-workflow` al iniciar cada ejecución del agente y selecciona skills adicionales según el tema de la solicitud (por ejemplo Python/FastAPI, frontend, APIs, PostgreSQL, pruebas, depuración, seguridad o Git). La selección es una ayuda contextual: AXYRON debe comprobar que la skill existe, leer su contenido mediante `read_skill` y contrastarlo con el repositorio. Si una skill no está instalada, continúa sin inventarla. Las skills no otorgan permisos ni sustituyen aprobaciones.
+El runtime carga automáticamente `programming-workflow` al iniciar cada ejecución del agente y selecciona skills adicionales según el tema de la solicitud. La selección normaliza acentos y reconoce términos técnicos en español e inglés (por ejemplo Python/FastAPI, frontend, APIs, PostgreSQL, pruebas, depuración, seguridad o Git). La selección es una ayuda contextual: AXYRON debe comprobar que la skill existe, leer su contenido mediante `read_skill` y contrastarlo con el repositorio. Si una skill no está instalada, continúa sin inventarla. Las skills no otorgan permisos ni sustituyen aprobaciones.
 
 **Herramientas de ingeniería actualmente expuestas:** lectura y búsqueda de archivos, listado de directorios, resumen estructural del repositorio, estado/diff/log Git, propuestas de creación/edición/eliminación y propuestas de commit/rama. Las herramientas de terminal y ejecución de pruebas solo se exponen cuando el runtime recibe un backend Docker aislado y configurado con imágenes fijadas por digest. La API HTTP actual no inyecta ese backend; por tanto, no debe anunciarse terminal ni ejecución automática de pruebas como disponible en Studio hasta completar y validar esa integración.
