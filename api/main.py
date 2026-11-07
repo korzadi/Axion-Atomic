@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.exc import TimeoutError as SQLAlchemyPoolTimeout
 from fastapi.staticfiles import StaticFiles
@@ -162,5 +162,13 @@ async def approve(approval_id: int, req: ApprovalRequest, project_id: str = Quer
 
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+LANDING_PAGE = FRONTEND_DIR / "Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html"
+
+@app.get("/", include_in_schema=False)
+async def landing_page():
+    if not LANDING_PAGE.is_file():
+        raise HTTPException(status_code=503, detail="La página principal no está disponible.")
+    return FileResponse(LANDING_PAGE, media_type="text/html")
+
 if FRONTEND_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="axyron-studio")
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=False), name="axyron-static")
