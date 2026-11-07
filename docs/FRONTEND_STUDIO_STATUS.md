@@ -88,3 +88,35 @@ Esta sección sustituye los estados de CI y Qdrant Cloud descritos en las seccio
 - Esta prueba acredita el ciclo remoto específico del smoke test; no valida todavía reindexación completa de documentos, OAuth con proveedores reales, correo en dominio de producción, runtime de agente, cobros ni despliegue.
 
 No se accedió al VPS ni se modificó infraestructura, servicios o datos de producción.
+
+
+## Actualización — 7 de noviembre de 2026: Axyron Studio SPA
+
+Se incorporó una primera estructura SPA ligera dentro de la aplicación FastAPI, respetando la página HTML principal seleccionada y sin añadir un framework ni un paso de build frontend. Los recursos `/studio.css` y `/studio.js` se sirven desde el directorio estático existente.
+
+### Interfaz añadida
+
+- Navegación integrada: Resumen, Proyectos, Atomic Code, Conocimiento, Agente Axyron, Modelos Atomic, Consumo, Facturación, Cuenta y seguridad y Administración.
+- Sistema visual futurista responsive con base oscura azul profundo, cian, azul y violeta; el tema claro se conserva como opción.
+- Atomic Code reutiliza el módulo de chat existente y sus endpoints autenticados.
+- Proyectos usa la API real de listado y creación.
+- Conocimiento usa las rutas reales de ingestión, carga, listado y eliminación de fuentes.
+- Agente usa las rutas de ejecución persistente, lectura de ejecuciones y aprobaciones. La UI advierte que una aprobación no ejecuta por sí sola la acción.
+- Modelos consulta el catálogo público; los modelos no disponibles se etiquetan como próximas actualizaciones.
+- Consumo consulta métricas reales por proyecto.
+- Facturación consulta catálogo y órdenes propias; checkout permanece deshabilitado si así lo informa el backend.
+- Cuenta muestra sesión y MFA; Administración muestra permisos de solo lectura y no inventa mutaciones.
+
+### Validación añadida
+
+- El script de CI ahora ejecuta `node --check` también sobre `frontend/studio.js`.
+- La prueba de navegador sirve los nuevos recursos CSS/JS y verifica el shell SPA y su estado anónimo.
+- Se añadió `tests/test_frontend_studio_spa.py` para comprobar contratos de integración con las rutas existentes.
+
+### Límites todavía vigentes
+
+- No se ejecutaron estas pruebas en este cambio; se espera el resultado de GitHub Actions.
+- No se ha validado el aspecto visual en navegador real con una sesión autenticada.
+- La autenticación del VPS permanece deshabilitada hasta completar sus gates.
+- No se habilitaron cobros, operaciones administrativas mutables, ni modelos Atomic aún no disponibles.
+- No se desplegó ni reinició el VPS y no se modificaron datos, volúmenes o servicios.
