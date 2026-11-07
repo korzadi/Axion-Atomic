@@ -36,7 +36,7 @@ Crear una OAuth App en GitHub Developer Settings. Configurar la URL de retorno:
 
 https://TU_DOMINIO/auth/oauth/github/callback
 
-Variables: GITHUB_OAUTH_CLIENT_ID y GITHUB_OAUTH_CLIENT_SECRET.
+Variables de entorno: AXION_GITHUB_CLIENT_ID y AXION_GITHUB_CLIENT_SECRET. El prefijo AXION_ evita el prefijo reservado GITHUB_ de GitHub Actions.
 
 El backend obtiene el perfil y exige un correo verificado del proveedor. Los access tokens de GitHub se mantienen únicamente en memoria durante la consulta y no se guardan.
 
