@@ -60,9 +60,20 @@ class SkillRegistry:
                     return list(found.values())
                 if child.is_symlink() or not child.is_dir():
                     continue
-                item = self._manifest(child / "SKILL.md")
-                if item and item["name"] not in found:
-                    found[item["name"]] = item
+                candidates = [child / "SKILL.md"]
+                nested = child / "skills"
+                if nested.is_dir() and not nested.is_symlink():
+                    try:
+                        candidates.extend(folder / "SKILL.md" for folder in sorted(nested.iterdir(), key=lambda item: item.name)
+                                          if folder.is_dir() and not folder.is_symlink())
+                    except OSError:
+                        pass
+                for manifest in candidates:
+                    item = self._manifest(manifest)
+                    if item and item["name"] not in found:
+                        found[item["name"]] = item
+                        if len(found) >= _MAX_SKILLS:
+                            return list(found.values())
         return list(found.values())
 
     def list_text(self):
