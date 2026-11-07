@@ -59,6 +59,13 @@ class DockerBackend:
                  egress_network: str | None = None, allow_egress: bool = False):
         if "default" not in images:
             raise ValueError("images debe incluir 'default'")
+        # Las imágenes de ejecución deben ser inmutables: una etiqueta puede cambiar
+        # entre la revisión de seguridad y la ejecución real del contenedor.
+        for key, image in images.items():
+            if not isinstance(key, str) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", key):
+                raise ValueError("Clave de imagen de sandbox inválida")
+            if not isinstance(image, str) or not re.search(r"@sha256:[0-9a-f]{64}$", image):
+                raise ValueError(f"La imagen de sandbox '{key}' debe estar fijada por digest SHA-256")
         # No existe todavía una implementación de filtrado egress verificable. Rechazar incluso
         # el opt-in evita que una variable de configuración convierta una bridge Docker en salida libre.
         if allow_egress or egress_network is not None:
