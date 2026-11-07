@@ -66,3 +66,13 @@ Follow all three phases in order. Read the referenced files from this skill's di
 5. **Ignoring configuration and environment.** What env vars does it need? What config files does it read? What external services does it connect to? These are part of the architecture.
 6. **Over-documenting trivial code.** A `utils/formatDate.js` doesn't need its own section. Group utilities and mention them in aggregate.
 7. **Generating a Mermaid diagram that doesn't match the prose.** The diagram and the written summary must describe the same architecture. If they disagree, one of them is wrong.
+
+
+## AXYRON ATOMIC workspace convention
+
+For this repository, use the stable output directory `.agents/project-context/` instead of the generic home-directory default. Create or refresh these files after analyzing the actual checked-out project:
+
+- `.agents/project-context/SUMMARY.md` — verified human-readable architecture, module map, Mermaid diagram, API inventory, configuration, build/test instructions, and known gaps.
+- `.agents/project-context/summary.json` — schema-validated machine-readable summary.
+
+Treat existing reports as potentially stale: inspect the current source and regenerate them when the user requests a refresh or when substantial architecture changes have occurred. Never copy secrets, environment values, private keys, tokens, credentials, personal data, or contents of ignored/private files into the report. Record variable names and configuration file paths only, not their values. Do not modify application source while performing this read-only analysis. If parallel subagents are unavailable, perform the three scan perspectives sequentially and disclose that limitation. The report must describe only verified current behavior, separating implemented features from roadmap items.
