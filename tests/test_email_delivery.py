@@ -9,7 +9,8 @@ from fastapi import HTTPException
 class EmailDeliveryTests(unittest.TestCase):
     def test_requires_host_sender_and_tls(self):
         settings = Mock(smtp_host="smtp.example", email_from="no-reply@example",
-                        smtp_starttls=False, smtp_ssl=False)
+                        smtp_starttls=False, smtp_ssl=False, smtp_username=None, smtp_password=None,
+                        smtp_port=587)
         self.assertFalse(email_delivery_configured(settings))
         settings.smtp_starttls = True
         self.assertTrue(email_delivery_configured(settings))
@@ -17,18 +18,31 @@ class EmailDeliveryTests(unittest.TestCase):
     def test_rejects_username_without_password(self):
         settings = Mock(smtp_host="smtp.example", email_from="no-reply@example",
                         smtp_starttls=True, smtp_ssl=False,
-                        smtp_username="smtp-user", smtp_password=None)
+                        smtp_username="smtp-user", smtp_password=None, smtp_port=587)
+        self.assertFalse(email_delivery_configured(settings))
+
+    def test_rejects_password_without_username(self):
+        settings = Mock(smtp_host="smtp.example", email_from="no-reply@example",
+                        smtp_starttls=True, smtp_ssl=False,
+                        smtp_username=None, smtp_password="orphaned-password", smtp_port=587)
+        self.assertFalse(email_delivery_configured(settings))
+
+    def test_rejects_invalid_port(self):
+        settings = Mock(smtp_host="smtp.example", email_from="no-reply@example",
+                        smtp_starttls=True, smtp_ssl=False,
+                        smtp_username=None, smtp_password=None, smtp_port=70000)
         self.assertFalse(email_delivery_configured(settings))
 
     def test_rejects_conflicting_tls_modes(self):
         settings = Mock(smtp_host="smtp.example", email_from="no-reply@example",
                         smtp_starttls=True, smtp_ssl=True,
-                        smtp_username=None, smtp_password=None)
+                        smtp_username=None, smtp_password=None, smtp_port=587)
         self.assertFalse(email_delivery_configured(settings))
 
     def test_refuses_plaintext_smtp(self):
         settings = Mock(smtp_host="smtp.example", email_from="no-reply@example",
-                        smtp_starttls=False, smtp_ssl=False)
+                        smtp_starttls=False, smtp_ssl=False, smtp_username=None,
+                        smtp_password=None, smtp_port=587)
         with self.assertRaises(RuntimeError):
             send_transactional_email(settings=settings, recipient="user@example.com",
                                      subject="test", body="test")
