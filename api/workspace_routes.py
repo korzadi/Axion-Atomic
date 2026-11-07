@@ -368,6 +368,8 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
         "id": f"chatcmpl-{request_id}", "object": "chat.completion", "created": 0,
         "model": req.model,
         "history_saved": history_saved,
+        # Transparencia explícita: el chat aún no reserva ni descuenta créditos.
+        "usage_billing": {"mode": "shadow", "charged": False, "credits_reserved": False},
         "choices": [{"index": 0, "message": {"role": "assistant", "content": result.content}, "finish_reason": "stop"}],
     }
 
