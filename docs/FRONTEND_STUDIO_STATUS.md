@@ -157,3 +157,30 @@ Porcentajes estimados de implementación, no porcentajes de certificación ni de
 El portal administrativo está separado de la SPA principal y su URL prevista es `https://admin.axyronatomic.com`. El frontend del portal y el enrutamiento por Host ya están en GitHub; el DNS, Nginx y certificado de ese subdominio todavía no se han comprobado ni modificado.
 
 La autenticación sigue desactivada en producción. No se deben aceptar registros ni presentar el portal como operativo hasta completar la validación de MFA, correo, OAuth, cookies y autorización administrativa. No se ha desplegado este corte en el VPS.
+
+
+## Validación CI completada — 7 de noviembre de 2026
+
+La ejecución GitHub Actions `42398454717` sobre el commit `9d3895081fbc20571aa790f0d804d3f4ebfde850` terminó con resultado **success**. Pasaron los trabajos de pruebas Python, navegador Playwright de Axyron Studio, build y smoke test de la imagen, migraciones PostgreSQL e integración Qdrant Cloud. El build y smoke test ocurrieron dentro de GitHub Actions; no desplegaron ni modificaron el VPS de producción.
+
+Durante esta validación se corrigió una regla de presentación que hacía visible un enlace marcado como oculto, y el E2E se ajustó para seleccionar botones de registro/login realmente visibles. La validación CI no habilita autenticación productiva ni demuestra que el subdominio administrativo esté configurado en DNS/Nginx.
+
+### Avance revisado tras CI
+
+| Fase | Área | Avance estimado |
+|---|---|---:|
+| 1 | Marca, dominio y landing | 95% |
+| 2 | API, base de datos e infraestructura | 85% |
+| 3 | Axyron Studio SPA y navegación | 90% |
+| 4 | Integración frontend/API | 78% |
+| 5 | Atomic Code y workspace | 72% |
+| 6 | Registro, login y OAuth | 55% |
+| 7 | MFA, SMTP y recuperación | 55% |
+| 8 | Portal administrativo independiente | 38% |
+| 9 | Facturación y pagos | 20% |
+| 10 | Atomic Vision, Reasoning y Video | 10% |
+| 11 | CI y pruebas automatizadas | 100% |
+| 12 | Despliegue de la versión actual | 65% |
+| 13 | Auditoría final y lanzamiento | 0% |
+
+Los porcentajes son estimaciones de implementación, no certificaciones de seguridad ni disponibilidad pública. El promedio simple de estas fases es aproximadamente 58%; no sustituye un criterio de salida a producción.
