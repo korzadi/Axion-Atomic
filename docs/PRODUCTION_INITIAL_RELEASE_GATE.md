@@ -1,11 +1,11 @@
-# AXION ATOMIC — Puerta de salida a producción inicial
+# AXYRON ATOMIC — Puerta de salida a producción inicial
 
 **Estado:** plan de cierre obligatorio; no certifica que el producto esté listo ni habilita despliegues o cobros.
 **Objetivo:** entregar una primera versión privada y comercialmente operable, con ATOMIC CODE como único modelo facturable inicial. Vídeo, visión, imágenes, organizaciones y proveedores adicionales quedan fuera de este lanzamiento.
 
 ## 1. Definición de producción inicial
 
-La primera producción debe permitir que un usuario se registre, verifique su correo, inicie sesión, cree proyectos aislados, use AXION STUDIO, converse con el modelo realmente verificado, consulte plan/consumo/saldo/historial y compre por QvaPay con acreditación servidor-a-servidor idempotente.
+La primera producción debe permitir que un usuario se registre, verifique su correo, inicie sesión, cree proyectos aislados, use AXYRON STUDIO, converse con el modelo realmente verificado, consulte plan/consumo/saldo/historial y compre por QvaPay con acreditación servidor-a-servidor idempotente.
 
 El primer lanzamiento será limitado: un modelo, usuarios individuales y catálogo publicado de forma explícita. No se anunciarán capacidades que no estén operativas.
 
@@ -52,7 +52,7 @@ El primer lanzamiento será limitado: un modelo, usuarios individuales y catálo
 - No vender créditos con expiración de 12 meses hasta revisar términos, reembolsos y obligaciones aplicables.
 
 ### D. Experiencia y operación
-- AXION STUDIO móvil/escritorio: registro/login, proyectos, chat, historial, perfil, plan, consumo, saldo, compras y soporte.
+- AXYRON STUDIO móvil/escritorio: registro/login, proyectos, chat, historial, perfil, plan, consumo, saldo, compras y soporte.
 - Panel administrativo mínimo: usuarios, suspensión, catálogo, tarifas, pagos, conciliación, ajustes justificados, auditoría y métricas.
 - Estado de servicio, readiness checks, logs sin prompts/secretos, métricas, alertas y trazabilidad por request ID.
 - Privacidad, términos, uso aceptable, reembolsos, caducidad, soporte y contacto publicados antes de aceptar pagos.
@@ -113,3 +113,8 @@ Se añadió `api/billing_request_identity.py`. Genera un UUID determinista por c
 ### Corrección de cookie de sesión — 7 de noviembre de 2026
 
 La ruta de login por contraseña establecía la cookie de sesión sin `HttpOnly`. Se corrigió a `httponly=True` y se añadió una prueba que verifica el atributo en la respuesta. La cookie CSRF sigue siendo legible por el navegador para adjuntar el encabezado `X-CSRF-Token`; no contiene el token de sesión. GitHub Actions `42399587370` aprobó las pruebas Python, Playwright, build de imagen en CI, migraciones PostgreSQL e integración Qdrant Cloud. Esto no reemplaza la validación de staging ni autoriza activar `AUTH_ENABLED`.
+
+
+### Readiness de modelos configurados
+
+La ruta `/health` comprueba ahora que el endpoint de etiquetas de Ollama incluya el modelo de chat y el modelo de embeddings configurados, además de verificar que el servicio responda. Si falta cualquiera de los dos modelos, readiness devuelve HTTP 503; `/health/live` conserva su función de liveness. Las pruebas de disponibilidad y modelo ausente pasaron en GitHub Actions `42400165930`.
