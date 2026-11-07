@@ -175,12 +175,14 @@ class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
         denied = HTTPException(status_code=429, detail="rate limited")
         request = TaskRequest(project_id="project-1", goal="Ejecutar tarea segura")
         with (
+            patch("api.workspace_routes._project_role", return_value="editor") as authorize,
             patch("api.workspace_routes._enforce_workspace_limit", side_effect=denied) as limit,
             patch("api.workspace_routes._agent_runtime") as runtime,
         ):
             with self.assertRaises(HTTPException) as raised:
                 await workspace_agent_start(request, user={"id": "user-1"})
         self.assertEqual(raised.exception.status_code, 429)
+        authorize.assert_called_once_with({"id": "user-1"}, "project-1", ("owner", "admin", "editor"))
         limit.assert_called_once()
         runtime.assert_not_called()
 
@@ -188,6 +190,7 @@ class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
         from api.workspace_routes import workspace_agent_resume
         denied = HTTPException(status_code=429, detail="rate limited")
         with (
+            patch("api.workspace_routes._project_role", return_value="editor") as authorize,
             patch("api.workspace_routes._enforce_workspace_limit", side_effect=denied) as limit,
             patch("api.workspace_routes._agent_runtime") as runtime,
         ):
@@ -196,6 +199,7 @@ class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
                     "run-1", project_id="project-1", user={"id": "user-1"}
                 )
         self.assertEqual(raised.exception.status_code, 429)
+        authorize.assert_called_once_with({"id": "user-1"}, "project-1", ("owner", "admin", "editor"))
         limit.assert_called_once()
         self.assertEqual(limit.call_args.args, ("user-1", "project-1", "agent"))
         runtime.assert_not_called()
