@@ -52,6 +52,8 @@ class AuthRouteGateTests(unittest.TestCase):
 
     def test_oauth_callback_rejects_mismatched_browser_state_without_server_error(self):
         import asyncio
+        from unittest.mock import Mock
+        from fastapi import Request
         from api.auth_routes import oauth_callback
         with patch("api.auth_routes.settings.auth_enabled", True):
             response = asyncio.run(oauth_callback(
