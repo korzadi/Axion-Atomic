@@ -21,7 +21,7 @@ def test_all_expected_migrations_are_registered():
         versions = conn.execute(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).scalars().all()
-    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016", "017", "018", "019", "020"]
+    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016", "017", "018", "019", "020", "021"]
 
 
 def test_core_postgresql_tables_exist():
@@ -59,6 +59,10 @@ def test_core_postgresql_tables_exist():
         "global_role_assignments",
         "global_admin_audit_events",
         "workspace_chat_history",
+        "user_mfa_credentials",
+        "user_mfa_recovery_codes",
+        "auth_mfa_challenges",
+        "user_mfa_audit_events",
     }
     assert expected <= tables
 
@@ -299,3 +303,37 @@ def test_workspace_chat_history_is_private_and_bounded():
     joined = " ".join(definitions)
     assert "jsonb_typeof" in joined
     assert "jsonb_array_length" in joined
+
+
+def test_mfa_storage_schema_is_encrypted_replay_safe_and_audited():
+    inspector = inspect(engine)
+    credentials = {item["name"]: item for item in inspector.get_columns("user_mfa_credentials")}
+    assert {
+        "user_id", "state", "pending_secret_ciphertext", "pending_secret_nonce",
+        "pending_secret_key_id", "secret_ciphertext", "secret_nonce", "secret_key_id",
+        "last_accepted_counter", "enabled_at",
+    } <= set(credentials)
+    assert credentials["pending_secret_ciphertext"]["type"].__class__.__name__.lower() == "bytea"
+    assert credentials["secret_ciphertext"]["type"].__class__.__name__.lower() == "bytea"
+
+    challenge_columns = {item["name"] for item in inspector.get_columns("auth_mfa_challenges")}
+    assert {
+        "user_id", "challenge_hash", "purpose", "expires_at", "attempts", "consumed_at",
+    } <= challenge_columns
+    recovery_columns = {item["name"] for item in inspector.get_columns("user_mfa_recovery_codes")}
+    assert {"user_id", "code_hash", "used_at"} <= recovery_columns
+
+    indexes = {item["name"] for item in inspector.get_indexes("user_mfa_recovery_codes")}
+    assert "idx_user_mfa_recovery_unused" in indexes
+    indexes = {item["name"] for item in inspector.get_indexes("auth_mfa_challenges")}
+    assert "idx_auth_mfa_challenges_user_expiry" in indexes
+
+    with engine.connect() as conn:
+        triggers = conn.execute(text("""
+            SELECT tgname FROM pg_trigger
+            WHERE tgrelid='user_mfa_audit_events'::regclass AND NOT tgisinternal
+        """)).scalars().all()
+    assert {
+        "trg_user_mfa_audit_no_update_delete",
+        "trg_user_mfa_audit_no_truncate",
+    } <= set(triggers)
