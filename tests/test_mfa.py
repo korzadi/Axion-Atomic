@@ -36,16 +36,16 @@ class TotpPrimitiveTests(unittest.TestCase):
             with self.assertRaises(MfaError):
                 provider.active_key()
         with patch.dict(os.environ, {
-            "AXION_MFA_ENCRYPTION_KEY_ID": "runtime-v1",
-            "AXION_MFA_ENCRYPTION_KEY_B64": "not-base64!",
+            "AXYRON_MFA_ENCRYPTION_KEY_ID": "runtime-v1",
+            "AXYRON_MFA_ENCRYPTION_KEY_B64": "not-base64!",
         }, clear=True):
             with self.assertRaises(MfaError):
                 provider.active_key()
         import base64
         encoded = base64.b64encode(b"r" * 32).decode("ascii")
         with patch.dict(os.environ, {
-            "AXION_MFA_ENCRYPTION_KEY_ID": "runtime-v1",
-            "AXION_MFA_ENCRYPTION_KEY_B64": encoded,
+            "AXYRON_MFA_ENCRYPTION_KEY_ID": "runtime-v1",
+            "AXYRON_MFA_ENCRYPTION_KEY_B64": encoded,
         }, clear=True):
             self.assertEqual(provider.active_key(), ("runtime-v1", b"r" * 32))
             self.assertEqual(provider.get_key("runtime-v1"), b"r" * 32)
@@ -54,15 +54,28 @@ class TotpPrimitiveTests(unittest.TestCase):
 
         historical = base64.b64encode(b"h" * 32).decode("ascii")
         with patch.dict(os.environ, {
-            "AXION_MFA_ENCRYPTION_KEY_ID": "runtime-v2",
-            "AXION_MFA_ENCRYPTION_KEY_B64": encoded,
-            "AXION_MFA_ENCRYPTION_KEYRING_B64": (
+            "AXYRON_MFA_ENCRYPTION_KEY_ID": "runtime-v2",
+            "AXYRON_MFA_ENCRYPTION_KEY_B64": encoded,
+            "AXYRON_MFA_ENCRYPTION_KEYRING_B64": (
                 '{"runtime-v1":"' + historical + '"}'
             ),
         }, clear=True):
             self.assertEqual(provider.get_key("runtime-v1"), b"h" * 32)
             with self.assertRaises(MfaError):
                 provider.get_key("unknown-key")
+
+
+    def test_legacy_axion_environment_names_remain_readable(self):
+        import base64
+        encoded = base64.b64encode(b"l" * 32).decode("ascii")
+        with patch.dict(os.environ, {
+            "AXION_MFA_ENCRYPTION_KEY_ID": "legacy-v1",
+            "AXION_MFA_ENCRYPTION_KEY_B64": encoded,
+        }, clear=True):
+            self.assertEqual(
+                EnvironmentMfaKeyProvider().active_key(),
+                ("legacy-v1", b"l" * 32),
+            )
 
     def test_cipher_decrypts_with_historical_keyring_after_rotation(self):
         import base64
@@ -72,9 +85,9 @@ class TotpPrimitiveTests(unittest.TestCase):
         old_key = base64.b64encode(old_provider.key).decode("ascii")
         active_key = base64.b64encode(b"n" * 32).decode("ascii")
         with patch.dict(os.environ, {
-            "AXION_MFA_ENCRYPTION_KEY_ID": "new-key-v2",
-            "AXION_MFA_ENCRYPTION_KEY_B64": active_key,
-            "AXION_MFA_ENCRYPTION_KEYRING_B64": '{"test-key-v1":"' + old_key + '"}',
+            "AXYRON_MFA_ENCRYPTION_KEY_ID": "new-key-v2",
+            "AXYRON_MFA_ENCRYPTION_KEY_B64": active_key,
+            "AXYRON_MFA_ENCRYPTION_KEYRING_B64": '{"test-key-v1":"' + old_key + '"}',
         }, clear=True):
             rotated_cipher = AesGcmTotpCipher(EnvironmentMfaKeyProvider())
             self.assertEqual(
