@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from api.email_delivery import email_delivery_configured, send_transactional_email
+from api.email_delivery import email_delivery_configured, send_transactional_email, send_verification_email, send_password_reset_email
 from api.auth_recovery_routes import _gate
 from fastapi import HTTPException
 
@@ -89,6 +89,19 @@ class EmailDeliveryTests(unittest.TestCase):
             send_transactional_email(settings=settings, recipient="user@example.com",
                                       subject="test", body="test")
         server.send_message.assert_not_called()
+
+    @patch("api.email_delivery.send_transactional_email")
+    def test_verification_and_password_reset_emails_use_final_axyron_brand(self, send_email):
+        settings = Mock(oauth_public_base_url="https://axyronatomic.com")
+        send_verification_email(settings=settings, recipient="user@example.com", token="verification-token")
+        verification = send_email.call_args.kwargs
+        self.assertIn("AXYRON ATOMIC", verification["subject"])
+        self.assertIn("AXYRON ATOMIC", verification["body"])
+        send_password_reset_email(settings=settings, recipient="user@example.com", token="reset-token")
+        reset = send_email.call_args.kwargs
+        self.assertIn("AXYRON ATOMIC", reset["subject"])
+        self.assertIn("AXYRON ATOMIC", reset["body"])
+        self.assertNotIn("AXION ATOMIC", verification["subject"] + verification["body"] + reset["subject"] + reset["body"])
 
 
 class RecoveryGateTests(unittest.TestCase):
