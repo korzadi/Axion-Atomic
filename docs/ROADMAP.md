@@ -61,3 +61,10 @@ No comenzar hasta que la fase 1 esté cerrada y aceptada.
 La lectura estática de `api/auth.py` y `api/auth_routes.py` detectó que tanto el login por contraseña como el callback OAuth crean una sesión inmediatamente tras validar el primer factor/identidad. No hay desafío MFA ni enrolamiento TOTP implementado. El diseño MFA documentado debe cubrir ambos caminos antes de habilitar autenticación pública. No se cambió el código de autenticación ni se ejecutaron pruebas dinámicas en esta revisión.
 
 **Estado:** brecha de MFA confirmada en código; implementación pendiente. Mantener `AUTH_ENABLED=false`. El cierre de Fase 1 requiere implementar MFA completo, añadir pruebas de regresión para contraseña y OAuth y validar el flujo en staging.
+
+
+## Progreso incremental de MFA (7 de noviembre de 2026)
+
+Se añadieron `api/mfa.py` y `tests/test_mfa.py` como primera capa criptográfica aislada: TOTP RFC 6238, detección de replay mediante contador devuelto al llamador, cifrado AES-256-GCM con AAD ligada al usuario y generación/hash de códigos de recuperación. La clave AES se inyecta mediante proveedor externo; no se crea ni persiste desde este módulo.
+
+**No equivale a MFA funcional:** falta integrar persistencia PostgreSQL, enrolamiento pendiente/activo, desafío temporal, consumo atómico del contador y recovery codes, rate limiting, auditoría y el bloqueo de emisión de sesión en login de contraseña y callback OAuth. Las pruebas están añadidas, pero su resultado CI está pendiente. `AUTH_ENABLED=false` se mantiene.
