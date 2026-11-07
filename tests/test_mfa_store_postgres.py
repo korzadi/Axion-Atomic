@@ -103,10 +103,6 @@ def test_mfa_enrollment_totp_replay_recovery_and_expiry_are_transactional():
         assert credential.last_accepted_counter >= 0
         assert used_recovery is not None
     finally:
-        with engine.begin() as conn:
-            conn.execute(text("DELETE FROM auth_mfa_challenges WHERE user_id=:id"), {"id": user_id})
-            conn.execute(text("DELETE FROM user_mfa_recovery_codes WHERE user_id=:id"), {"id": user_id})
-            conn.execute(text("DELETE FROM user_mfa_audit_events WHERE user_id=:id"), {"id": user_id})
-            conn.execute(text("DELETE FROM user_mfa_credentials WHERE user_id=:id"), {"id": user_id})
-            conn.execute(text("DELETE FROM users WHERE id=:id"), {"id": user_id})
+        # La tabla de auditoría es append-only y las relaciones MFA usan RESTRICT.
+        # PostgreSQL vive solo durante este job CI; no borrar ni alterar sus eventos.
         engine.dispose()
