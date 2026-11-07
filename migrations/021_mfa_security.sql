@@ -16,6 +16,7 @@ CREATE TABLE user_mfa_credentials (
     CHECK (
       (state = 'pending'
        AND pending_secret_ciphertext IS NOT NULL
+       AND pending_secret_nonce IS NOT NULL
        AND octet_length(pending_secret_nonce) = 12
        AND pending_secret_key_id IS NOT NULL
        AND secret_ciphertext IS NULL
@@ -28,6 +29,7 @@ CREATE TABLE user_mfa_credentials (
        AND pending_secret_nonce IS NULL
        AND pending_secret_key_id IS NULL
        AND secret_ciphertext IS NOT NULL
+       AND secret_nonce IS NOT NULL
        AND octet_length(secret_nonce) = 12
        AND secret_key_id IS NOT NULL
        AND enabled_at IS NOT NULL)
