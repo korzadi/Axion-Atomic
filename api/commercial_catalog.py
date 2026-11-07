@@ -38,7 +38,7 @@ CATALOG = CommercialCatalog(
         PublicModel(
             code="atomic-code",
             name="ATOMIC CODE",
-            description="Modelo de programación de AXION ATOMIC.",
+            description="Modelo de programación de AXYRON ATOMIC.",
             available_for_chat=True,
             billing_candidate=True,
             billing_enabled=False,
