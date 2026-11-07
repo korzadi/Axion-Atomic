@@ -75,8 +75,9 @@ Esta ejecución incluye tres pruebas directas de rutas MFA: rechazo de desafío 
 
 1. Configurar las variables de MFA en el **entorno runtime del backend**. Los GitHub Actions secrets/variables que ya configuraste no se inyectan automáticamente en el proceso del servidor:
    - AXION_MFA_ENCRYPTION_KEY_ID: identificador no secreto, por ejemplo runtime-v1.
-   - AXION_MFA_ENCRYPTION_KEY_B64: clave AES-256 de 32 bytes en Base64. Nunca compartirla por chat ni guardarla en Git.
-2. Diseñar y probar rotación multi-clave y recuperación ante pérdida de clave. El proveedor actual resuelve solo la clave activa; no permite descifrar con IDs históricos.
+   - AXION_MFA_ENCRYPTION_KEY_B64: clave AES-256 activa de 32 bytes en Base64. Nunca compartirla por chat ni guardarla en Git.
+   - AXION_MFA_ENCRYPTION_KEYRING_B64: objeto JSON con IDs históricos y sus claves Base64 de 32 bytes. Debe residir únicamente en el gestor de secretos del runtime. Ejemplo de estructura sin valores reales: `{"old-key-id":"BASE64_ANTIGUA"}`.
+2. Para rotar: conservar la clave antigua en el anillo, generar una nueva clave activa con nuevo ID, desplegar ambas de forma coordinada y verificar descifrado de registros antiguos antes de retirar cualquier clave. Nunca eliminar una clave mientras existan registros cifrados con su ID.
 3. Configurar SMTP y OAuth reales en staging y validar los flujos completos desde navegador.
 4. Validar proxy HTTPS, cookies Secure, CSRF, recuperación de cuenta, suspensión de usuarios, observabilidad y alertas.
 5. Ejecutar revisión independiente de seguridad y aceptación funcional.
