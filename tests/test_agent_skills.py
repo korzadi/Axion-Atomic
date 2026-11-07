@@ -38,6 +38,17 @@ class SkillRegistryTests(unittest.TestCase):
         self.assertIn("security-and-hardening", registry.list_text())
         self.assertIn("# Security", registry.read_text("security-and-hardening"))
 
+    def test_accepts_standard_long_skill_description(self):
+        skill = self.skills / "long-description"
+        skill.mkdir(parents=True)
+        description = "A" * 600
+        (skill / "SKILL.md").write_text(
+            f"---\nname: long-description\ndescription: {description}\n---\n# Skill\n",
+            encoding="utf-8",
+        )
+        registry = SkillRegistry(self.root)
+        self.assertIn("long-description", registry.list_text())
+
     def test_rejects_invalid_manifest_and_symlinked_skill(self):
         bad = self.skills / "bad"
         bad.mkdir(parents=True)

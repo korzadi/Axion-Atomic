@@ -52,7 +52,7 @@ class SkillRegistry:
             if sep and key.strip() in {"name", "description"}:
                 fields[key.strip()] = value.strip().strip("'\"").strip()
         name, description = fields.get("name"), fields.get("description")
-        if not name or not _NAME.fullmatch(name) or not description or len(description) > 500:
+        if not name or not _NAME.fullmatch(name) or not description or len(description) > 1024:
             return None
         return {"name": name, "description": description, "content": raw}
 
