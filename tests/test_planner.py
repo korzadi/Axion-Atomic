@@ -19,7 +19,7 @@ def valid_steps():
             "risk": "low",
             "proposed_action": "Inspeccionar el alcance sin modificar archivos",
         }
-        for index in range(1, 4)
+        for index in range(1, 9)
     ]
 
 
