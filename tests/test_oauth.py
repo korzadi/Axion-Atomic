@@ -2,7 +2,34 @@ import os
 import unittest
 from unittest.mock import patch
 from unittest.mock import Mock
-from api.oauth import configured, digest, begin, resolve_user
+from api.oauth import configured, digest, begin, resolve_user, _validate_google_claims
+
+
+class GoogleOidcClaimsTests(unittest.TestCase):
+    def valid_claims(self):
+        return {"aud": "google-client", "iss": "https://accounts.google.com", "nonce": "expected-nonce", "email_verified": True, "exp": 2000, "iat": 1900, "sub": "google-subject", "email": "person@example.com"}
+
+    def test_accepts_valid_google_oidc_claims(self):
+        _validate_google_claims(self.valid_claims(), nonce="expected-nonce", client_id="google-client", now=1950)
+
+    def test_rejects_wrong_authorized_party_for_multiple_audiences(self):
+        claims = self.valid_claims()
+        claims["aud"] = ["google-client", "other-client"]
+        claims["azp"] = "other-client"
+        with self.assertRaises(ValueError):
+            _validate_google_claims(claims, nonce="expected-nonce", client_id="google-client", now=1950)
+
+    def test_rejects_future_issued_at(self):
+        claims = self.valid_claims()
+        claims["iat"] = 2100
+        with self.assertRaises(ValueError):
+            _validate_google_claims(claims, nonce="expected-nonce", client_id="google-client", now=1950)
+
+    def test_rejects_unverified_email(self):
+        claims = self.valid_claims()
+        claims["email_verified"] = "true"
+        with self.assertRaises(ValueError):
+            _validate_google_claims(claims, nonce="expected-nonce", client_id="google-client", now=1950)
 
 
 class OAuthConfigurationTests(unittest.TestCase):
