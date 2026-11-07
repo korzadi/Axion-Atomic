@@ -29,7 +29,7 @@ for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
     if not line or line.startswith("#"):
         continue
     if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", line):
-        if re.match(r"^AXYRON_MFA_ENCRYPTION_KEY_B64\\s*:", line):
+        if re.match(r"^AXYRON_MFA_ENCRYPTION_KEY_B64\s*:", line):
             errors.append(
                 f"línea {number}: AXYRON_MFA_ENCRYPTION_KEY_B64 usa ':'; "
                 "el formato requerido es KEY=VALUE. No se corrige automáticamente."
