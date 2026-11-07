@@ -9,11 +9,11 @@
 - Interfaz: **Axyron Studio**
 - API y web comparten el mismo origen y las rutas de API permanecen bajo el dominio principal.
 
-El repositorio conserva el nombre técnico `korzadi/Axion-Atomic` y los nombres internos de variables/migraciones existentes para evitar romper integraciones. Esto no cambia la identidad pública.
+El repositorio conserva el nombre técnico `korzadi/Axyron-Atomic` y los nombres internos de variables/migraciones existentes para evitar romper integraciones. Esto no cambia la identidad pública.
 
 ## DNS que debes crear
 
-El VPS AXION/Axyron conocido usa la IPv4 `145.79.0.125`.
+El VPS AXYRON/Axyron conocido usa la IPv4 `145.79.0.125`.
 
 | Tipo | Nombre | Valor | Proxy |
 |---|---|---|---|
@@ -48,7 +48,7 @@ QDRANT_COLLECTION=axion_atomic_knowledge
 
 - `AUTH_ENABLED` debe pasar a `true` únicamente cuando se confirme que SMTP y MFA están realmente disponibles dentro del contenedor `api`, y que HTTPS está activo.
 - SMTP usa `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS`, `SMTP_SSL` y `EMAIL_FROM`.
-- MFA usa `AXION_MFA_ENCRYPTION_KEY_ID` y `AXION_MFA_ENCRYPTION_KEY_B64`; las claves históricas, si existen, se inyectan mediante `AXION_MFA_ENCRYPTION_KEYRING_B64`.
+- MFA usa `AXYRON_MFA_ENCRYPTION_KEY_ID` y `AXYRON_MFA_ENCRYPTION_KEY_B64`; las claves históricas, si existen, se inyectan mediante `AXYRON_MFA_ENCRYPTION_KEYRING_B64`.
 - Los valores reales de SMTP/MFA nunca se guardan en Git ni en `.env.example`. GitHub Actions Secrets solo están disponibles en los workflows que los referencian; no se inyectan automáticamente en el contenedor del VPS.
 - No activar `LEGACY_API_ENABLED`: el endpoint `/v1/chat/completions` usa una API key compartida heredada. Studio utiliza las rutas modernas `/auth/*` y `/workspace/*` con sesión, CSRF y permisos de proyecto.
 - Mantener `ENABLE_COMMAND_EXECUTION=false` hasta completar la revisión del sandbox y las aprobaciones.
