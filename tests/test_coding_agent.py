@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from agent.approval_gate import ApprovalError, InMemoryApprovalGate
-from agent.coding_agent import CodingAgent, parse_action, system_prompt
+from agent.coding_agent import CodingAgent, parse_action, system_prompt, _automatic_skill_context
 from agent.git import GitManager
 from agent.toolset import build_tools, validate_args
 from agent.workspace import Workspace
@@ -52,6 +52,20 @@ class AgentBase(unittest.IsolatedAsyncioTestCase):
 
 
 class ToolsetTests(AgentBase):
+    def test_skills_are_loaded_automatically_by_task_topic(self):
+        from agent.toolset import Tool
+        loaded = []
+        def read_skill(args):
+            loaded.append(args["name"])
+            return f"CONTENIDO DE {args['name']}"
+        tools = {"read_skill": Tool("read_skill", "read", {"name": ("str", True)}, run=read_skill)}
+        context = _automatic_skill_context(tools, "Corrige el error del endpoint FastAPI y añade pruebas pytest")
+        self.assertEqual(loaded[0], "programming-workflow")
+        self.assertIn("python-backend", loaded)
+        self.assertIn("systematic-debugging", loaded)
+        self.assertIn("test-engineering", loaded)
+        self.assertIn("CONTENIDO DE programming-workflow", context)
+
     def test_agent_system_prompt_uses_final_axyron_identity(self):
         prompt = system_prompt(self.tools)
         self.assertIn("Eres AXYRON, el agente de ingeniería de AXYRON ATOMIC", prompt)

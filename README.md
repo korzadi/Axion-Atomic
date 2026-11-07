@@ -157,3 +157,10 @@ Las skills son guías de trabajo, no plugins ejecutables. El agente debe consult
 - Probar los cambios y verificar el resultado antes de declarar que están terminados.
 - Revisar seguridad, permisos, aislamiento, accesibilidad y regresiones.
 - Documentar límites y evidencias reales, sin afirmar pruebas o despliegues no realizados.
+
+
+### Activación automática de Agent Skills
+
+El runtime carga automáticamente `programming-workflow` al iniciar cada ejecución del agente y selecciona skills adicionales según el tema de la solicitud (por ejemplo Python/FastAPI, frontend, APIs, PostgreSQL, pruebas, depuración, seguridad o Git). La selección es una ayuda contextual: AXYRON debe comprobar que la skill existe, leer su contenido mediante `read_skill` y contrastarlo con el repositorio. Si una skill no está instalada, continúa sin inventarla. Las skills no otorgan permisos ni sustituyen aprobaciones.
+
+**Herramientas de ingeniería actualmente expuestas:** lectura y búsqueda de archivos, listado de directorios, resumen estructural del repositorio, estado/diff/log Git, propuestas de creación/edición/eliminación y propuestas de commit/rama. Las herramientas de terminal y ejecución de pruebas solo se exponen cuando el runtime recibe un backend Docker aislado y configurado con imágenes fijadas por digest. La API HTTP actual no inyecta ese backend; por tanto, no debe anunciarse terminal ni ejecución automática de pruebas como disponible en Studio hasta completar y validar esa integración.
