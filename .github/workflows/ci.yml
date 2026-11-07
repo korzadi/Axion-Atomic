@@ -71,6 +71,14 @@ jobs:
           test "$ready" -eq 1
           curl --fail --silent --show-error --output /tmp/axyron-homepage http://127.0.0.1:18080/
           grep -q "Axyron Atomic" /tmp/axyron-homepage
+          # Verify that the production image serves every landing-page asset.
+          for asset in studio.css studio.js workspace.js; do
+            curl --fail --silent --show-error "http://127.0.0.1:18080/$asset" --output "/tmp/axyron-$asset"
+            test -s "/tmp/axyron-$asset"
+          done
+          grep -q "IntersectionObserver" /tmp/axyron-homepage
+          grep -q "workspace.js" /tmp/axyron-homepage
+          grep -q "studio.js" /tmp/axyron-homepage
           curl --fail --silent --show-error --output /tmp/axion-live http://127.0.0.1:18080/health/live
           grep -q '"status":"alive"' /tmp/axion-live
           api_status="$(curl --silent --output /tmp/axion-auth-response --write-out '%{http_code}' http://127.0.0.1:18080/auth/me)"
