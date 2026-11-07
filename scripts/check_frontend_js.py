@@ -1,4 +1,4 @@
-"""Extrae los scripts inline de AXION STUDIO y valida sintaxis con Node.js."""
+"""Extrae los scripts inline de Axyron Atomic y valida sintaxis con Node.js."""
 from html.parser import HTMLParser
 from pathlib import Path
 import subprocess
@@ -29,7 +29,7 @@ class ScriptExtractor(HTMLParser):
 
 
 def main():
-    html = Path(__file__).resolve().parents[1] / "frontend" / "index.html"
+    html = Path(__file__).resolve().parents[1] / "frontend" / "Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html"
     parser = ScriptExtractor()
     parser.feed(html.read_text(encoding="utf-8"))
     if not parser.scripts:
