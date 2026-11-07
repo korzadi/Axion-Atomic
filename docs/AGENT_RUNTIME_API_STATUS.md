@@ -228,3 +228,27 @@ Esta sección prevalece sobre las observaciones históricas anteriores cuando de
 - `AUTH_ENABLED=false` continúa siendo el estado operativo informado; el código de runtime integrado no habilita por sí mismo el acceso público ni autoriza cambiar la configuración del VPS.
 
 **Alcance de verificación:** esta actualización documenta la inspección del código de `main`. No certifica ejecución en VPS, Docker real, autenticación pública, ni aislamiento de contenedores.
+
+
+## Endurecimiento del protocolo de respuesta del modelo — 7 de noviembre de 2026
+
+La auditoría del parser de respuestas de AXYRON detectó que `parse_action` aceptaba el primer objeto JSON válido e ignoraba contenido adicional posterior. Eso permitía respuestas ambiguas con texto o incluso un segundo objeto JSON después de la acción interpretada.
+
+Se endureció el parser:
+- Rechaza cualquier contenido no vacío después del único objeto JSON.
+- Conserva compatibilidad con un bloque Markdown JSON único y texto introductorio, sin aceptar un segundo objeto o instrucciones añadidas al final.
+- Los casos ambiguos se convierten en error de formato y pasan por el límite existente de fallos de parseo; no se ejecuta una segunda acción escondida en el mismo mensaje.
+- Se añadieron pruebas para texto final, objetos concatenados y bloques contradictorios.
+
+Archivos: `agent/coding_agent.py` y `tests/test_coding_agent.py`.
+
+### Validación CI del cambio
+
+GitHub Actions run [42404444729](https://github.com/korzadi/Axion-Atomic/actions/runs/42404444729), asociado exactamente al HEAD `e045d10158163be198128bba2708c598d00da410`, terminó con **success**:
+- Python: **664 passed, 9 skipped, 4 warnings**.
+- Axyron Studio browser E2E: success.
+- Build y smoke test de imagen: success.
+- Migraciones PostgreSQL: success.
+- Integración autenticada de Qdrant Cloud: success.
+
+Esta CI valida los tests automatizados y los jobs declarados; no certifica ejecución del agente en el VPS ni habilita el sandbox Docker del runtime HTTP.
