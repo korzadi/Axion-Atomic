@@ -35,6 +35,9 @@ async function newPage(role = "owner") {
   await page.route("**/billing/catalog", route => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify({ models: [], checkout_enabled: false })
   }));
+  await page.route("**/auth/oauth/providers", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ google: true, github: false })
+  }));
   await page.goto(baseUrl);
   await page.locator('[data-open="login"]').first().click();
   await page.locator("#email").fill(user.email);
@@ -103,6 +106,9 @@ async function viewerCannotUpload() {
 async function oauthRequiresTermsAcceptance() {
   const context = await browser.newContext();
   const page = await context.newPage();
+  await page.route("**/auth/oauth/providers", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ google: true, github: false })
+  }));
   await page.goto(baseUrl);
   await page.locator('[data-open="login"]').first().click();
   await page.locator('[data-oauth="google"]').click();
