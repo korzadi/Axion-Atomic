@@ -92,6 +92,8 @@ def test_usage_endpoint_authorizes_project_and_scopes_queries_to_user():
 
 
 def test_usage_endpoint_preserves_unknown_token_totals_as_null():
+    # Project authorization is covered separately; isolate aggregation behavior here.
+
     engine = _Engine()
     engine.connection.execute = lambda statement, params: _Result(
         one={
