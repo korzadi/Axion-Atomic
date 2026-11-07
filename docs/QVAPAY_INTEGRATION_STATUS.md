@@ -28,7 +28,7 @@ La captura compartida por el propietario mostraba:
 - Comisión de conversión mostrada en esa pantalla: 0,5 %.
 - Límites visibles en ese momento: USD 0,10–500 por pago y disponibilidad diaria de USD 1.000.
 
-Son datos de una pantalla/cuenta en ese momento, no tarifas ni límites contractuales permanentes. La comisión de conversión tampoco debe confundirse con una comisión de AXION ATOMIC.
+Son datos de una pantalla/cuenta en ese momento, no tarifas ni límites contractuales permanentes. La comisión de conversión tampoco debe confundirse con una comisión de AXYRON ATOMIC.
 
 ## Confirmaciones necesarias de QvaPay para Lightning Address
 
@@ -37,7 +37,7 @@ Antes de implementar o activar el adaptador, obtener confirmación oficial por e
 1. Si cada orden puede generar una invoice Lightning única o incluir una referencia externa.
 2. Si existe webhook/notificación de pagos Lightning entrantes y su autenticación/firma exacta.
 3. Si existe endpoint servidor-a-servidor para consultar una transacción Lightning y obtener identificador estable, importe, moneda, destinatario y estado final.
-4. Cómo correlacionar inequívocamente cada pago con una orden de AXION ATOMIC.
+4. Cómo correlacionar inequívocamente cada pago con una orden de AXYRON ATOMIC.
 5. Cómo se representan pagos parciales, pagos repetidos, tardíos, expirados, reembolsados o revertidos.
 6. Si USD es el importe de liquidación verificable o solo una preferencia de conversión de la cuenta.
 7. Límites y comisiones vigentes para la cuenta comercial al momento de operar.
