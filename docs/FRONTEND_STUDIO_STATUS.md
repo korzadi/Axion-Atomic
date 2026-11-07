@@ -132,3 +132,28 @@ Se añadieron además las secciones **Privacidad y legal**, **API e integracione
 Por decisión de producto, Axyron Studio mantiene todas las páginas de usuario en una sola SPA, pero excluye Administración de su navegación. El host exacto `admin.axyronatomic.com` sirve un portal independiente desde `frontend/admin.html`, con JavaScript propio, inicio de sesión en ese subdominio y lectura de `/admin/access/me`. La cookie de sesión es host-only: el administrador inicia sesión directamente en el subdominio administrativo, sin ampliar cookies al dominio padre.
 
 El portal muestra únicamente autorización, roles y permisos reales. La API actual declara `mutations_enabled=false`; no se simulan operaciones de escritura. Para publicar el subdominio aún se requiere DNS correcto, un virtual host Nginx que proxyee a la API y certificado TLS válido. Este cambio no altera Nginx ni despliega el VPS.
+
+
+## Tablero de fases — corte del 7 de noviembre de 2026
+
+Porcentajes estimados de implementación, no porcentajes de certificación ni de disponibilidad productiva:
+
+| Fase | Alcance | Avance estimado | Bloqueo principal |
+|---|---|---:|---|
+| 1 | Marca, dominio principal y landing | 95% | Validación de la versión desplegada actualizada |
+| 2 | API, base de datos y servicios | 85% | Validación operativa completa tras el último cambio |
+| 3 | Axyron Studio SPA y diseño unificado | 85% | Pruebas visuales autenticadas y responsive |
+| 4 | Integración de páginas con API real | 75% | Recorrido completo con sesión real |
+| 5 | Atomic Code y workspace | 70% | Prueba real de inferencia y persistencia con usuario autenticado |
+| 6 | Registro, login, OAuth y sesiones | 55% | AUTH_ENABLED continúa desactivado; falta validar proveedores/correo reales |
+| 7 | MFA y recuperación | 55% | Cerrar validación de rotación de clave y flujos reales |
+| 8 | Portal admin independiente | 35% | Configurar DNS, Nginx/TLS y validar roles con cuenta autorizada |
+| 9 | Facturación y pagos | 20% | Checkout, proveedor y conciliación firmada no habilitados |
+| 10 | Atomic Vision, Reasoning y Video | 10% | Runtimes y productos no publicados |
+| 11 | CI, pruebas y empaquetado | 75% | La última ejecución está en cola; corregidos dos fallos detectados en pruebas previas |
+| 12 | Despliegue de la versión actual | 65% | Actualizar VPS requiere aprobación y procedimiento de despliegue separado |
+| 13 | Auditoría final y lanzamiento público | 0% | Depende del cierre de los gates anteriores |
+
+El portal administrativo está separado de la SPA principal y su URL prevista es `https://admin.axyronatomic.com`. El frontend del portal y el enrutamiento por Host ya están en GitHub; el DNS, Nginx y certificado de ese subdominio todavía no se han comprobado ni modificado.
+
+La autenticación sigue desactivada en producción. No se deben aceptar registros ni presentar el portal como operativo hasta completar la validación de MFA, correo, OAuth, cookies y autorización administrativa. No se ha desplegado este corte en el VPS.
