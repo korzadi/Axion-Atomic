@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     ollama_base_url: str = "http://localhost:11434"
     # Consumir el modelo local ya existente; no descargar, recrear ni modificar Ollama.
-    chat_model: str = "atomic-code:16k-8k"
+    chat_model: str = "atomic-code:1.1"
     num_ctx: int = 16384
     embed_model: str = "nomic-embed-text"
     embed_dimension: int = 768
@@ -65,7 +65,7 @@ class Settings(BaseSettings):
         return f"https://{host}" + (f":{parsed.port}" if parsed.port else "")
 
     qdrant_api_key: str | None = None
-    qdrant_collection: str = "qwen_knowledge"
+    qdrant_collection: str = "axion_atomic_knowledge"
     database_url: str = "postgresql+psycopg://axion:change-me@localhost:5433/axion_atomic"
     api_key: str | None = None
     legacy_api_enabled: bool = False

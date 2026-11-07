@@ -83,7 +83,8 @@ async def health():
             ("qdrant", settings.qdrant_url.rstrip("/") + "/healthz"),
         ):
             try:
-                response = await client.get(url)
+                headers = {"api-key": settings.qdrant_api_key} if key == "qdrant" and settings.qdrant_api_key else {}
+                response = await client.get(url, headers=headers)
                 if response.is_success:
                     checks[key] = "ok"
             except httpx.HTTPError:
