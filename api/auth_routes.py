@@ -138,7 +138,7 @@ async def login(req: LoginRequest, request: Request, response: Response):
     )
     response.headers["Cache-Control"] = "no-store"
     response.set_cookie(
-        key=COOKIE_NAME, value=token, max_age=SESSION_MAX_AGE,
+        key=COOKIE_NAME, value=token, max_age=SESSION_MAX_AGE, httponly=True,
         secure=settings.auth_cookie_secure, samesite="lax", path="/",
     )
     response.set_cookie(
