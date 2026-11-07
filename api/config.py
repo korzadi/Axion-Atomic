@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     legacy_api_enabled: bool = False
     workspace_root: str = "/workspace"
     auth_enabled: bool = False
+    # Facturación transaccional: permanece desactivada hasta configurar clave y cuotas/lotes reales.
+    billing_enforcement_enabled: bool = False
+    billing_input_credit_weight: int = 1
+    billing_output_credit_weight: int = 1
+    billing_purchased_fallback_allowed: bool = True
     auth_cookie_secure: bool = True
     oauth_public_base_url: str | None = None
     google_oauth_client_id: str | None = Field(default=None, validation_alias=AliasChoices("GOOGLE_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_ID"))
