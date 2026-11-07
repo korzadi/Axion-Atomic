@@ -75,6 +75,17 @@ def test_atomic_code_sends_user_selected_generation_settings_to_real_api():
     assert 'temperature: 0.2, max_tokens: 2048' not in workspace
     assert '"/workspace/chat/completions"' in workspace
 
+def test_workspace_locks_project_switching_while_inference_is_running():
+    source = (FRONTEND.parent / "workspace.js").read_text(encoding="utf-8")
+    assert "function setBusy(value)" in source
+    assert "projectSelect.disabled = busy" in source
+    assert '$("ws-create-project").disabled = busy' in source
+    assert '$("ws-new-project").disabled = busy' in source
+    assert 'form.setAttribute("aria-busy", busy ? "true" : "false")' in source
+    assert "setBusy(true);" in source
+    assert "finally { setBusy(false); }" in source
+
+
 def test_email_verification_link_uses_registered_api_route():
     source = FRONTEND.read_text(encoding="utf-8")
     assert "api('/auth/verify-email'" in source
