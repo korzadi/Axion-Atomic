@@ -203,6 +203,7 @@ async def oauth_callback(provider: str, request: Request, code: str | None = Non
             issue_login_challenge, engine=engine, user_id=user["id"], purpose="oauth",
         )
         result = RedirectResponse("/?mfa_required=1", status_code=303)
+        result.headers["Cache-Control"] = "no-store"
         result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
         result.set_cookie(
             key="axion_mfa_challenge", value=challenge, max_age=300, httponly=True,
@@ -299,6 +300,7 @@ async def mfa_challenge_verify(
     token, csrf = await run_in_threadpool(
         create_session, user_id=user_id, user_agent=request.headers.get("user-agent"),
     )
+    response.headers["Cache-Control"] = "no-store"
     response.set_cookie(
         key=COOKIE_NAME, value=token, max_age=SESSION_MAX_AGE, httponly=True,
         secure=settings.auth_cookie_secure, samesite="lax", path="/",
