@@ -3,17 +3,26 @@ from datetime import datetime, timedelta, timezone
 import secrets
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from urllib.parse import quote
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from api.auth import (
     COOKIE_NAME, CSRF_COOKIE, authenticate, create_user, current_user,
-    require_csrf, revoke_session,
+    require_csrf, revoke_session, verify_credentials, create_session,
 )
 from api.config import settings
-from api.schemas import LoginRequest, RegisterRequest, ProjectCreateRequest
+from api.schemas import (
+    LoginRequest, RegisterRequest, ProjectCreateRequest,
+    MfaChallengeVerifyRequest, MfaConfirmRequest,
+)
+from api.mfa import AesGcmTotpCipher, EnvironmentMfaKeyProvider, MfaError
+from api.mfa_store import (
+    begin_enrollment, confirm_enrollment, get_mfa_status, is_mfa_enabled,
+    issue_login_challenge, verify_login_challenge,
+)
 from api.project_creation import create_owned_project_with_workspace
 from api.projects import list_user_projects
 from api.database import engine
@@ -114,7 +123,18 @@ async def login(req: LoginRequest, request: Request, response: Response):
     _require_auth_feature()
     await run_in_threadpool(_enforce_rate_limit, request, namespace="auth:login:ip", limit=30, window=timedelta(minutes=1))
     await run_in_threadpool(_enforce_rate_limit, request, namespace="auth:login:account", subject=req.email.strip().casefold(), limit=10, window=timedelta(minutes=5))
-    user, token, csrf = await run_in_threadpool(authenticate, req.email, req.password, request.headers.get("user-agent"))
+    user = await run_in_threadpool(verify_credentials, req.email, req.password)
+    if await run_in_threadpool(is_mfa_enabled, engine=engine, user_id=user["id"]):
+        challenge = await run_in_threadpool(
+            issue_login_challenge, engine=engine, user_id=user["id"], purpose="login",
+        )
+        return JSONResponse(
+            status_code=202,
+            content={"mfa_required": True, "challenge_token": challenge, "expires_in": 300},
+        )
+    token, csrf = await run_in_threadpool(
+        create_session, user_id=user["id"], user_agent=request.headers.get("user-agent"),
+    )
     response.set_cookie(
         key=COOKIE_NAME, value=token, max_age=SESSION_MAX_AGE, httponly=True,
         secure=settings.auth_cookie_secure, samesite="lax", path="/",
@@ -176,7 +196,19 @@ async def oauth_callback(provider: str, request: Request, code: str | None = Non
         result = RedirectResponse("/?oauth_error=failed", status_code=303)
         result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
         return result
-    session, csrf = await run_in_threadpool(_create_oauth_session, user["id"])
+    if await run_in_threadpool(is_mfa_enabled, engine=engine, user_id=user["id"]):
+        challenge = await run_in_threadpool(
+            issue_login_challenge, engine=engine, user_id=user["id"], purpose="oauth",
+        )
+        result = RedirectResponse("/?mfa_required=1", status_code=303)
+        result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
+        result.set_cookie(
+            key="axion_mfa_challenge", value=challenge, max_age=300, httponly=True,
+            secure=settings.auth_cookie_secure, samesite="lax",
+            path="/auth/mfa/challenge/verify",
+        )
+        return result
+    session, csrf = await run_in_threadpool(create_session, user_id=user["id"])
     result = RedirectResponse("/?oauth=success", status_code=303)
     result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
     result.set_cookie(key=COOKIE_NAME, value=session, max_age=SESSION_MAX_AGE,
@@ -186,6 +218,96 @@ async def oauth_callback(provider: str, request: Request, code: str | None = Non
                       httponly=False, secure=settings.auth_cookie_secure,
                       samesite="lax", path="/")
     return result
+
+
+@router.get("/mfa/status")
+async def mfa_status(user=Depends(_authenticated_user)):
+    return await run_in_threadpool(get_mfa_status, engine=engine, user_id=user["id"])
+
+
+@router.post("/mfa/enroll")
+async def mfa_enroll(request: Request, user=Depends(_csrf_guard)):
+    await run_in_threadpool(
+        _enforce_rate_limit, request, namespace="auth:mfa:enroll",
+        limit=3, window=timedelta(hours=1), subject=user["id"],
+    )
+    try:
+        cipher = AesGcmTotpCipher(EnvironmentMfaKeyProvider())
+        secret = await run_in_threadpool(
+            begin_enrollment, engine=engine, cipher=cipher, user_id=user["id"],
+        )
+    except (MfaError, ValueError) as exc:
+        raise HTTPException(status_code=503 if isinstance(exc, MfaError) else 409,
+                            detail="No se pudo iniciar el enrolamiento MFA.") from exc
+    label = quote("AXION ATOMIC:" + user["email"])
+    issuer = quote("AXION ATOMIC")
+    uri = f"otpauth://totp/{label}?secret={secret}&issuer={issuer}&algorithm=SHA1&digits=6&period=30"
+    return {"secret": secret, "otpauth_uri": uri, "issuer": "AXION ATOMIC"}
+
+
+@router.post("/mfa/confirm")
+async def mfa_confirm(req: MfaConfirmRequest, request: Request, user=Depends(_csrf_guard)):
+    await run_in_threadpool(
+        _enforce_rate_limit, request, namespace="auth:mfa:confirm",
+        limit=10, window=timedelta(minutes=10), subject=user["id"],
+    )
+    try:
+        cipher = AesGcmTotpCipher(EnvironmentMfaKeyProvider())
+        recovery_codes = await run_in_threadpool(
+            confirm_enrollment, engine=engine, cipher=cipher,
+            user_id=user["id"], code=req.code,
+        )
+    except (MfaError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="No se pudo confirmar el código MFA.") from exc
+    return {"status": "enabled", "recovery_codes": recovery_codes}
+
+
+@router.post("/mfa/challenge/verify")
+async def mfa_challenge_verify(
+    req: MfaChallengeVerifyRequest, request: Request, response: Response,
+    oauth_challenge: str | None = Cookie(default=None, alias="axion_mfa_challenge"),
+):
+    _require_auth_feature()
+    challenge_token = oauth_challenge or req.challenge_token
+    expected_purpose = "oauth" if oauth_challenge else "login"
+    if not challenge_token:
+        raise HTTPException(status_code=400, detail="Desafío MFA requerido")
+    await run_in_threadpool(
+        _enforce_rate_limit, request, namespace="auth:mfa:verify:ip",
+        limit=20, window=timedelta(minutes=10),
+    )
+    from api.mfa_store import _digest as _mfa_digest
+    await run_in_threadpool(
+        _enforce_rate_limit, request, namespace="auth:mfa:verify:challenge",
+        limit=5, window=timedelta(minutes=10), subject=_mfa_digest(challenge_token),
+    )
+    try:
+        cipher = AesGcmTotpCipher(EnvironmentMfaKeyProvider())
+        user_id = await run_in_threadpool(
+            verify_login_challenge, engine=engine, cipher=cipher,
+            challenge_token=challenge_token, code=req.code,
+            expected_purpose=expected_purpose,
+        )
+    except MfaError as exc:
+        raise HTTPException(status_code=503, detail="La verificación MFA no está disponible.") from exc
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Código MFA inválido o desafío expirado.")
+    token, csrf = await run_in_threadpool(
+        create_session, user_id=user_id, user_agent=request.headers.get("user-agent"),
+    )
+    response.set_cookie(
+        key=COOKIE_NAME, value=token, max_age=SESSION_MAX_AGE, httponly=True,
+        secure=settings.auth_cookie_secure, samesite="lax", path="/",
+    )
+    response.set_cookie(
+        key=CSRF_COOKIE, value=csrf, max_age=SESSION_MAX_AGE, httponly=False,
+        secure=settings.auth_cookie_secure, samesite="lax", path="/",
+    )
+    response.delete_cookie(
+        "axion_mfa_challenge", path="/auth/mfa/challenge/verify",
+        secure=settings.auth_cookie_secure, httponly=True, samesite="lax",
+    )
+    return {"status": "authenticated", "csrf_token": csrf, "expires_in": SESSION_MAX_AGE}
 
 
 @router.get("/me")
