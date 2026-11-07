@@ -25,7 +25,7 @@ Para descargar el pack completo y conservar también sus referencias compartidas
 bash scripts/install_agent_skills.sh
 ```
 
-El instalador fija el upstream en el commit `301b02b12bff98e4688e6984af6556802322bbde`, verifica que existan las 25 skills y conserva el archivo `LICENSE`. Se detiene si el destino ya existe; nunca sobrescribe una instalación anterior.
+El instalador fija el upstream en el commit `301b02b12bff98e4688e6984af6556802322bbde`, verifica que existan las 25 skills y conserva `LICENSE` y la carpeta compartida `references/`. Se detiene si el destino ya existe; nunca sobrescribe una instalación anterior.
 
 El runtime AXYRON descubre tanto skills individuales en `.agents/skills/<skill>/SKILL.md` como bundles completos en `.agents/skills/<pack>/skills/<skill>/SKILL.md`. La carpeta `.agents/skills` es también la ubicación de workspace documentada por Antigravity.
 
