@@ -40,8 +40,9 @@ class EnvironmentMfaKeyProvider:
     """Proveedor runtime desde variables de entorno; nunca registra ni genera claves.
 
     Requiere AXION_MFA_ENCRYPTION_KEY_B64 (32 bytes en Base64) y
-    AXION_MFA_ENCRYPTION_KEY_ID. La rotación requiere conservar claves históricas
-    en un gestor de secretos; este proveedor mínimo solo resuelve la clave activa.
+    AXION_MFA_ENCRYPTION_KEY_ID. Para descifrar registros antiguos admite
+    AXION_MFA_ENCRYPTION_KEYRING_B64 con un objeto JSON de claves históricas;
+    todas las claves deben proceder del gestor de secretos del runtime.
     """
 
     KEY_ENV = "AXION_MFA_ENCRYPTION_KEY_B64"
