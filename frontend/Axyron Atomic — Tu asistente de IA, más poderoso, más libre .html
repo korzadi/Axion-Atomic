@@ -118,7 +118,7 @@ input:focus{outline:2px solid var(--ac);border-color:transparent}
 <a class="logo" href="#inicio" aria-label="Axyron Atomic">
 <svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#3b82f6"/><stop offset="1" stop-color="#a855f7"/></linearGradient></defs><ellipse cx="32" cy="38" rx="28" ry="10" fill="none" stroke="url(#lg)" stroke-width="3.5" transform="rotate(-18 32 38)"/><path d="M32 6 10 54h11l11-27 11 27h11z" fill="url(#lg)"/><circle cx="32" cy="40" r="3.5" fill="#fff"/></svg>
 <span>Axyron <span class="grad">Atomic</span></span></a>
-<nav class="links" id="links"><a href="#modelos">Modelos</a><a href="#funciones">Funciones</a><a href="#como">Cómo funciona</a><a href="#demo">Demo</a><a href="#seguridad">Seguridad</a><a href="#precios">Precios</a><a href="#faq">FAQ</a><div class="mauth"><button class="btn" data-open="login">Iniciar sesión</button><button class="btn p" data-open="reg">Registrarse</button></div></nav>
+<nav class="links" id="links"><a href="#modelos">Modelos</a><a href="#funciones">Funciones</a><a href="#como">Cómo funciona</a><a href="#demo">Demo</a><a href="#seguridad">Seguridad</a><a href="#precios">Precios</a><a href="#faq">FAQ</a><a href="#workspace-app" id="workspace-nav" hidden>Mi espacio</a><div class="mauth"><button class="btn" data-open="login">Iniciar sesión</button><button class="btn p" data-open="reg">Registrarse</button></div></nav>
 <div class="acts">
 <div class="theme"><button class="btn" id="tbtn" aria-label="Cambiar tema" aria-haspopup="true"><span id="ticon">🖥️</span></button>
 <div class="tmenu" id="tmenu"><button data-t="light">☀️ Claro</button><button data-t="dark">🌙 Oscuro</button><button data-t="system">🖥️ Sistema</button></div></div>
@@ -310,7 +310,7 @@ if(!ok)setTimeout(function(){ck.classList.add('show')},1500);
 document.getElementById('cka').onclick=function(){ck.classList.remove('show');try{localStorage.setItem('axyron-ck','1')}catch(e){}};
 document.getElementById('nlf').onsubmit=function(e){e.preventDefault();var m=document.getElementById('nlm');m.textContent=/^\S+@\S+\.\S+$/.test(document.getElementById('nle').value)?'El boletín estará disponible en una próxima actualización.':'Correo no válido.'};
 /* Sesión real validada por el backend mediante cookie HttpOnly. */
- function setU(u){cur=u;document.querySelectorAll('.acts [data-open],.mauth').forEach(function(x){x.style.display=u?'none':''});var el=document.getElementById('usr');el.hidden=!u;if(u){var n=u.display_name||u.email||'Usuario';document.getElementById('av').textContent=n.charAt(0).toUpperCase();document.getElementById('un').textContent=n}window.dispatchEvent(new CustomEvent('axyron:user',{detail:{user:u}}))}
+ function setU(u){cur=u;document.querySelectorAll('.acts [data-open],.mauth').forEach(function(x){x.style.display=u?'none':''});var el=document.getElementById('usr');el.hidden=!u;var workspaceNav=document.getElementById('workspace-nav');if(workspaceNav)workspaceNav.hidden=!u;if(u){var n=u.display_name||u.email||'Usuario';document.getElementById('av').textContent=n.charAt(0).toUpperCase();document.getElementById('un').textContent=n}window.dispatchEvent(new CustomEvent('axyron:user',{detail:{user:u}}))}
  var cur=null;loadUser();loadPublicData();
 /* reveal + counters */
 var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){x.target.classList.add('in');io.unobserve(x.target)}})},{threshold:.12});
