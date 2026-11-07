@@ -57,6 +57,39 @@ class EmailDeliveryTests(unittest.TestCase):
         server.starttls.assert_called_once()
         server.send_message.assert_called_once()
 
+    @patch("api.email_delivery.smtplib.SMTP_SSL")
+    def test_implicit_tls_uses_ssl_transport(self, smtp_ssl_class):
+        server = smtp_ssl_class.return_value.__enter__.return_value
+        settings = Mock(smtp_host="smtp.example", smtp_port=465, email_from="no-reply@example",
+                        smtp_starttls=False, smtp_ssl=True, smtp_username=None, smtp_password=None)
+        send_transactional_email(settings=settings, recipient="user@example.com",
+                                  subject="test", body="test")
+        smtp_ssl_class.assert_called_once()
+        server.send_message.assert_called_once()
+
+    @patch("api.email_delivery.smtplib.SMTP")
+    def test_authentication_occurs_after_starttls(self, smtp_class):
+        server = smtp_class.return_value.__enter__.return_value
+        settings = Mock(smtp_host="smtp.example", smtp_port=587, email_from="no-reply@example",
+                        smtp_starttls=True, smtp_ssl=False, smtp_username="smtp-user",
+                        smtp_password="smtp-password")
+        send_transactional_email(settings=settings, recipient="user@example.com",
+                                  subject="test", body="test")
+        self.assertLess(server.starttls.call_count, 2)
+        server.login.assert_called_once_with("smtp-user", "smtp-password")
+        server.send_message.assert_called_once()
+
+    @patch("api.email_delivery.smtplib.SMTP")
+    def test_starttls_failure_prevents_message_delivery(self, smtp_class):
+        server = smtp_class.return_value.__enter__.return_value
+        server.starttls.side_effect = RuntimeError("TLS negotiation failed")
+        settings = Mock(smtp_host="smtp.example", smtp_port=587, email_from="no-reply@example",
+                        smtp_starttls=True, smtp_ssl=False, smtp_username=None, smtp_password=None)
+        with self.assertRaises(RuntimeError):
+            send_transactional_email(settings=settings, recipient="user@example.com",
+                                      subject="test", body="test")
+        server.send_message.assert_not_called()
+
 
 class RecoveryGateTests(unittest.TestCase):
     def test_recovery_routes_fail_closed_until_auth_is_enabled(self):
