@@ -10,7 +10,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL or not DATABASE_URL.startswith(("postgresql://", "postgresql+")):
     pytest.skip("Requiere PostgreSQL del job postgres-migrations", allow_module_level=True)
 
-from api.mfa import AesGcmTotpCipher, totp_at
+from api.mfa import AesGcmTotpCipher, hash_recovery_code, totp_at
 from api.mfa_store import (
     begin_enrollment,
     confirm_enrollment,
@@ -52,28 +52,29 @@ def test_mfa_enrollment_totp_replay_recovery_and_expiry_are_transactional():
         )
         assert len(recovery_codes) == 10
 
+        login_now = now + timedelta(seconds=30)
         challenge = issue_login_challenge(
-            engine=engine, user_id=user_id, purpose="login", now=now,
+            engine=engine, user_id=user_id, purpose="login", now=login_now,
         )
         assert verify_login_challenge(
             engine=engine, cipher=cipher, challenge_token=challenge,
-            code=totp_at(secret, int(now.timestamp())), now=now,
+            code=totp_at(secret, int(login_now.timestamp())), now=login_now,
         ) == user_id
         # Desafío consumido y contador TOTP no pueden reutilizarse.
         assert verify_login_challenge(
             engine=engine, cipher=cipher, challenge_token=challenge,
-            code=totp_at(secret, int(now.timestamp())), now=now,
+            code=totp_at(secret, int(login_now.timestamp())), now=login_now,
         ) is None
 
         recovery_challenge = issue_login_challenge(
-            engine=engine, user_id=user_id, purpose="oauth", now=now,
+            engine=engine, user_id=user_id, purpose="oauth", now=login_now,
         )
         assert verify_login_challenge(
             engine=engine, cipher=cipher, challenge_token=recovery_challenge,
-            code=recovery_codes[0], now=now,
+            code=recovery_codes[0], now=login_now,
         ) == user_id
         replay_challenge = issue_login_challenge(
-            engine=engine, user_id=user_id, now=now,
+            engine=engine, user_id=user_id, now=login_now,
         )
         assert verify_login_challenge(
             engine=engine, cipher=cipher, challenge_token=replay_challenge,
@@ -85,8 +86,8 @@ def test_mfa_enrollment_totp_replay_recovery_and_expiry_are_transactional():
         )
         assert verify_login_challenge(
             engine=engine, cipher=cipher, challenge_token=expired,
-            code=totp_at(secret, int(now.timestamp())),
-            now=now + timedelta(minutes=6),
+            code=totp_at(secret, int(login_now.timestamp())),
+            now=login_now + timedelta(minutes=6),
         ) is None
 
         with engine.connect() as conn:
@@ -96,8 +97,8 @@ def test_mfa_enrollment_totp_replay_recovery_and_expiry_are_transactional():
             """), {"user_id": user_id}).one()
             used_recovery = conn.execute(text("""
                 SELECT used_at FROM user_mfa_recovery_codes
-                WHERE user_id=:user_id AND code_hash=encode(digest(:code,'sha256'),'hex')
-            """), {"user_id": user_id, "code": recovery_codes[0].upper()}).scalar_one()
+                WHERE user_id=:user_id AND code_hash=:code_hash
+            """), {"user_id": user_id, "code_hash": hash_recovery_code(recovery_codes[0])}).scalar_one()
         assert credential.state == "enabled"
         assert credential.last_accepted_counter >= 0
         assert used_recovery is not None
