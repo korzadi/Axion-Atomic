@@ -74,3 +74,11 @@ def test_atomic_code_sends_user_selected_generation_settings_to_real_api():
     assert 'max_tokens: Number.parseInt($("ws-max-tokens").value, 10)' in workspace
     assert 'temperature: 0.2, max_tokens: 2048' not in workspace
     assert '"/workspace/chat/completions"' in workspace
+
+def test_email_verification_link_uses_registered_api_route():
+    source = FRONTEND.read_text(encoding="utf-8")
+    assert "api('/auth/email/verify'" in source
+    assert "api('/auth/verify-email'" not in source
+    assert "api('/auth/password/forgot'" in source
+    assert "api('/auth/password/reset'" in source
+
