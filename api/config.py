@@ -1,7 +1,7 @@
 import ipaddress
 from urllib.parse import urlsplit
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -75,8 +75,8 @@ class Settings(BaseSettings):
     oauth_public_base_url: str | None = None
     google_oauth_client_id: str | None = None
     google_oauth_client_secret: str | None = None
-    github_oauth_client_id: str | None = Field(default=None, validation_alias="AXION_GITHUB_CLIENT_ID")
-    github_oauth_client_secret: str | None = Field(default=None, validation_alias="AXION_GITHUB_CLIENT_SECRET")
+    github_oauth_client_id: str | None = Field(default=None, validation_alias=AliasChoices("AXYRON_GITHUB_CLIENT_ID", "AXION_GITHUB_CLIENT_ID"))
+    github_oauth_client_secret: str | None = Field(default=None, validation_alias=AliasChoices("AXYRON_GITHUB_CLIENT_SECRET", "AXION_GITHUB_CLIENT_SECRET"))
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None
