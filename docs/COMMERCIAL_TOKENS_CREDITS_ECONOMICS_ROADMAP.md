@@ -406,3 +406,33 @@ Pruebas añadidas en `tests/test_usage_routes.py`: autenticación deshabilitada,
 | Conciliación de medición | 0% |
 
 **Avance estimado de Fase comercial 3: 60%.** La lectura de consumo está disponible en código, pero la telemetría sigue siendo best-effort. No se activan reservas, cuotas, ledger, pagos ni cobros. La fase no está cerrada.
+
+
+## 10. Actualización de implementación — 2026-11-07
+
+Esta sección prevalece sobre los hallazgos históricos de la auditoría inicial cuando describe código incorporado después de ella.
+
+### Medición y consulta de uso
+
+- El backend captura contadores de inferencia de Ollama y los vincula a la solicitud autenticada.
+- Los eventos de uso se persisten en PostgreSQL con identidad de usuario/proyecto e idempotencia por `request_id`.
+- La consulta autenticada `GET /workspace/usage` devuelve totales y eventos recientes, exige autenticación habilitada y autorización de membresía en el proyecto.
+- Las consultas filtran simultáneamente por usuario y proyecto. Un usuario sin permiso no llega a ejecutar la consulta de métricas.
+- Los totales de tokens permanecen `NULL` cuando no hay medición; la API informa por separado solicitudes medidas y mediciones no disponibles. No convierte ausencia de datos en consumo cero.
+- El endpoint está incorporado y validado por CI; no está habilitado en producción ni acredita que `AUTH_ENABLED` esté activado en el entorno operativo.
+
+### Recuperación durable de facturación
+
+Existe un flujo durable de reserva, claim único, inferencia, resultado cifrado y liquidación. También existe una cola de recuperación para ejecuciones completadas cuya reserva sigue retenida: usa lease, backoff exponencial, límite de intentos y revisión manual. El worker recupera el resultado cifrado y no vuelve a ejecutar Ollama.
+
+Esto **no equivale a un patrón outbox independiente**. No se debe describir la recuperación actual como outbox ni afirmar que la reconciliación integral de todos los eventos esté terminada.
+
+### Evidencia CI
+
+Ejecución GitHub Actions `42362681566`, commit `a60b357b91140952face2b6fd50a8bd3095bddc8`: cuatro jobs aprobados (pruebas Python, migraciones PostgreSQL, integración Qdrant Cloud y E2E de AXION STUDIO). Python: **632 passed, 9 skipped, 3 warnings**. Los avisos incluyen APIs de ciclo de vida FastAPI/Starlette y deprecación de Node en acciones; no fallaron el pipeline.
+
+La evidencia CI valida el código en los entornos de prueba definidos. No sustituye staging, pruebas de carga, verificación de secretos/runtime, revisión de seguridad externa ni aceptación funcional.
+
+### Estado revisado de Fase comercial 3
+
+**Estimación: 62%.** El endpoint de consulta autenticada y su aislamiento por usuario/proyecto quedan incorporados y pasan CI. Siguen pendientes las pruebas reales de concurrencia/recuperación, reconciliación integral y decisión/implementación de un outbox independiente solo si se demuestra una necesidad de entrega asíncrona fiable.
