@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from agent.approval_gate import ApprovalError, InMemoryApprovalGate
-from agent.coding_agent import CodingAgent, parse_action
+from agent.coding_agent import CodingAgent, parse_action, system_prompt
 from agent.git import GitManager
 from agent.toolset import build_tools, validate_args
 from agent.workspace import Workspace
@@ -42,6 +42,11 @@ class AgentBase(unittest.IsolatedAsyncioTestCase):
 
 
 class ToolsetTests(AgentBase):
+    def test_agent_system_prompt_uses_final_axyron_identity(self):
+        prompt = system_prompt(self.tools)
+        self.assertIn("Eres AXYRON, el agente de ingeniería de AXYRON ATOMIC", prompt)
+        self.assertNotIn("AXION ATOMIC", prompt)
+
     def test_validation(self):
         t = self.tools["read_file"]
         for bad in ({}, {"path": 5}, {"path": "a", "x": 1}, {"path": "a", "start_line": True}, "texto"):
