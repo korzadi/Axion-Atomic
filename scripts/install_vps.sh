@@ -8,7 +8,15 @@ ENV_FILE="$ROOT/.env"
 BACKUPS="$ROOT/backups"
 MODE="${1:---prepare}"
 log(){ printf '[AXYRON] %s\n' "$*"; }
-die(){ printf '[ERROR] %s\n' "$*" >&2; exit 1; }
+die(){ printf '[ERROR] %s\\n' "$*" >&2; exit 1; }
+ensure_env_file_safe(){
+  [[ -f "$ENV_FILE" && ! -L "$ENV_FILE" ]] || die ".env debe ser un archivo regular y no un enlace simbólico; no se modificó ningún archivo."
+}
+ensure_env_file_safe_if_present(){
+  if [[ -L "$ENV_FILE" || -e "$ENV_FILE" ]]; then
+    ensure_env_file_safe
+  fi
+}
 usage(){ printf '%s\n' 'Uso: bash scripts/install_vps.sh [--prepare|--check|--deploy]'; }
 case "$MODE" in --prepare|--check|--deploy) ;; -h|--help) usage; exit 0 ;; *) usage; die "Opción desconocida";; esac
 command -v python3 >/dev/null || die "Se requiere Python 3."
@@ -19,6 +27,7 @@ docker compose version >/dev/null 2>&1 || die "Se requiere Docker Compose v2."
 [[ -f "$ROOT/compose.yaml" && -f "$ROOT/.env.example" ]] || die "Faltan compose.yaml o .env.example."
 
 prepare(){
+  ensure_env_file_safe_if_present
   if [[ ! -e "$ROOT/workspace" || ! -e "$ROOT/knowledge" || ! -e "$BACKUPS" ]]; then
     [[ "$EUID" -eq 0 ]] || die "Ejecuta --prepare como root para crear directorios con permisos correctos para el usuario de la API (UID 10001)."
   fi
