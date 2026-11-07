@@ -68,9 +68,17 @@ def parse_action(text: str) -> tuple[str, object, dict | None]:
         if ch != "{":
             continue
         try:
-            obj, _ = dec.raw_decode(text[i:])
+            obj, end = dec.raw_decode(text[i:])
         except ValueError:
             continue
+        # Se tolera texto introductorio y un único bloque Markdown JSON por
+        # compatibilidad, pero nunca contenido ejecutable/ambiguo después del
+        # primer objeto (por ejemplo, un segundo objeto de herramienta).
+        trailing = text[i + end:].strip()
+        if trailing == "```":
+            trailing = ""
+        if trailing:
+            raise ValueError("Hay contenido adicional después del objeto JSON")
         if not isinstance(obj, dict):
             continue
         if ("tool" in obj) == ("final" in obj):
