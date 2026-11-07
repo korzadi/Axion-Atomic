@@ -6,6 +6,7 @@ from agent.skills import SkillRegistry
 from agent.workspace import Workspace
 from agent.git import GitManager
 from agent.toolset import build_tools
+from agent.coding_agent import system_prompt
 
 
 class SkillRegistryTests(unittest.TestCase):
@@ -46,6 +47,15 @@ class SkillRegistryTests(unittest.TestCase):
         (outside / "SKILL.md").write_text("---\nname: outside\ndescription: outside\n---\n")
         (self.skills / "linked").symlink_to(outside, target_is_directory=True)
         self.assertEqual(SkillRegistry(self.root).discover(), [])
+
+    def test_system_prompt_requires_relevant_engineering_skills(self):
+        ws = Workspace(self.root, "p1")
+        tools = build_tools(ws, GitManager(ws))
+        prompt = system_prompt(tools)
+        self.assertIn("list_skills", prompt)
+        self.assertIn("programming-workflow", prompt)
+        self.assertIn("read_skill", prompt)
+        self.assertIn("no ejecuta scripts", prompt.lower())
 
     def test_skills_are_exposed_as_read_only_agent_tools(self):
         self.skills.mkdir(parents=True)

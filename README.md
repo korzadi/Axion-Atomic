@@ -132,3 +132,28 @@ Las siguientes skills quedan versionadas dentro del repositorio y se descubren d
 Para generar el mapa inicial del proyecto, solicita a AXYRON: **«Usa la skill codebase-summary para analizar todo este repositorio y guardar/actualizar el contexto del proyecto»**. Para refrescarlo tras cambios importantes, vuelve a solicitar el análisis. AXYRON debe leer el resumen al comenzar trabajos de ingeniería, contrastarlo con el código vigente y nunca tratarlo como sustituto de la fuente.
 
 Ambas skills son guías de solo lectura durante su análisis; no habilitan ejecución de scripts de terceros, instalaciones, despliegues ni acciones fuera de las aprobaciones existentes. No deben incluir secretos ni valores de variables de entorno en los informes.
+
+
+## AXYRON Engineering Skills — programación integral
+
+El agente incorpora un conjunto de skills especializadas para acompañar el ciclo completo de desarrollo. Se descubren desde `.agents/skills/` y se cargan bajo demanda; AXYRON no necesita leerlas todas para cada tarea.
+
+**Flujo principal:** `programming-workflow`, `feature-design`, `implementation-planning`, `architecture-design`.
+
+**Construcción:** `python-backend`, `frontend-web`, `api-contracts`, `postgresql-database`.
+
+**Calidad:** `test-engineering`, `systematic-debugging`, `code-review`, `receiving-code-review`, `performance-engineering`.
+
+**Seguridad y mantenimiento:** `secure-coding`, `git-workflow`, `technical-documentation`, `accessibility-ux`.
+
+Las skills son guías de trabajo, no plugins ejecutables. El agente debe consultar `programming-workflow` antes de tareas de programación y cargar solo las especializadas que correspondan. Se mantienen las aprobaciones humanas, el aislamiento por proyecto y las restricciones operativas existentes. Ninguna skill autoriza despliegues, cambios en producción, operaciones destructivas, ejecución de scripts de terceros ni acceso a secretos.
+
+### Estándares de ingeniería
+
+- Inspeccionar el código y las instrucciones del repositorio antes de modificar.
+- Mantener sincronizados backend, frontend, contratos, pruebas y documentación.
+- No inventar endpoints, datos demo ni capacidades aún no implementadas.
+- Investigar la causa raíz antes de corregir errores.
+- Probar los cambios y verificar el resultado antes de declarar que están terminados.
+- Revisar seguridad, permisos, aislamiento, accesibilidad y regresiones.
+- Documentar límites y evidencias reales, sin afirmar pruebas o despliegues no realizados.
