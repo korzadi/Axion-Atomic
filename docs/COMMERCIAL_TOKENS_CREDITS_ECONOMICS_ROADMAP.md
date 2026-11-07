@@ -333,3 +333,44 @@ Se publicó `docs/SHADOW_USAGE_POSTGRESQL_DESIGN.md` como propuesta técnica par
 ## 18. CI con PostgreSQL efímero
 
 Se añadió un job independiente `postgres-migrations` a `.github/workflows/ci.yml`. Usa PostgreSQL 16 efímero, aplica las cinco migraciones versionadas dos veces para verificar idempotencia y ejecuta `tests/test_postgres_migrations.py` para comprobar tablas, relaciones, restricciones e índices del esquema actual. El job todavía debe completar satisfactoriamente en GitHub Actions. Esta verificación no crea ni prueba aún la tabla de telemetría `inference_usage_events` y no implica cambios en bases de datos reales.
+
+
+## 18. Estado real de medición Shadow Mode y correcciones de validación (7 de noviembre de 2026)
+
+Esta sección **sustituye las afirmaciones anteriores de las secciones 15–17 que quedaron desactualizadas**.
+
+### Implementado en main
+
+- `api/ollama.py` conserva `InferenceResult`, contadores reales de Ollama y duraciones; los valores inválidos/ausentes permanecen `NULL`/`None`.
+- `migrations/006_inference_usage_events.sql` crea `inference_usage_events` con identidad, proyecto, modelo, contadores, duraciones, timestamp e índices.
+- `api/usage_events.py` persiste observaciones en PostgreSQL mediante transacción breve y `ON CONFLICT (request_id) DO NOTHING`.
+- `/workspace/chat/completions` genera un UUID y persiste la observación sin prompts, respuestas ni secretos. La escritura es best-effort: un fallo de PostgreSQL no interrumpe una inferencia ya aceptada y puede perderse el evento.
+- La ruta heredada `/v1` continúa fuera de medición individual. Shadow Mode no crea saldos, créditos, reservas, cuotas ni cobros.
+
+### Endurecimiento añadido el 7 de noviembre
+
+La revisión encontró que la ruta intentaba guardar contadores antes de validar que el modelo devuelto coincidiera con el modelo autorizado y que la inferencia hubiera terminado. Se corrigió el orden: ahora solo se persiste uso después de superar ambas validaciones. Se añadieron pruebas HTTP para comprobar que un modelo inesperado o una inferencia incompleta no generan eventos de uso ni historial de chat.
+
+### Estado de validación
+
+- La persistencia PostgreSQL best-effort está implementada; no debe marcarse como pendiente de implementación.
+- La prueba unitaria de mapeo y la prueba de esquema PostgreSQL existen.
+- El CI completo anterior confirmó migraciones y pruebas de PostgreSQL; la ejecución específica del endurecimiento del 7 de noviembre está pendiente de resultado.
+- No existe todavía outbox/reintento durable, consultas de consumo para usuarios, medición completa de concurrencia ni conciliación económica.
+- No se permite usar estos eventos como libro contable ni habilitar cobros.
+
+### Desglose actualizado de Fase comercial 3 — Medición
+
+| Submódulo | Avance |
+|---|---:|
+| Contrato InferenceResult y contadores Ollama | 100% |
+| Integración con chat autenticado | 100% |
+| Persistencia PostgreSQL best-effort e idempotencia por request_id | 100% código |
+| Validación de modelo y finalización antes de persistir | 100% código; CI pendiente |
+| Pruebas de parsing y persistencia | 100% código; ejecución específica pendiente |
+| Outbox y reintentos durables | 0% |
+| Consultas de consumo autenticadas | 0% |
+| Pruebas de concurrencia y recuperación | 0% |
+| Conciliación de medición | 0% |
+
+**No se activan reservas, cuotas, ledger, pagos ni cobros.** La Fase comercial 3 no se considera cerrada hasta aprobar CI, definir garantía de entrega y completar los criterios de aceptación de esta fase.
