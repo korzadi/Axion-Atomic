@@ -57,8 +57,8 @@ if errors:
     sys.exit(1)
 PY
 }
-usage(){ printf '%s\n' 'Uso: bash scripts/install_vps.sh [--prepare|--check|--deploy]'; }
-case "$MODE" in --prepare|--check|--deploy) ;; -h|--help) usage; exit 0 ;; *) usage; die "Opción desconocida";; esac
+usage(){ printf '%s\n' 'Uso: bash scripts/install_vps.sh [--prepare|--check|--deploy|--upgrade-frontend]'; }
+case "$MODE" in --prepare|--check|--deploy|--upgrade-frontend) ;; -h|--help) usage; exit 0 ;; *) usage; die "Opción desconocida";; esac
 command -v python3 >/dev/null || die "Se requiere Python 3."
 command -v openssl >/dev/null || die "Se requiere OpenSSL para generar secretos aleatorios."
 command -v curl >/dev/null || die "Se requiere curl para las comprobaciones HTTP."
@@ -216,8 +216,59 @@ deploy(){
   else log "AVISO: health integral degradado; revisa Ollama/modelos y Qdrant. No se declara producción."; fi
   log "Contenedores levantados. Proxy HTTPS/DNS y activación de auth se validan aparte."
 }
+
+upgrade_frontend(){
+  [[ -t 0 ]] || die "--upgrade-frontend requiere confirmación interactiva."
+  ensure_env_file_safe
+  validate_env_syntax
+  docker compose --project-name "$PROJECT_NAME" -f "$ROOT/compose.yaml" --env-file "$ENV_FILE" config --quiet
+  C=(docker compose --project-name "$PROJECT_NAME" -f "$ROOT/compose.yaml" --env-file "$ENV_FILE")
+  PG="$("\${C[@]}" ps -q postgres)"
+  REDIS="$("\${C[@]}" ps -q redis)"
+  API="$("\${C[@]}" ps -q api)"
+  [[ -n "$PG" && -n "$REDIS" && -n "$API" ]] || die "No se reconoce el stack existente (postgres, redis y api). No se modificó nada."
+  for container in "$PG" "$REDIS" "$API"; do
+    PROJECT="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$container")"
+    [[ "$PROJECT" == "$PROJECT_NAME" ]] || die "Un contenedor no pertenece al proyecto esperado. No se modificó nada."
+  done
+  PG_HEALTH="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$PG")"
+  [[ "$PG_HEALTH" == healthy ]] || die "PostgreSQL no está healthy. No se modificó nada."
+  [[ "$(docker inspect --format '{{.State.Status}}' "$REDIS")" == running ]] || die "Redis no está ejecutándose. No se modificó nada."
+  [[ "$(docker inspect --format '{{.State.Status}}' "$API")" == running ]] || die "La API existente no está ejecutándose. No se modificó nada."
+  API_PORTS="$(docker port "$API" 2>/dev/null || true)"
+  grep -q '8070' <<<"$API_PORTS" || die "La API existente no publica el puerto 8070 esperado. No se modificó nada."
+  printf 'Se actualizarán solamente API y frontend. PostgreSQL, Redis, volúmenes y .env se conservarán.\nEscribe ACTUALIZAR AXYRON FRONTEND: '
+  read -r answer
+  [[ "$answer" == "ACTUALIZAR AXYRON FRONTEND" ]] || die "Cancelado; no se actualizó nada."
+  install -d -m 700 "$BACKUPS"
+  BACKUP="$BACKUPS/pre-frontend-upgrade-$(date -u +%Y%m%dT%H%M%SZ).dump"
+  "\${C[@]}" exec -T postgres pg_dump --no-owner --no-acl -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" -Fc > "$BACKUP"
+  [[ -s "$BACKUP" ]] || die "Backup vacío; no se actualizaron contenedores."
+  chmod 600 "$BACKUP"
+  log "Backup PostgreSQL previo guardado de forma privada."
+  cd "$ROOT"
+  "\${C[@]}" build api frontend
+  "\${C[@]}" up -d --no-deps api frontend
+  LIVE=0
+  for _ in $(seq 1 60); do
+    if curl -fsS http://127.0.0.1:8070/health/live >/dev/null 2>&1; then LIVE=1; break; fi
+    sleep 2
+  done
+  [[ "$LIVE" == 1 ]] || die "La API no responde detrás del frontend. Se conserva el backup; PostgreSQL/Redis no se tocaron."
+  HOME_PAGE="$(mktemp)"
+  trap 'rm -f "$HOME_PAGE"' EXIT
+  curl -fsS http://127.0.0.1:8070/ -o "$HOME_PAGE"
+  grep -q "Axyron Atomic" "$HOME_PAGE" || die "La ruta raíz no entrega la página principal esperada."
+  for asset in studio.css studio.js workspace.js; do
+    curl -fsS "http://127.0.0.1:8070/$asset" -o /dev/null || die "No se pudo cargar $asset."
+  done
+  log "Frontend y proxy API comprobados en 127.0.0.1:8070."
+  log "PostgreSQL, Redis, volúmenes y .env no fueron recreados ni eliminados."
+}
+
 case "$MODE" in
   --prepare) prepare ;;
   --check) [[ -f "$ENV_FILE" ]] || die "No existe .env; ejecuta primero --prepare."; preflight; log "Validación completada sin modificar archivos ni iniciar servicios." ;;
   --deploy) [[ -f "$ENV_FILE" ]] || die "No existe .env; ejecuta primero --prepare."; deploy ;;
+  --upgrade-frontend) [[ -f "$ENV_FILE" ]] || die "No existe .env; ejecuta primero --prepare."; upgrade_frontend ;;
 esac
