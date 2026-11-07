@@ -17,6 +17,32 @@ ensure_env_file_safe_if_present(){
     ensure_env_file_safe
   fi
 }
+validate_env_syntax(){
+  python3 - "$ENV_FILE" <<'PY'
+from pathlib import Path
+import re, sys
+path = Path(sys.argv[1])
+seen = {}
+errors = []
+for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    line = raw.strip()
+    if not line or line.startswith("#"):
+        continue
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", line):
+        errors.append(f"línea {number}: formato KEY=VALUE inválido")
+        continue
+    key = line.split("=", 1)[0]
+    if key in seen:
+        errors.append(f"línea {number}: variable duplicada {key} (también en línea {seen[key]})")
+    else:
+        seen[key] = number
+if errors:
+    print("[ERROR] Sintaxis de .env no válida:", file=sys.stderr)
+    for error in errors:
+        print(f"  - {error}", file=sys.stderr)
+    sys.exit(1)
+PY
+}
 usage(){ printf '%s\n' 'Uso: bash scripts/install_vps.sh [--prepare|--check|--deploy]'; }
 case "$MODE" in --prepare|--check|--deploy) ;; -h|--help) usage; exit 0 ;; *) usage; die "Opción desconocida";; esac
 command -v python3 >/dev/null || die "Se requiere Python 3."
@@ -82,6 +108,7 @@ PY
 }
 validate(){
   ensure_env_file_safe
+  validate_env_syntax
   QURL="$(value QDRANT_URL)"; QKEY="$(value QDRANT_API_KEY)"
   DBPASS="$(value POSTGRES_PASSWORD)"; APIKEY="$(value API_KEY)"
   OLLAMA="$(value OLLAMA_BASE_URL)"
