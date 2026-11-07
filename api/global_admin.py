@@ -25,7 +25,8 @@ def global_roles_for_user(user_id: str) -> tuple[str, ...]:
    SELECT role FROM global_role_assignments
    WHERE user_id=:user_id AND revoked_at IS NULL ORDER BY role
   """), {"user_id": user_id}).scalars().all()
- return tuple(rows)
+ # Fail closed: una asignación desconocida no debe aparentar acceso administrativo.
+ return tuple(role for role in rows if role in ROLE_PERMISSIONS)
 
 
 def require_global_permission(permission: str):
