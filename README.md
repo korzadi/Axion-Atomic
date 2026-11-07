@@ -180,3 +180,8 @@ El repositorio incluye un instalador por etapas y conservador para levantar los 
 - Despliegue explícito, con confirmación y respaldo PostgreSQL antes de migraciones: `sudo bash scripts/install_vps.sh --deploy`.
 
 El instalador no modifica servicios existentes, Nginx, UFW, Ollama ni KorzadiVPN; si detecta el proyecto/volumen anterior o puertos ocupados, se detiene para evitar una segunda base de datos. No realiza despliegues automáticamente desde GitHub Actions.
+
+
+## Contexto seguro de construcción Docker
+
+El archivo `.dockerignore` excluye secretos, archivos de entorno reales, workspaces, conocimiento privado, backups, bases de datos locales y metadatos Git del contexto de construcción. Mantiene disponibles las fuentes de la aplicación y las skills versionadas que el Dockerfile empaqueta. No añadas credenciales ni datos de usuarios al contexto de build.
