@@ -223,11 +223,12 @@ upgrade_frontend(){
   validate_env_syntax
   docker compose --project-name "$PROJECT_NAME" -f "$ROOT/compose.yaml" --env-file "$ENV_FILE" config --quiet
   C=(docker compose --project-name "$PROJECT_NAME" -f "$ROOT/compose.yaml" --env-file "$ENV_FILE")
-  PG="$("${C[@]}" ps -q postgres)"
-  REDIS="$("${C[@]}" ps -q redis)"
-  API="$("${C[@]}" ps -q api)"
-  [[ -n "$PG" && -n "$REDIS" && -n "$API" ]] || die "No se reconoce el stack existente (postgres, redis y api). No se modificó nada."
-  for container in "$PG" "$REDIS" "$API"; do
+  PG="$(${C[@]} ps -q postgres)"
+  REDIS="$(${C[@]} ps -q redis)"
+  API="$(${C[@]} ps -q api)"
+  FRONTEND="$(${C[@]} ps -q frontend)"
+  [[ -n "$PG" && -n "$REDIS" && -n "$API" && -n "$FRONTEND" ]] || die "No se reconoce el stack existente (postgres, redis, api y frontend). No se modificó nada."
+  for container in "$PG" "$REDIS" "$API" "$FRONTEND"; do
     PROJECT="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$container")"
     [[ "$PROJECT" == "$PROJECT_NAME" ]] || die "Un contenedor no pertenece al proyecto esperado. No se modificó nada."
   done
@@ -235,8 +236,11 @@ upgrade_frontend(){
   [[ "$PG_HEALTH" == healthy ]] || die "PostgreSQL no está healthy. No se modificó nada."
   [[ "$(docker inspect --format '{{.State.Status}}' "$REDIS")" == running ]] || die "Redis no está ejecutándose. No se modificó nada."
   [[ "$(docker inspect --format '{{.State.Status}}' "$API")" == running ]] || die "La API existente no está ejecutándose. No se modificó nada."
-  API_PORTS="$(docker port "$API" 2>/dev/null || true)"
-  grep -q '8070' <<<"$API_PORTS" || die "La API existente no publica el puerto 8070 esperado. No se modificó nada."
+  [[ "$(docker inspect --format '{{.State.Status}}' "$FRONTEND")" == running ]] || die "El frontend existente no está ejecutándose. No se modificó nada."
+  API_EXPOSED="$(docker inspect --format '{{json .Config.ExposedPorts}}' "$API")"
+  grep -q '8000/tcp' <<<"$API_EXPOSED" || die "La API no expone el puerto interno 8000 esperado. No se modificó nada."
+  FRONTEND_PORTS="$(docker port "$FRONTEND" 2>/dev/null || true)"
+  grep -q '8070' <<<"$FRONTEND_PORTS" || die "El frontend existente no publica el puerto 8070 esperado. No se modificó nada."
   printf 'Se actualizarán solamente API y frontend. PostgreSQL, Redis, volúmenes y .env se conservarán.\nEscribe ACTUALIZAR AXYRON FRONTEND: '
   read -r answer
   [[ "$answer" == "ACTUALIZAR AXYRON FRONTEND" ]] || die "Cancelado; no se actualizó nada."
