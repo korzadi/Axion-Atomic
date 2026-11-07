@@ -114,3 +114,28 @@ class PasswordResetRequest(BaseModel):
 
 class EmailAddressRequest(BaseModel):
     email: str = Field(min_length=5, max_length=320)
+
+
+
+class MfaChallengeVerifyRequest(BaseModel):
+    challenge_token: str | None = Field(default=None, min_length=20, max_length=256)
+    code: str = Field(min_length=6, max_length=32)
+
+    @field_validator("code")
+    @classmethod
+    def validate_mfa_code(cls, value: str) -> str:
+        import re
+        if not re.fullmatch(r"(?:[0-9]{6}|[A-Fa-f0-9]{32})", value):
+            raise ValueError("Código MFA no válido")
+        return value.upper()
+
+
+class MfaConfirmRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=6)
+
+    @field_validator("code")
+    @classmethod
+    def validate_totp_code(cls, value: str) -> str:
+        if not value.isdigit():
+            raise ValueError("Código TOTP no válido")
+        return value
