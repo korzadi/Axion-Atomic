@@ -232,3 +232,16 @@ La ruta `/health` ahora valida no solo que Ollama responda, sino que `/api/tags`
 Los correos de verificación y recuperación y la documentación del servicio de identidad usan ahora la identidad definitiva **AXYRON ATOMIC** en lugar de la marca heredada AXION. Se añadió una prueba de regresión de asunto y cuerpo de ambos correos.
 
 GitHub Actions `42400165930`, commit `e3965f7944b3f330c014413e6df2d597d1249d24`, terminó en **success**: Python, Playwright, build de imagen en CI, migraciones PostgreSQL e integración Qdrant Cloud. Esta ejecución incluye la corrección HttpOnly del login, los textos de marca y la validación de modelos configurados en readiness. No hubo despliegue de VPS.
+
+
+### Portal administrativo: E2E de navegador añadido
+
+Se amplió `tests/e2e/studio-browser.mjs` para ejecutar el portal administrativo en Chromium con respuestas de API controladas: sesión válida sin rol global, disponibilidad de cierre de sesión, transición de logout a login, login que exige MFA, limpieza de la contraseña del primer factor, visualización del desafío MFA y denegación final cuando la cuenta no tiene rol administrativo. La prueba verifica que no se conceda acceso por completar MFA sin rol global.
+
+GitHub Actions `42401029175`, commit `62c1a0321622492d01b5c02f1f5089ef501dbda0`, terminó en **success**. Los cinco trabajos pasaron: `python-tests`, `studio-browser-e2e` (incluye ahora el portal admin y MFA), `container-image-build`, `postgres-migrations` y `qdrant-cloud-integration`. El build fue de CI, no un despliegue.
+
+### Archivos de esta mejora
+
+- `frontend/admin.js`: separa el desafío MFA del formulario de contraseña y limpia el primer factor antes de pedir el código.
+- `tests/test_frontend_studio_spa.py`: cubre el contrato de transición MFA.
+- `tests/e2e/studio-browser.mjs`: prueba navegador del portal administrativo, logout, MFA y rechazo de cuentas sin rol global.
