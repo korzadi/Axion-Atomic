@@ -131,12 +131,14 @@ async def login(req: LoginRequest, request: Request, response: Response):
         return JSONResponse(
             status_code=202,
             content={"mfa_required": True, "challenge_token": challenge, "expires_in": 300},
+            headers={"Cache-Control": "no-store"},
         )
     token, csrf = await run_in_threadpool(
         create_session, user_id=user["id"], user_agent=request.headers.get("user-agent"),
     )
+    response.headers["Cache-Control"] = "no-store"
     response.set_cookie(
-        key=COOKIE_NAME, value=token, max_age=SESSION_MAX_AGE, httponly=True,
+        key=COOKIE_NAME, value=token, max_age=SESSION_MAX_AGE,
         secure=settings.auth_cookie_secure, samesite="lax", path="/",
     )
     response.set_cookie(
@@ -226,7 +228,7 @@ async def mfa_status(user=Depends(_authenticated_user)):
 
 
 @router.post("/mfa/enroll")
-async def mfa_enroll(request: Request, user=Depends(_csrf_guard)):
+async def mfa_enroll(request: Request, response: Response, user=Depends(_csrf_guard)):
     await run_in_threadpool(
         _enforce_rate_limit, request, namespace="auth:mfa:enroll",
         limit=3, window=timedelta(hours=1), subject=user["id"],
@@ -242,11 +244,12 @@ async def mfa_enroll(request: Request, user=Depends(_csrf_guard)):
     label = quote("AXION ATOMIC:" + user["email"])
     issuer = quote("AXION ATOMIC")
     uri = f"otpauth://totp/{label}?secret={secret}&issuer={issuer}&algorithm=SHA1&digits=6&period=30"
+    response.headers["Cache-Control"] = "no-store"
     return {"secret": secret, "otpauth_uri": uri, "issuer": "AXION ATOMIC"}
 
 
 @router.post("/mfa/confirm")
-async def mfa_confirm(req: MfaConfirmRequest, request: Request, user=Depends(_csrf_guard)):
+async def mfa_confirm(req: MfaConfirmRequest, request: Request, response: Response, user=Depends(_csrf_guard)):
     await run_in_threadpool(
         _enforce_rate_limit, request, namespace="auth:mfa:confirm",
         limit=10, window=timedelta(minutes=10), subject=user["id"],
@@ -259,6 +262,7 @@ async def mfa_confirm(req: MfaConfirmRequest, request: Request, user=Depends(_cs
         )
     except (MfaError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="No se pudo confirmar el código MFA.") from exc
+    response.headers["Cache-Control"] = "no-store"
     return {"status": "enabled", "recovery_codes": recovery_codes}
 
 
