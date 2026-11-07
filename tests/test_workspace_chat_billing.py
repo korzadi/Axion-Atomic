@@ -85,7 +85,7 @@ class WorkspaceChatBillingIntegrationTests(unittest.IsolatedAsyncioTestCase):
             patch("api.workspace_routes.settings.chat_model", "atomic-code:1.1"),
             patch("api.workspace_routes.EnvironmentResultKeyProvider.active_key", return_value=("billing-v1", b"x" * 32)),
             patch("api.workspace_routes.execute_durable_reserved_inference", new=AsyncMock(return_value=durable)) as execute,
-            patch("api.workspace_routes.persist_shadow_usage_event"),
+            patch("api.workspace_routes.persist_shadow_usage_event") as shadow_event,
             patch("api.workspace_routes._save_chat_history"),
         ):
             response = await workspace_chat(
@@ -104,6 +104,8 @@ class WorkspaceChatBillingIntegrationTests(unittest.IsolatedAsyncioTestCase):
             kwargs["budget"].input_tokens_upper_bound + kwargs["budget"].output_tokens_upper_bound,
         )
         self.assertEqual(kwargs["expected_runtime_model"], "atomic-code:1.1")
+        # Una ejecución liquidada en el ledger no debe generar además un evento shadow.
+        shadow_event.assert_not_called()
 
 
 if __name__ == "__main__":
