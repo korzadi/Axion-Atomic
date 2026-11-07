@@ -77,21 +77,47 @@ class AuthRouteGateTests(unittest.TestCase):
         self.assertEqual(limiter.call_args.kwargs["namespace"], "auth:oauth:callback:github")
         self.assertEqual(limiter.call_args.kwargs["limit"], 20)
 
-    def test_login_enforces_ip_and_account_rate_limits(self):
+    def test_login_enforces_ip_and_account_rate_limits_without_mfa(self):
         from api.auth_routes import login
         request = Mock(spec=Request)
         request.client.host = "198.51.100.11"
         request.headers.get.return_value = "test-agent"
         user = {"id": "user-1", "email": "test@example.com", "display_name": "Test"}
+        response = Response()
         with patch("api.auth_routes.settings.auth_enabled", True):
             with patch("api.auth_routes._enforce_rate_limit") as limiter:
-                with patch("api.auth_routes.authenticate", return_value=(user, "session-token", "csrf-token")):
-                    asyncio.run(login(
-                        LoginRequest(email="test@example.com", password="StrongPassword123!"),
-                        request, Response(),
-                    ))
+                with patch("api.auth_routes.verify_credentials", return_value=user):
+                    with patch("api.auth_routes.is_mfa_enabled", return_value=False):
+                        with patch("api.auth_routes.create_session", return_value=("session-token", "csrf-token")):
+                            result = asyncio.run(login(
+                                LoginRequest(email="test@example.com", password="StrongPassword123!"),
+                                request, response,
+                            ))
         self.assertEqual(limiter.call_count, 2)
         self.assertEqual(limiter.call_args_list[1].kwargs["subject"], "test@example.com")
+        self.assertEqual(result["user"], user)
+        self.assertIn("axion_session=session-token", response.headers["set-cookie"])
+
+    def test_password_login_returns_challenge_without_creating_session_when_mfa_enabled(self):
+        from api.auth_routes import login
+        request = Mock(spec=Request)
+        request.client.host = "198.51.100.14"
+        request.headers.get.return_value = "test-agent"
+        user = {"id": "user-2", "email": "mfa@example.com", "display_name": "MFA"}
+        with patch("api.auth_routes.settings.auth_enabled", True):
+            with patch("api.auth_routes._enforce_rate_limit"):
+                with patch("api.auth_routes.verify_credentials", return_value=user):
+                    with patch("api.auth_routes.is_mfa_enabled", return_value=True):
+                        with patch("api.auth_routes.issue_login_challenge", return_value="opaque-challenge") as issue:
+                            with patch("api.auth_routes.create_session") as create:
+                                result = asyncio.run(login(
+                                    LoginRequest(email="mfa@example.com", password="StrongPassword123!"),
+                                    request, Response(),
+                                ))
+        self.assertEqual(result.status_code, 202)
+        self.assertEqual(result.body, b'{"mfa_required":true,"challenge_token":"opaque-challenge","expires_in":300}')
+        issue.assert_called_once()
+        create.assert_not_called()
 
     def test_oauth_provider_discovery_exposes_only_availability_flags(self):
         from api.auth_routes import oauth_providers
