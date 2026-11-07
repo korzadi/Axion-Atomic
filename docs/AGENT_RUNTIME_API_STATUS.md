@@ -273,3 +273,25 @@ GitHub Actions run [42404791578](https://github.com/korzadi/Axion-Atomic/actions
 - Integración Qdrant Cloud: success.
 
 Esta validación no prueba la ejecución del sandbox desde el runtime HTTP, inferencia real en VPS ni los flujos de autenticación pública.
+
+
+## Validación estricta del planificador — 7 de noviembre de 2026
+
+La auditoría encontró que `agent/planner.py` aceptaba cualquier lista de diccionarios, truncaba silenciosamente planes de más de ocho pasos y no validaba campos, niveles de riesgo ni tamaños. También devolvía texto bruto del modelo como supuesto plan de respaldo.
+
+Corrección:
+- Solo se aceptan planes JSON con entre 3 y 8 pasos.
+- Cada paso debe contener exactamente `title`, `rationale`, `risk` y `proposed_action`.
+- Riesgo limitado a `low`, `medium` o `high`.
+- Límites de caracteres por campo y respuesta completa.
+- Objetivos limitados a 10.000 caracteres.
+- Ante respuesta inválida o fallo de inferencia, se devuelve un plan genérico de revisión; nunca se inserta texto bruto no validado del modelo.
+- La validación no ejecuta acciones: la aprobación del plan sigue siendo un registro de intención y no ejecuta código.
+
+Archivos: `agent/planner.py` y `tests/test_planner.py`.
+
+La primera ejecución detectó un defecto en el fixture de pruebas (solo generaba tres pasos para probar el caso de cuatro); se corrigió el fixture y se volvió a ejecutar CI.
+
+GitHub Actions run [42405182522](https://github.com/korzadi/Axion-Atomic/actions/runs/42405182522), HEAD `6a8d8564ed1ac653c79e426e778447394ef8ccdb`: **success**, cinco jobs aprobados. Python: **675 passed, 9 skipped, 4 warnings**; Studio Browser E2E, imagen, PostgreSQL y Qdrant Cloud: success.
+
+Sigue pendiente la integración del sandbox Docker aislado en el runtime HTTP, además de pruebas end-to-end con inferencia real y autenticación pública.
