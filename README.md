@@ -117,6 +117,6 @@ La SPA usa únicamente rutas ya existentes en el backend. Las capacidades no imp
 AXYRON adopta el estándar abierto `SKILL.md` para descubrir workflows especializados instalados por workspace, incluyendo bundles compatibles con Google Antigravity. El runtime puede listar y cargar skills bajo demanda mediante herramientas de solo lectura; nunca ejecuta scripts de terceros incluidos en ellas. La compatibilidad de formato no implica dependencia de Antigravity ni habilita ejecución de terminal.
 
 - Pack de ingeniería de Addy Osmani: 25 skills (24 workflows + una meta-skill), licencia MIT.
-- Instalación y seguridad, compatibilidad Antigravity y estado real: [docs/AGENT_SKILLS_ANTIGRAVITY_INTEGRATION.md](docs/AGENT_SKILLS_ANTIGRAVITY_INTEGRATION.md).
+- Instalación fijada y verificada mediante `bash scripts/install_agent_skills.sh`; instrucciones y seguridad: [docs/AGENT_SKILLS_ANTIGRAVITY_INTEGRATION.md](docs/AGENT_SKILLS_ANTIGRAVITY_INTEGRATION.md).
 - Las skills no conceden permisos: siguen vigentes aislamiento por proyecto, aprobación humana y políticas del agente.
 - El pack upstream está documentado, pero no se incorpora automáticamente ni se declara instalado en el repositorio.
