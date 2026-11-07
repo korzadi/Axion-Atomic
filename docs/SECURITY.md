@@ -24,7 +24,7 @@ AXION ATOMIC dispone de controles implementados en el repositorio, pero **no est
 - Probar cookies Secure, CSRF, proxy de confianza y sesiones detrás de la infraestructura real. El rate limit usa `request.client.host`; confirmar en staging la IP efectiva del cliente detrás del proxy sin confiar en encabezados `X-Forwarded-*` no validados.
 - Completar revisión del rol administrativo global y MFA para operaciones sensibles.
 
-### Diseño obligatorio antes de implementar MFA
+### Controles MFA implementados y controles operativos pendientes
 
 - No almacenar secretos TOTP en texto plano. Cifrarlos en reposo con una clave de aplicación independiente de la base de datos, suministrada por el entorno de ejecución y rotatable.
 - Separar el secreto de enrolamiento pendiente del secreto MFA activo; no activar MFA hasta confirmar un código TOTP válido.
@@ -61,16 +61,15 @@ La integración de MFA ya está implementada en el código para los dos caminos 
 
 ### Validación automatizada
 
-El workflow 42324288766 terminó correctamente en el commit c5aff40043873f0ace54e0f5cec0aac2c716242b:
+El workflow [42324560749](https://github.com/korzadi/Axion-Atomic/actions/runs/42324560749) terminó correctamente en el commit `54451588a88fcfc5c801f3b1aa486876ccee6771`:
 
-- Python: **622 aprobadas, 9 omitidas, 3 advertencias**.
-- PostgreSQL: **46 pruebas aprobadas**, incluidas persistencia MFA, consumo de TOTP, replay, recuperación y expiración.
-- Migraciones PostgreSQL e idempotencia: correctas.
-- Qdrant Cloud: correcto.
-- AXION STUDIO browser E2E: correcto.
-- Sintaxis JavaScript y compilación Python: correctas.
+- Python: **625 aprobadas, 9 omitidas, 3 advertencias**.
+- PostgreSQL migrations e idempotencia: success.
+- Qdrant Cloud integration: success.
+- AXION STUDIO browser E2E: success.
+- Sintaxis JavaScript y compilación Python: success.
 
-El commit posterior e2a6829a7856bc1c684fe2bf206d35900989ab2e añadió no-store también a la respuesta de finalización MFA y a la redirección OAuth MFA; su ejecución CI todavía debe confirmarse.
+Esta ejecución incluye tres pruebas directas de rutas MFA: rechazo de desafío inválido sin crear sesión, creación de sesión solo tras validar el desafío y separación del propósito OAuth.
 
 ### Pendientes operativos antes de activar autenticación pública
 
