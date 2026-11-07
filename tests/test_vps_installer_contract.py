@@ -21,6 +21,11 @@ class VpsInstallerContractTests(unittest.TestCase):
         for token in ("volume=axion_atomic_pgdata", "project=axion-atomic", "8070", "5433"):
             self.assertIn(token, self.script)
 
+    def test_workspace_permissions_are_checked_before_deploy(self):
+        self.assertIn("WORKSPACE_META", self.script)
+        self.assertIn("10001:700", self.script)
+        self.assertIn("No se cambia automáticamente", self.script)
+
     def test_auth_legacy_api_and_command_execution_remain_disabled(self):
         for token in ("AUTH_ENABLED", "LEGACY_API_ENABLED", "ENABLE_COMMAND_EXECUTION"):
             self.assertIn(token, self.script)
