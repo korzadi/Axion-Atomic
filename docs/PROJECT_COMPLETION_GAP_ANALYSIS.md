@@ -1,4 +1,4 @@
-# Estado real del proyecto AXION ATOMIC
+# Estado real del proyecto AXYRON ATOMIC
 
 **Rama revisada:** `main`  
 **Estado:** desarrollo/hardening; NO apto para producción.  
@@ -144,3 +144,28 @@ Esta sección registra una inspección adicional de `api/workspace_routes.py`, `
 ### Protección de cuotas del runtime de agente
 
 La auditoría de rutas detectó que `/workspace/agent/runs` y `/workspace/agent/runs/{run_id}/resume` consumían el rate limit antes de validar la membresía del proyecto. Esto permitía a una cuenta ajena consumir el bucket asociado a un proyecto si conocía su identificador. Las dos rutas ahora autorizan primero (`owner`, `admin` o `editor`) y solo después consumen cuotas o construyen el runtime. Se añadieron pruebas HTTP que simulan una cuenta no miembro y verifican HTTP 403, cero consumo del rate limit y cero invocaciones del runtime. Pendiente validar el resultado en CI.
+
+
+## Actualización de estado — 7 de noviembre de 2026
+
+Esta sección prevalece sobre las observaciones históricas anteriores cuando exista contradicción. El repositorio ya no está en el estado descrito por la primera auditoría:
+
+- Identidad vigente: producto **Axyron Atomic**, agente **AXYRON**, interfaz **AXYRON STUDIO**. El HTML principal conservado es `frontend/Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html`.
+- Autenticación web incluye verificación de correo, recuperación, MFA, OAuth Google/GitHub, sesiones, CSRF, cookies seguras y rate limiting persistente en código. `AUTH_ENABLED` permanece desactivado en el entorno operativo; SMTP/OAuth/MFA reales todavía requieren aceptación en staging.
+- El runtime persistente ya está conectado a rutas HTTP: `POST /workspace/agent/runs`, `POST /workspace/agent/runs/{run_id}/resume`, lecturas de runs y decisiones de aprobación. `/workspace/agent/tasks` sigue siendo el planificador legacy y no debe confundirse con la ejecución real.
+- La construcción del runtime vuelve a autorizar la membresía y resuelve un workspace privado por proyecto. Las mutaciones de archivos/Git requieren propuesta y aprobación ligada al hash. La ejecución de comandos/sandbox no está conectada a la API: Compose no proporciona un daemon Docker al servicio API, y no se debe montar el socket privilegiado del host como atajo.
+- El health/readiness verifica PostgreSQL, Ollama, los modelos de chat y embeddings configurados y Qdrant; Redis opcional puede degradar sin hacer fallar readiness crítica.
+- GitHub Actions `42401140808` aprobó Python, Playwright, build/smoke de imagen, migraciones PostgreSQL y Qdrant Cloud para el commit `d3fe1f1f479fbdd890339158a75ac3c289a91637`.
+- La auditoría del 7 de noviembre detectó que las rutas de inicio y reanudación del agente consumían cuotas antes de comprobar la membresía. Se corrigió el orden: autorización `owner/admin/editor` antes del rate limit y antes de construir el runtime. Se añadieron pruebas negativas que comprueban HTTP 403 y que no se consume la cuota ni se inicia el runtime para usuarios externos. La ejecución CI de esta corrección aún debe quedar verde antes de marcarla verificada.
+
+### Pendientes reales que siguen bloqueando V1.0
+
+1. Validar las nuevas pruebas y la secuencia completa de aprobación/reanudación contra PostgreSQL real en CI; mantener pendiente una prueba end-to-end de agente con workspace aislado.
+2. Definir y probar el daemon/snapshot de Docker sandbox con aislamiento real. No habilitar comandos arbitrarios ni egress.
+3. Probar inferencia real de Atomic Code 1.1 desde el servicio en un entorno controlado y validar identidad, tokenizer, contexto y errores.
+4. Conectar facturación durable al endpoint de chat solo después de verificar presupuesto previo, reservas, liquidación y recuperación; mantener Shadow Mode y no cobrar.
+5. Completar aceptación SMTP/OAuth/MFA en staging y revisión independiente de seguridad.
+6. Terminar contratos técnicos de QvaPay sandbox, webhooks firmados, consulta servidor-a-servidor, idempotencia y ledger.
+7. Verificar restauración de backups, monitorización, DNS/TLS del subdominio admin y plan de despliegue con autorización explícita.
+
+El progreso de implementación no equivale a preparación para producción. No se han realizado cambios en VPS, Docker, datos persistentes ni servicios ajenos.
