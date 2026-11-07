@@ -111,6 +111,53 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
         retrieve.assert_awaited_once()
         inference.assert_not_awaited()
 
+    async def test_chat_rejects_context_overflow_before_ollama_inference(self):
+        request = ChatRequest(
+            project_id="project-a",
+            messages=[Message(role="user", content="Consulta que no cabe")],
+            max_tokens=128,
+        )
+        with (
+            patch("api.workspace_routes.run_in_threadpool", side_effect=_run_in_threadpool),
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.retrieve", new=AsyncMock(return_value="")),
+            patch("api.workspace_routes.settings.chat_model", "atomic-code:16k-8k"),
+            patch("api.workspace_routes.settings.num_ctx", 64),
+            patch("api.workspace_routes.chat_with_usage", new=AsyncMock()) as inference,
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                await workspace_chat(request, {"id": "user-a"})
+
+        self.assertEqual(caught.exception.status_code, 413)
+        self.assertIn("ventana de contexto", caught.exception.detail)
+        inference.assert_not_awaited()
+
+    async def test_chat_uses_complete_server_built_prompt_for_context_preflight(self):
+        request = ChatRequest(
+            project_id="project-a",
+            messages=[Message(role="user", content="Consulta")],
+            max_tokens=128,
+        )
+        result = self._result()
+        with (
+            patch("api.workspace_routes.run_in_threadpool", side_effect=_run_in_threadpool),
+            patch("api.workspace_routes._project_role"),
+            patch("api.workspace_routes._enforce_workspace_limit"),
+            patch("api.workspace_routes.retrieve", new=AsyncMock(return_value="CONTEXTO RAG")),
+            patch("api.workspace_routes.settings.chat_model", "atomic-code:16k-8k"),
+            patch("api.workspace_routes.settings.num_ctx", 16384),
+            patch("api.workspace_routes.chat_with_usage", new=AsyncMock(return_value=result)) as inference,
+            patch("api.workspace_routes.persist_shadow_usage_event"),
+            patch("api.workspace_routes._save_chat_history"),
+        ):
+            response = await workspace_chat(request, {"id": "user-a"})
+
+        sent_messages = inference.await_args.args[0]
+        self.assertIn("CONTEXTO RAG", sent_messages[0]["content"])
+        self.assertEqual(sent_messages[1]["content"], "Consulta")
+        self.assertEqual(response["usage_billing"]["mode"], "shadow")
+
     async def test_chat_rejects_model_mismatch_after_inference(self):
         request = ChatRequest(
             project_id="project-a",
