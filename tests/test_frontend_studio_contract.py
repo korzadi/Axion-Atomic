@@ -77,10 +77,10 @@ def test_atomic_code_sends_user_selected_generation_settings_to_real_api():
 
 def test_email_verification_link_uses_registered_api_route():
     source = FRONTEND.read_text(encoding="utf-8")
-    assert "api('/auth/email/verify'" in source
-    assert "api('/auth/verify-email'" not in source
+    assert "api('/auth/verify-email'" in source
+    assert "api('/auth/email/verify'" not in source
     assert "api('/auth/password/forgot'" in source
     assert "api('/auth/password/reset'" in source
-    assert "api('/auth/email/resend'" in source
+    assert "api('/auth/resend-verification'" in source
     assert 'id="resend"' in source
 
