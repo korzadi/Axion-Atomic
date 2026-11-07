@@ -1,8 +1,12 @@
 # Diseño técnico — economía, medición, cuotas y créditos de AXION ATOMIC
 
-**Estado:** diseño parcialmente implementado; la base de reservas/ledger está en el repositorio, pero no está conectada a inferencia ni habilita cobros  
+**Estado:** reservas/ledger y ejecución durable están conectados al chat bajo una bandera desactivada por defecto; no hay catálogo de precios publicado ni pagos reales habilitados  
 **Fecha:** 6 de noviembre de 2026  
 **Alcance:** Fase 2 del roadmap comercial. Este documento no activa pagos, créditos, límites ni migraciones.
+
+## Estado de integración de la ejecución durable (7 de noviembre de 2026)
+
+`POST /workspace/chat/completions` puede usar la ruta transaccional cuando `BILLING_ENFORCEMENT_ENABLED=true`. El modo predeterminado continúa en Shadow para no bloquear el servicio con saldos no provisionados. La ruta facturable requiere una clave `AXYRON_BILLING_RESULT_KEY_*` dedicada y distinta de MFA, una `Idempotency-Key` del cliente y cuotas o lotes de créditos previamente concedidos en PostgreSQL. La reserva se calcula antes de Ollama, se liquida con los contadores finales reales y el resultado se cifra antes de completar el asiento. No se deben activar ventas ni QvaPay: el catálogo comercial, los precios aprobados, la concesión de créditos por pago y los webhooks de QvaPay siguen fuera de esta integración.
 
 ## 1. Objetivos y límites
 
