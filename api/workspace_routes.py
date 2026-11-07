@@ -31,6 +31,7 @@ from api.billing_execution_envelope import (
     serialize_billing_execution_result,
 )
 from api.billing_reservations import IdempotencyConflict
+from api.billing_request_identity import InvalidIdempotencyKey, request_payload_sha256, stable_request_id
 from api.usage_events import persist_shadow_usage_event
 from rag.service import EmbeddingServiceUnavailable, KnowledgeStoreUnavailable, SensitiveContentError, delete_source, ingest_text, list_sources, replace_source, retrieve
 from rag.document_loader import DocumentLoadError, extract_document
@@ -339,18 +340,26 @@ async def workspace_chat(
                 status_code=400,
                 detail="La facturación requiere el encabezado Idempotency-Key (1-200 caracteres).",
             )
-        # La clave estable evita ejecutar dos veces una petición reintentada por el cliente.
-        request_id = str(uuid.uuid5(
-            uuid.NAMESPACE_URL, f"axyron-billing:{user['id']}:{idempotency_key}"
-        ))
-        payload = json.dumps({
-            "model": settings.chat_model,
-            "project_id": req.project_id,
-            "messages": [message.model_dump() for message in req.messages],
-            "temperature": req.temperature,
-            "max_tokens": req.max_tokens,
-        }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        payload_sha256 = hashlib.sha256(payload).hexdigest()
+        # Identidad estable y fingerprint de la inferencia EFECTIVA: incluye
+        # system prompt y contexto RAG añadidos por el servidor, no solo el texto cliente.
+        try:
+            request_id = stable_request_id(
+                user_id=str(user["id"]),
+                idempotency_key=idempotency_key,
+            )
+            payload_sha256 = request_payload_sha256(
+                project_id=req.project_id,
+                model=settings.chat_model,
+                messages=inference_messages,
+                temperature=req.temperature,
+                max_tokens=req.max_tokens,
+                policy_version=budget.policy_version,
+            )
+        except (InvalidIdempotencyKey, TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail="La clave de idempotencia o la solicitud no cumple el formato permitido.",
+            ) from None
         key_provider = EnvironmentResultKeyProvider()
         try:
             # Validar la clave ANTES de reservar créditos o ejecutar el modelo.
