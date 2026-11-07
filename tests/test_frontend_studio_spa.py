@@ -41,6 +41,37 @@ def test_spa_uses_only_existing_backend_routes_for_available_modules():
         assert '"' + section + '"' in source
 
 
+def test_integrations_and_extensions_are_explicitly_future_features():
+    source = (FRONTEND / "studio.js").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    for label in (
+        "AXYRON CONNECT",
+        "Aplicaciones y conectores",
+        "Plugins, Skills y Tools",
+        "Plugin Hub",
+        "Skill Library",
+        "Tool Registry",
+        "MCP / APIs",
+        "Próxima actualización",
+        "permisos",
+        "revocación",
+    ):
+        assert label in source
+    for label in (
+        "Ecosistema extensible",
+        "AXYRON CONNECT",
+        "App Connectors",
+        "Plugin Hub",
+        "Skill Library",
+        "Tool Registry",
+        "Automation Hub",
+        "Security Center",
+        "MCP",
+        "No existe todavía un catálogo operativo",
+    ):
+        assert label in readme
+
+
 def test_spa_has_no_fake_admin_or_commercial_mutations():
     source = (FRONTEND / "studio.js").read_text(encoding="utf-8")
     assert "/admin/users" not in source
