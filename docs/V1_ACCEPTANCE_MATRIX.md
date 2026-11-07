@@ -52,6 +52,15 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 
 Son resultados de esos SHA, no del HEAD actual. La consulta de estados y runs asociadas al HEAD `770c086d624dfb56d9179488db5585a169666948` no devolvió resultados verificables. **CI actual: no confirmada.**
 
+## Incidente de página principal: contenido oculto (7 de noviembre de 2026)
+
+- Síntoma reportado: la página pública muestra navegación y pie, pero no el contenido central ni las ilustraciones.
+- Causa confirmada en el HTML de `main`: el CSS oculta inicialmente los bloques `.rv` mediante `opacity:0`; el script inline accede directamente a `document.getElementById('nlf').onsubmit`, pero el formulario opcional de boletín no existe en el marcado actual. Ese acceso a `null` lanza una excepción antes de registrar el `IntersectionObserver` que añade la clase `.in`, dejando el contenido principal invisible. El HTML contiene el hero, secciones e ilustración embebida; el fallo no es la ausencia de esas secciones.
+- Corrección publicada: el manejador del boletín ahora se registra solo si existe el formulario y valida también sus elementos internos. Se añadió una prueba de regresión que protege la inicialización del reveal.
+- Archivos: HTML principal y `tests/test_frontend_studio_contract.py`.
+- Commits: `904c44ed061099179730c01027bad1d9f077b53e` y `9624779e4c3ac34c454df4d1cb332dff02613cef`.
+- Verificación estática en esta revisión: sintaxis JavaScript inline válida y presencia del guard y del registro del observer. Playwright/CI y comprobación visual del dominio público siguen pendientes; el cambio no se ha desplegado en el VPS.
+
 ## Revisiones incrementales posteriores (7 de noviembre de 2026)
 
 - HEAD inspeccionado antes de estas correcciones: `d75a9b7b0fd87fc91c4b562009cefe824f7d8428`.
