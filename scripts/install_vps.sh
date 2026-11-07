@@ -95,7 +95,9 @@ preflight(){
   OLD="$(docker ps -aq --filter label=com.docker.compose.project=axion-atomic || true)"
   NEW="$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT_NAME" || true)"
   USERS="$(docker ps -aq --filter volume=axion_atomic_pgdata || true)"
-  if [[ -n "$OLD" || -n "$NEW" || -n "$USERS" ]]; then
+  VOLUME_EXISTS=0
+  docker volume inspect axion_atomic_pgdata >/dev/null 2>&1 && VOLUME_EXISTS=1
+  if [[ -n "$OLD" || -n "$NEW" || -n "$USERS" || "$VOLUME_EXISTS" == 1 ]]; then
     die "Hay contenedores existentes o un contenedor usa axion_atomic_pgdata. No se modifica nada: reconciliación manual obligatoria."
   fi
   log "Preflight correcto: Compose, variables, puertos y recursos existentes."
@@ -140,6 +142,6 @@ deploy(){
 }
 case "$MODE" in
   --prepare) prepare ;;
-  --check) [[ -f "$ENV_FILE" ]] || prepare; preflight; log "Sin despliegue." ;;
-  --deploy) [[ -f "$ENV_FILE" ]] || prepare; deploy ;;
+  --check) [[ -f "$ENV_FILE" ]] || die "No existe .env; ejecuta primero --prepare."; preflight; log "Validación completada sin modificar archivos ni iniciar servicios." ;;
+  --deploy) [[ -f "$ENV_FILE" ]] || die "No existe .env; ejecuta primero --prepare."; deploy ;;
 esac

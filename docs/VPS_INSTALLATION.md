@@ -26,7 +26,7 @@ Edita localmente `.env` con un editor seguro (por ejemplo `sudoedit .env`) y con
 
     sudo bash scripts/install_vps.sh --check
 
-El preflight valida Compose y variables críticas, y comprueba los puertos 8070/5433. Se detiene si encuentra contenedores de proyectos `axion-atomic`/`axyron-atomic` o un contenedor conectado al volumen `axion_atomic_pgdata`. Es intencional: evita crear una segunda base de datos o conectar simultáneamente un volumen persistente.
+El preflight valida Compose y variables críticas, y comprueba los puertos 8070/5433. `--check` es de solo lectura y exige que `--prepare` ya se haya ejecutado. Se detiene si encuentra contenedores de proyectos `axion-atomic`/`axyron-atomic`, cualquier contenedor conectado al volumen `axion_atomic_pgdata` o el propio volumen aunque esté actualmente sin contenedor. Es intencional: evita crear una segunda base de datos o reutilizar accidentalmente datos persistentes.
 
 ## 3. Desplegar con confirmación humana
 

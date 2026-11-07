@@ -21,6 +21,16 @@ class VpsInstallerContractTests(unittest.TestCase):
         for token in ("volume=axion_atomic_pgdata", "project=axion-atomic", "8070", "5433"):
             self.assertIn(token, self.script)
 
+    def test_check_is_read_only_and_requires_explicit_prepare(self):
+        check = self.script.split('case "$MODE" in', 1)[1]
+        self.assertIn('--check) [[ -f "$ENV_FILE" ]] || die', check)
+        self.assertIn('Validación completada sin modificar archivos', check)
+        self.assertNotIn('--check) [[ -f "$ENV_FILE" ]] || prepare', self.script)
+
+    def test_existing_named_volume_blocks_even_without_running_container(self):
+        self.assertIn('docker volume inspect axion_atomic_pgdata', self.script)
+        self.assertIn('"$VOLUME_EXISTS" == 1', self.script)
+
     def test_workspace_permissions_are_checked_before_deploy(self):
         self.assertIn("WORKSPACE_META", self.script)
         self.assertIn("10001:700", self.script)
