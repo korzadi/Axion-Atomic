@@ -1,4 +1,4 @@
-# Estado de autenticación multiusuario — AXION ATOMIC
+# Estado de autenticación multiusuario — AXYRON ATOMIC
 
 **Estado de código:** primitives y rutas principales implementadas en `main`; CI #339 completado correctamente.  
 **Estado operativo:** autenticación pública continúa cerrada por defecto (`AUTH_ENABLED=false`). El CI no demuestra que SMTP, OAuth, HTTPS, cookies o el dominio estén configurados en el entorno de despliegue.
@@ -42,3 +42,8 @@ El workflow CI #339 (run `42255282471`, commit `fc4e719c5c682b1138150bf48596319e
 - No introducir credenciales SMTP/OAuth en Git ni en logs.
 - No habilitar facturación ni pagos a través de esta documentación.
 - No desplegar ni aplicar migraciones al VPS sin autorización específica.
+
+
+## Identidad del producto
+
+La identidad vigente del producto es **Axyron Atomic** y el agente se denomina **AXYRON**. Las menciones históricas AXION ATOMIC en ejecuciones CI antiguas corresponden al nombre anterior del proyecto y no a la identidad visible actual.
