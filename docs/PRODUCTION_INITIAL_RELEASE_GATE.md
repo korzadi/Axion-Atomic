@@ -28,7 +28,7 @@ El primer lanzamiento será limitado: un modelo, usuarios individuales y catálo
 - [x] Código de verificación de correo con token de un solo uso, hash, caducidad y consumo atómico; falta probar entrega SMTP real.
 - [x] Recuperación de contraseña, revocación de sesiones y notificación; falta aceptación end-to-end en staging.
 - [x] Rate limiting persistente para registro, login, recuperación y callbacks OAuth; confirmar IP efectiva detrás del proxy en staging.
-- [x] Sesiones, CSRF, cookies HttpOnly/Secure configurables y expiración; falta validar infraestructura HTTPS real.
+- [x] Sesiones, CSRF, cookie de sesión HttpOnly/Secure configurable y expiración; el login por contraseña ahora establece explícitamente HttpOnly y tiene prueba de regresión. Falta validar infraestructura HTTPS real.
 - [x] Rol administrativo global separado de roles de proyecto y MFA integrado en login/OAuth; faltan configuración runtime, rotación MFA en staging y revisión de operaciones sensibles.
 - [x] Pruebas automatizadas de aislamiento, cuentas suspendidas/no verificadas y rutas MFA; falta aceptación funcional y revisión independiente.
 
@@ -108,3 +108,8 @@ Se añadió `api/billing_preflight.py` para agrupar el cálculo de presupuesto y
 ### Identidad estable para reintentos HTTP
 
 Se añadió `api/billing_request_identity.py`. Genera un UUID determinista por combinación usuario + `Idempotency-Key`, valida longitud (1–200) y caracteres imprimibles ASCII, y evita que un reintento HTTP cree un `request_id` diferente. El helper no reserva créditos ni está conectado al endpoint. La futura ruta deberá exigir la cabecera, validar sesión/CSRF/rol de proyecto antes de invocarlo y pasar la misma clave al servicio transaccional de reservas.
+
+
+### Corrección de cookie de sesión — 7 de noviembre de 2026
+
+La ruta de login por contraseña establecía la cookie de sesión sin `HttpOnly`. Se corrigió a `httponly=True` y se añadió una prueba que verifica el atributo en la respuesta. La cookie CSRF sigue siendo legible por el navegador para adjuntar el encabezado `X-CSRF-Token`; no contiene el token de sesión. GitHub Actions `42399587370` aprobó las pruebas Python, Playwright, build de imagen en CI, migraciones PostgreSQL e integración Qdrant Cloud. Esto no reemplaza la validación de staging ni autoriza activar `AUTH_ENABLED`.
