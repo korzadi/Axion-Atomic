@@ -194,3 +194,21 @@ La interfaz de Axyron Studio ya podía iniciar tareas y registrar aprobaciones, 
 **Limitación de ejecución:** el runtime HTTP construye el toolset de proyecto sin un backend Docker inyectado por defecto. Las herramientas de lectura y cambios de archivos aprobados existen, pero comandos de shell/pruebas en sandbox no se ofrecen hasta configurar y validar un backend Docker aislado. No se debe describir la terminal/sandbox como disponible.
 
 Pruebas: `tests/test_frontend_studio_spa.py` ahora exige la ruta de reanudación, el control de confirmación y el botón para ejecuciones pendientes de aprobación. Las pruebas HTTP existentes en `tests/test_workspace_agent_runtime_http.py` cubren inicio, reanudación, permisos, CSRF y fallos cerrados. La ejecución CI de este commit debe completar antes de considerar el cambio validado.
+
+
+## Estado vigente de integración HTTP — 7 de noviembre de 2026
+
+Esta actualización prevalece sobre las secciones históricas anteriores que indicaban que no existían rutas de inicio/reanudación. La rama actual incluye:
+
+- `POST /workspace/agent/runs`: inicia una ejecución persistente con `ProjectAgentRuntime.start` después de validar membresía `owner/admin/editor` y rate limit.
+- `POST /workspace/agent/runs/{run_id}/resume`: restaura por `run_id + project_id`, comprueba membresía y reanuda según el estado persistido.
+- `GET /workspace/agent/runs` y `GET /workspace/agent/runs/{run_id}`: lectura restringida a miembros del proyecto.
+- `POST /workspace/agent/approvals/{approval_id}`: aprobación/rechazo por owner/admin; actualiza en una transacción la solicitud y la acción persistida, sin ejecutar la mutación dentro de la petición de decisión.
+- La siguiente petición autenticada de resume consulta `DbApprovalGate`, reclama la acción una sola vez, comprueba de nuevo el hash y aplica la herramienta aprobada. Estados inciertos no se reejecutan automáticamente.
+- `agent/sqlalchemy_meta.py` adapta stores al SQLAlchemy Engine mediante conexiones/cursors por operación; no comparte una conexión global.
+- La fábrica de proyecto solo acepta `DockerBackend` si se inyecta. Actualmente `_agent_runtime()` no inyecta backend Docker, por lo que el runtime HTTP expone herramientas de workspace/Git con aprobación, pero no herramientas de ejecución de comandos/sandbox. Esto es deliberado hasta cerrar la integración segura del daemon y snapshots.
+- `compose.yaml` no expone socket Docker ni endpoint daemon al servicio API. No habilitar `LocalBackend` en producción ni montar automáticamente el socket del host.
+
+### Endurecimiento de autorización antes de cuotas
+
+El 7 de noviembre se corrigió el orden de las rutas de inicio y reanudación: ambas llaman a `_project_role(..., ("owner", "admin", "editor"))` antes de consumir rate limit. Se añadieron pruebas para confirmar que una cuenta ajena recibe 403 y no consume cuota ni invoca el runtime. La corrección está pendiente de la ejecución CI más reciente para considerarse verificada.
