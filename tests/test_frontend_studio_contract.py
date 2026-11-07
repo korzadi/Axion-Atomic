@@ -41,6 +41,14 @@ def test_unreleased_models_and_commercial_features_are_roadmap_items():
     assert "Precios y cuotas pendientes de aprobación" in source
 
 
+def test_optional_newsletter_markup_cannot_abort_landing_reveal():
+    source = FRONTEND.read_text(encoding="utf-8")
+    assert "var newsletterForm=document.getElementById('nlf');if(newsletterForm)" in source
+    assert "document.getElementById('nlf').onsubmit" not in source
+    assert "new IntersectionObserver" in source
+    assert "document.querySelectorAll('.rv').forEach(function(x){io.observe(x)})" in source
+
+
 def test_public_indicators_are_loaded_from_backend_not_fake_counters():
     source = FRONTEND.read_text(encoding="utf-8")
     assert "/billing/catalog" in source
