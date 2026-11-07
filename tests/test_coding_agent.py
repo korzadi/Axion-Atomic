@@ -20,7 +20,17 @@ class ParseTests(unittest.TestCase):
     def test_variants(self):
         self.assertEqual(parse_action(fin("ok")), ("final", "ok", None))
         self.assertEqual(parse_action('Claro:\n```json\n{"tool":"git_status"}\n```'), ("tool", "git_status", {}))
-        for bad in ("sin json", '{"tool":"a","final":"b"}', "{}", '{"final": 3}', '{"tool": 5}', "[1,2]"):
+        for bad in (
+            "sin json",
+            '{"tool":"a","final":"b"}',
+            "{}",
+            '{"final": 3}',
+            '{"tool": 5}',
+            "[1,2]",
+            '{"final":"ok"} texto adicional',
+            '{"final":"ok"}{"tool":"delete_file","args":{"path":"important.txt"}}',
+            '{"tool":"git_status"} ```json {"final":"conflicting"} ```',
+        ):
             with self.assertRaises(ValueError, msg=bad): parse_action(bad)
 
 
