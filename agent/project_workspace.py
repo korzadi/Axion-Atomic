@@ -86,4 +86,7 @@ def build_project_toolset(
             audit=audit,
             snapshot_dir=snapshot_dir,
         )
-    return workspace, build_tools(workspace, git, sandbox=sandbox)
+    application_root = Path(__file__).resolve().parent.parent
+    return workspace, build_tools(
+        workspace, git, sandbox=sandbox, skill_roots=(application_root,)
+    )
