@@ -77,5 +77,40 @@ class ShadowUsagePersistenceTests(unittest.TestCase):
         self.assertEqual(params["usage_source"], "unavailable")
 
 
+    def test_rejects_negative_or_non_integer_provider_counters(self):
+        for field, value in (
+            ("prompt_eval_count", -1),
+            ("eval_count", -1),
+            ("total_duration_ns", -1),
+            ("load_duration_ns", -1),
+            ("prompt_eval_duration_ns", -1),
+            ("eval_duration_ns", -1),
+            ("prompt_eval_count", True),
+            ("eval_count", 1.5),
+        ):
+            result = SimpleNamespace(
+                requested_model="atomic-code:16k-8k",
+                returned_model="atomic-code:16k-8k",
+                prompt_eval_count=1,
+                eval_count=1,
+                total_duration_ns=1,
+                load_duration_ns=1,
+                prompt_eval_duration_ns=1,
+                eval_duration_ns=1,
+                usage_source="ollama_response",
+                done=True,
+            )
+            setattr(result, field, value)
+            with self.subTest(field=field, value=value):
+                with patch("api.usage_events.engine.begin") as begin:
+                    with self.assertRaises(ValueError):
+                        persist_shadow_usage_event(
+                            request_id="6a1e8e9a-52a1-45f6-9e19-7c7cb0c1e5a5",
+                            user_id="user-1",
+                            project_id="project-1",
+                            result=result,
+                        )
+                begin.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()
