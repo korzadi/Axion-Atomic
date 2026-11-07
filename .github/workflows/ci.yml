@@ -51,15 +51,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Build the production Docker image (no deployment)
-        run: docker build --pull --tag axyron-atomic:ci .
-      - name: Smoke-test the packaged API and AXYRON STUDIO
+      - name: Build independent production images (no deployment)
+        run: |
+          docker build --pull --file Dockerfile --tag axyron-atomic-api:ci .
+          docker build --pull --file Dockerfile.frontend --tag axyron-atomic-frontend:ci .
+      - name: Smoke-test frontend, static assets and API reverse proxy
         shell: bash
         run: |
           set -euo pipefail
-          docker run --detach --rm --name axyron-atomic-ci -p 127.0.0.1:18080:8000 axyron-atomic:ci
-          cleanup() { docker stop axyron-atomic-ci >/dev/null 2>&1 || true; }
+          docker network create axyron-ci
+          cleanup() {
+            docker rm --force axyron-frontend-ci axyron-api-ci >/dev/null 2>&1 || true
+            docker network rm axyron-ci >/dev/null 2>&1 || true
+          }
           trap cleanup EXIT
+          docker run --detach --network axyron-ci --name axyron-api-ci axyron-atomic-api:ci
+          docker run --detach --network axyron-ci --name axyron-frontend-ci -p 127.0.0.1:18080:8080 axyron-atomic-frontend:ci
           ready=0
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:18080/health/live >/dev/null; then
@@ -71,7 +78,6 @@ jobs:
           test "$ready" -eq 1
           curl --fail --silent --show-error --output /tmp/axyron-homepage http://127.0.0.1:18080/
           grep -q "Axyron Atomic" /tmp/axyron-homepage
-          # Verify that the production image serves every landing-page asset.
           for asset in studio.css studio.js workspace.js; do
             curl --fail --silent --show-error "http://127.0.0.1:18080/$asset" --output "/tmp/axyron-$asset"
             test -s "/tmp/axyron-$asset"
@@ -79,11 +85,11 @@ jobs:
           grep -q "IntersectionObserver" /tmp/axyron-homepage
           grep -q "workspace.js" /tmp/axyron-homepage
           grep -q "studio.js" /tmp/axyron-homepage
-          curl --fail --silent --show-error --output /tmp/axion-live http://127.0.0.1:18080/health/live
-          grep -q '"status":"alive"' /tmp/axion-live
-          api_status="$(curl --silent --output /tmp/axion-auth-response --write-out '%{http_code}' http://127.0.0.1:18080/auth/me)"
+          curl --fail --silent --show-error --output /tmp/axyron-admin -H 'Host: admin.axyronatomic.com' http://127.0.0.1:18080/
+          grep -q "Axyron" /tmp/axyron-admin
+          api_status="$(curl --silent --output /tmp/axyron-auth-response --write-out '%{http_code}' http://127.0.0.1:18080/auth/me)"
           test "$api_status" = "503"
-          ! grep -qi '<!doctype html>' /tmp/axion-auth-response
+          ! grep -qi '<!doctype html>' /tmp/axyron-auth-response
 
   studio-browser-e2e:
     runs-on: ubuntu-24.04
