@@ -32,6 +32,7 @@ class ResourceLimits:
 
 SAFE_PATH = re.compile(r"^[A-Za-z0-9_./-]+$")
 IMAGE_RE = re.compile(r"^[a-z0-9][a-z0-9._/:@-]{0,200}$")
+IMAGE_DIGEST_RE = re.compile(r"^[a-z0-9][a-z0-9._/:@-]{0,150}@sha256:[0-9a-f]{64}$")
 PYTHON_EXES = {"python", "python3", "pytest", "ruff", "flake8", "mypy", "black", "pyflakes", "isort", "pip", "pip3"}
 NODE_EXES = {"node", "npm", "npx", "yarn", "pnpm", "deno", "bun", "tsc"}
 
@@ -64,7 +65,7 @@ class DockerBackend:
         for key, image in images.items():
             if not isinstance(key, str) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", key):
                 raise ValueError("Clave de imagen de sandbox inválida")
-            if not isinstance(image, str) or not re.search(r"@sha256:[0-9a-f]{64}$", image):
+            if not isinstance(image, str) or not IMAGE_DIGEST_RE.fullmatch(image):
                 raise ValueError(f"La imagen de sandbox '{key}' debe estar fijada por digest SHA-256")
         # No existe todavía una implementación de filtrado egress verificable. Rechazar incluso
         # el opt-in evita que una variable de configuración convierta una bridge Docker en salida libre.
