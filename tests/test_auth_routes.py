@@ -55,9 +55,12 @@ class AuthRouteGateTests(unittest.TestCase):
         from unittest.mock import Mock
         from fastapi import Request
         from api.auth_routes import oauth_callback
-        with patch("api.auth_routes.settings.auth_enabled", True):
+        request = Mock(spec=Request)
+        request.client.host = "198.51.100.13"
+        with patch("api.auth_routes.settings.auth_enabled", True), \\
+             patch("api.auth_routes._enforce_rate_limit"):
             response = asyncio.run(oauth_callback(
-                "google", Mock(spec=Request), code="authorization-code", state="provider-state",
+                "google", request, code="authorization-code", state="provider-state",
                 browser_state="different-browser-state",
             ))
         self.assertEqual(response.status_code, 303)
