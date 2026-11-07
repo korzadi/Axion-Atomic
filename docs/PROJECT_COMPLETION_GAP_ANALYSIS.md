@@ -229,3 +229,50 @@ La validación de GitHub Actions para el HEAD `e045d10158163be198128bba2708c598d
 - No se ha ejecutado una prueba E2E con el modelo Atomic Code 1.1 real, un usuario autenticado y workspace aislado en un entorno operativo.
 - No se han completado las pruebas de autenticación real, SMTP/OAuth/MFA ni la activación de cobros.
 - No se ha desplegado este HEAD en el VPS. Los resultados CI no equivalen a una certificación de producción.
+
+
+---
+
+## Actualización de continuidad y CI (7 de noviembre de 2026)
+
+**Commit revisado:** `6cb39f61ae929b74137e8378bae93c7a0b51fa10`  
+**CI:** ejecución [42409035180](https://github.com/korzadi/Axion-Atomic/actions/runs/42409035180), resultado **5/5 trabajos aprobados**.
+
+### Cambios verificados en esta actualización
+
+- El instalador `scripts/install_vps.sh` ofrece `--prepare`, `--check` y `--deploy`; el despliegue requiere confirmación literal.
+- `--check` ahora es de solo lectura y requiere preparación previa.
+- El preflight detecta contenedores de los proyectos Compose anteriores/nuevos, contenedores conectados al volumen persistente y el volumen `axion_atomic_pgdata` incluso cuando está desconectado.
+- El instalador verifica los permisos/propietarios esperados para `workspace/` (UID 10001, modo 700) y `knowledge/` (UID 10001, modo 500). No corrige recursivamente directorios existentes.
+- El respaldo PostgreSQL precede a la migración; no hay borrado de volúmenes ni rollback destructivo.
+- Se añadió `.dockerignore` para excluir secretos, archivos de entorno reales, workspaces, conocimiento, backups, bases de datos locales y metadatos Git del contexto Docker. Las skills versionadas necesarias siguen incluidas.
+- README y documentación de instalación describen estas salvaguardas.
+
+### Evidencia automatizada de este commit
+
+- Python: **696 passed, 9 skipped, 4 warnings**.
+- `container-image-build`: success; incluye smoke test de la imagen y API/Studio empaquetados.
+- `postgres-migrations`: success.
+- `qdrant-cloud-integration`: success.
+- `studio-browser-e2e`: success.
+- Sintaxis del instalador Bash: validada por CI.
+
+Estos resultados corresponden al commit indicado. Son pruebas de CI, no pruebas del VPS ni una autorización para desplegar.
+
+### Estado operativo que sigue bloqueando el despliegue
+
+El instalador se detendrá intencionalmente ante recursos anteriores. El siguiente paso no es ejecutar `--deploy`, sino realizar un inventario de solo lectura y diseñar una reconciliación explícita del proyecto Compose y del volumen existente. No se ha accedido ni modificado el VPS durante esta actualización.
+
+### Brechas de V1.0 que permanecen
+
+1. Runtime Docker sandbox no integrado en el runtime HTTP; no ofrecer ejecución arbitraria ni terminal como capacidad disponible.
+2. Facturación durable todavía no conectada a `workspace_chat`; la inferencia continúa en Shadow Mode, sin reservas ni cargos reales.
+3. El flujo durable requiere un proveedor externo de claves/KMS, serialización versionada y validación antes de conectarse a rutas HTTP.
+4. QvaPay: aprobación comercial reportada por el operador, pero contrato técnico/credenciales, órdenes, webhook firmado, verificación servidor-a-servidor e idempotencia aún no demostrados.
+5. SMTP, OAuth y MFA necesitan pruebas end-to-end en staging; `AUTH_ENABLED=false` se mantiene.
+6. El portal administrativo no dispone todavía de operaciones mutables completas y verificadas.
+7. La reconciliación de Compose/volumen, prueba de restauración y despliegue autorizado siguen pendientes.
+
+### Límite de la evidencia
+
+No se han realizado en este trabajo: despliegue, reinicios, migraciones sobre la base del VPS, cambios de Nginx/UFW, cambios de secretos ni pruebas contra servicios de producción. La imagen Docker construida por CI no prueba la instalación sobre el VPS existente.
