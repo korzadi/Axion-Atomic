@@ -11,8 +11,8 @@ El primer lanzamiento será limitado: un modelo, usuarios individuales y catálo
 
 ## 2. Bloqueadores verificados en el repositorio
 
-- auth_enabled está desactivado por defecto. El registro crea usuarios pending_verification, pero no se encontró un flujo completo de verificación de correo.
-- No habilitar autenticación pública hasta añadir verificación, recuperación de contraseña, rate limiting y pruebas de abuso.
+- `AUTH_ENABLED` permanece desactivado por defecto. El repositorio ya incluye registro pendiente, verificación de correo, reenvío, recuperación de contraseña, revocación de sesiones, rate limiting persistente, OAuth Google/GitHub y MFA integrado en contraseña/OAuth. La implementación está cubierta por CI; la entrega SMTP, OAuth real, proxy/cookies y aceptación siguen pendientes de staging.
+- No habilitar autenticación pública hasta validar en staging los flujos completos, configuración runtime de MFA/SMTP/OAuth, seguridad del proxy, revisión independiente y pruebas de abuso.
 - La medición de Ollama está en Shadow Mode: emite logs, no persiste uso durable ni cobra créditos. Existe un helper puro de cálculo de tarifa que exige contadores finales confiables y coincidencia entre modelo solicitado/devuelto; todavía no reserva saldo ni está conectado a inferencia.
 - Existe una base PostgreSQL aditiva para cuotas, reservas, asignaciones y ledger (migraciones 007/008/009/010), además de un servicio transaccional inicial de reserva/liquidación y conciliación auditada de reservas `unknown`/`review` cuando se confirma que no hubo ejecución. La auditoría es append-only e idempotente; la función requiere que una capa superior valide al administrador y la evidencia. El CI de la migración 009 y sus pruebas Python/PostgreSQL terminó correctamente (run 247). Se añadió un registro de ejecución único por reserva y almacenamiento de resultado exclusivamente cifrado (migración 010); la capa de almacenamiento permite reclamar una ejecución una sola vez y recuperar ciphertext completado con verificación SHA-256. Se añadió `api/billing_result_crypto.py` con AES-256-GCM, nonce aleatorio de 96 bits y AAD ligado a user_id/reservation_id/execution_id; el proveedor de claves es una interfaz inyectable y los tests cubren integridad, contexto, clave incorrecta y rotación por key_id. Esto NO proporciona por sí solo un KMS: aún falta conectar un gestor externo de secretos/claves, configurar custodia/rotación operativa y enlazar el cifrado/descifrado al orquestador de ejecución y a rutas HTTP. Se añadió `api/billing_execution_durable.py`: reserva, claim único, inferencia, persistencia de ciphertext antes de liquidar y recuperación de ejecuciones `completed` sin repetir inferencia; los estados `started`/`unknown`/`review` bloquean la reejecución. Tiene pruebas unitarias del orden persistir→liquidar y recuperación sin segunda llamada. Aún no está integrado en `workspace_routes.py` y requiere serializador estable más proveedor KMS real. Se añadió una prueba de integración PostgreSQL que simula caída de liquidación después de persistir ciphertext y verifica recuperación sin segunda inferencia; el workflow PostgreSQL ahora ejecuta explícitamente las pruebas del store y de recuperación durable. También se reforzó la idempotencia de reservas para vincular clave a payload, cantidad, proyecto, request_id y versión de política; las pruebas de integración cubren reutilización incompatible. Siguen pendientes pruebas adicionales de expiración, recuperación tras caída y conciliación de uso confirmado. La tabla de telemetría sigue siendo observacional y no debe usarse directamente como fuente de cobro.
 - La API heredada /v1 usa una clave compartida y no representa identidad individual; queda fuera de facturación.
@@ -25,12 +25,12 @@ El primer lanzamiento será limitado: un modelo, usuarios individuales y catálo
 ## 3. Entregables obligatorios antes de cobrar
 
 ### A. Identidad, sesiones y protección
-- Verificación de correo con token aleatorio de un solo uso, hash almacenado, caducidad y consumo atómico.
-- Recuperación de contraseña, invalidación de sesiones y notificación de cambio.
-- Rate limiting persistente/distribuido para registro, login, recuperación y endpoints costosos.
-- Controles de sesión, CSRF, cookies seguras y expiración.
-- Rol administrativo global separado de roles de proyecto; MFA/2FA para operaciones económicas críticas.
-- Pruebas de aislamiento entre usuarios/proyectos y de cuentas suspendidas/no verificadas.
+- [x] Código de verificación de correo con token de un solo uso, hash, caducidad y consumo atómico; falta probar entrega SMTP real.
+- [x] Recuperación de contraseña, revocación de sesiones y notificación; falta aceptación end-to-end en staging.
+- [x] Rate limiting persistente para registro, login, recuperación y callbacks OAuth; confirmar IP efectiva detrás del proxy en staging.
+- [x] Sesiones, CSRF, cookies HttpOnly/Secure configurables y expiración; falta validar infraestructura HTTPS real.
+- [x] Rol administrativo global separado de roles de proyecto y MFA integrado en login/OAuth; faltan configuración runtime, rotación MFA en staging y revisión de operaciones sensibles.
+- [x] Pruebas automatizadas de aislamiento, cuentas suspendidas/no verificadas y rutas MFA; falta aceptación funcional y revisión independiente.
 
 ### B. Inferencia y límites
 - Persistir cada petición y medición en PostgreSQL con UUID, usuario, proyecto, modelo, política y estado.
