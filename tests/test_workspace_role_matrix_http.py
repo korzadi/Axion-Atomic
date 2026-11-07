@@ -110,6 +110,54 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["choices"][0]["message"]["content"], "respuesta segura")
 
+    def test_rejected_model_identity_is_not_persisted_as_usage(self):
+        result = InferenceResult(
+            content="respuesta de modelo inesperado", requested_model="atomic-code",
+            returned_model="unexpected-model", done=True, prompt_eval_count=3,
+            eval_count=2, total_duration_ns=10, load_duration_ns=None,
+            prompt_eval_duration_ns=None, eval_duration_ns=None,
+            usage_source="ollama_response",
+        )
+        with (
+            patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.settings.chat_model", "atomic-code"),
+            patch("api.workspace_routes.retrieve", return_value=""),
+            patch("api.workspace_routes.chat_with_usage", new_callable=AsyncMock, return_value=result),
+            patch("api.workspace_routes.persist_shadow_usage_event") as persist_usage,
+            patch("api.workspace_routes._save_chat_history") as save_history,
+        ):
+            response = self._post("/workspace/chat/completions", {
+                "project_id": "project-a",
+                "messages": [{"role": "user", "content": "hola"}],
+            })
+        self.assertEqual(response.status_code, 503)
+        persist_usage.assert_not_called()
+        save_history.assert_not_called()
+
+    def test_incomplete_inference_is_not_persisted_as_usage(self):
+        result = InferenceResult(
+            content="respuesta parcial", requested_model="atomic-code",
+            returned_model="atomic-code", done=False, prompt_eval_count=3,
+            eval_count=2, total_duration_ns=10, load_duration_ns=None,
+            prompt_eval_duration_ns=None, eval_duration_ns=None,
+            usage_source="ollama_response",
+        )
+        with (
+            patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.settings.chat_model", "atomic-code"),
+            patch("api.workspace_routes.retrieve", return_value=""),
+            patch("api.workspace_routes.chat_with_usage", new_callable=AsyncMock, return_value=result),
+            patch("api.workspace_routes.persist_shadow_usage_event") as persist_usage,
+            patch("api.workspace_routes._save_chat_history") as save_history,
+        ):
+            response = self._post("/workspace/chat/completions", {
+                "project_id": "project-a",
+                "messages": [{"role": "user", "content": "hola"}],
+            })
+        self.assertEqual(response.status_code, 503)
+        persist_usage.assert_not_called()
+        save_history.assert_not_called()
+
     def test_editor_can_ingest_and_create_plan_but_not_decide_approvals(self):
         self.role = "editor"
         with (
