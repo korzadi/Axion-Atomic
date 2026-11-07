@@ -1,4 +1,4 @@
-"""Composition root del runtime de AXION con stores persistentes."""
+"""Composition root del runtime de AXYRON con stores persistentes."""
 from typing import Callable
 
 from agent.approval_store import DbApprovalGate
