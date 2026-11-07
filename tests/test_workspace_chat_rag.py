@@ -121,7 +121,8 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
             patch("api.workspace_routes._enforce_workspace_limit"),
             patch("api.workspace_routes.retrieve", new=AsyncMock(return_value="")),
             patch("api.workspace_routes.chat_with_usage", new=AsyncMock(return_value=result)),
-            patch("api.workspace_routes.persist_shadow_usage_event"),
+            patch("api.workspace_routes.persist_shadow_usage_event") as persist_usage,
+            patch("api.workspace_routes._save_chat_history") as save_history,
             patch("api.workspace_routes.settings.chat_model", "atomic-code:16k-8k"),
         ):
             with self.assertRaises(HTTPException) as caught:
@@ -129,6 +130,8 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(caught.exception.status_code, 503)
         self.assertIn("modelo ejecutado no coincide", caught.exception.detail)
+        persist_usage.assert_not_called()
+        save_history.assert_not_called()
 
     async def test_chat_returns_completed_response_when_history_storage_fails(self):
         request = ChatRequest(
@@ -187,7 +190,7 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
             patch("api.workspace_routes._enforce_workspace_limit"),
             patch("api.workspace_routes.retrieve", new=AsyncMock(return_value="")),
             patch("api.workspace_routes.chat_with_usage", new=AsyncMock(return_value=result)),
-            patch("api.workspace_routes.persist_shadow_usage_event"),
+            patch("api.workspace_routes.persist_shadow_usage_event") as persist_usage,
             patch("api.workspace_routes._save_chat_history") as save_history,
             patch("api.workspace_routes.settings.chat_model", "atomic-code:16k-8k"),
         ):
@@ -196,6 +199,7 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(caught.exception.status_code, 503)
         self.assertEqual(caught.exception.detail, "La inferencia no terminó correctamente")
+        persist_usage.assert_not_called()
         save_history.assert_not_called()
 
     def test_rag_context_is_encoded_as_json_data_not_prompt_instructions(self):
