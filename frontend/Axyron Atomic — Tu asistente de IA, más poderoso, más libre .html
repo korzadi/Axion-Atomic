@@ -223,7 +223,11 @@ input:focus{outline:2px solid var(--ac);border-color:transparent}
       <form id="ws-chat-form">
         <label for="ws-prompt">Habla con Axyron · Atomic Code</label>
         <textarea id="ws-prompt" required maxlength="20000" rows="4" placeholder="Describe lo que necesitas…" style="width:100%;padding:12px;border-radius:11px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font:inherit"></textarea>
-        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap"><span class="muted">Las respuestas se guardan en el historial del proyecto.</span><button class="btn p" id="ws-send" type="submit">Enviar mensaje</button></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px">
+          <div style="min-width:150px;flex:1"><label for="ws-temperature">Creatividad</label><select id="ws-temperature" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)"><option value="0">Precisa · 0.0</option><option value="0.2" selected>Equilibrada · 0.2</option><option value="0.5">Creativa · 0.5</option><option value="0.8">Muy creativa · 0.8</option><option value="1.2">Experimental · 1.2</option></select></div>
+          <div style="min-width:150px;flex:1"><label for="ws-max-tokens">Longitud máxima</label><select id="ws-max-tokens" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)"><option value="1024">Corta · 1.024 tokens</option><option value="2048" selected>Normal · 2.048 tokens</option><option value="4096">Larga · 4.096 tokens</option><option value="8192">Máxima · 8.192 tokens</option></select></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap"><span class="muted">Las respuestas se guardan en el historial del proyecto. Los ajustes se aplican a la siguiente petición.</span><button class="btn p" id="ws-send" type="submit">Enviar mensaje</button></div>
       </form>
     </div>
   </div>
