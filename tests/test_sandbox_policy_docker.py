@@ -35,7 +35,7 @@ class PolicyTests(unittest.TestCase):
 
 class DockerArgvTests(unittest.TestCase):
     def args(self, **kw):
-        base = dict(image="python:3.12-slim", argv=["python", "-m", "pytest"], snapshot="/tmp/axion-sbx-abc", limits=ResourceLimits(),
+        base = dict(image="registry.example/python@sha256:" + "a" * 64, argv=["python", "-m", "pytest"], snapshot="/tmp/axion-sbx-abc", limits=ResourceLimits(),
                     network="none", name="axion-1", uid=1000, gid=1000)
         base.update(kw); return docker_argv(**base)
 
@@ -45,12 +45,17 @@ class DockerArgvTests(unittest.TestCase):
             self.assertIn(flag, a)
         self.assertEqual(a[a.index("--network") + 1], "none"); self.assertEqual(a[a.index("--cap-drop") + 1], "ALL")
         self.assertEqual(a[a.index("--user") + 1], "1000:1000"); self.assertEqual(a[a.index("--memory") + 1], a[a.index("--memory-swap") + 1])
-        self.assertEqual(a[a.index("python:3.12-slim") + 1:], ["python", "-m", "pytest"])
+        self.assertEqual(a[a.index("registry.example/python@sha256:" + "a" * 64) + 1:], ["python", "-m", "pytest"])
         self.assertNotIn("--privileged", a); self.assertFalse(any("docker.sock" in x for x in a))
 
     def test_only_snapshot_is_mounted(self):
         a = self.args(); mounts = [a[i + 1] for i, x in enumerate(a) if x in ("--mount", "-v")]
         self.assertEqual(mounts, ["type=bind,src=/tmp/axion-sbx-abc,dst=/workspace"])
+
+    def test_docker_argv_rejects_mutable_image_tags(self):
+        for image in ("python:3.12-slim", "registry.example/image:latest", "registry.example/image"):
+            with self.assertRaises(ValueError):
+                self.args(image=image)
 
     def test_rejects_injection_and_root(self):
         for kw in ({"snapshot": "/tmp/a,dst=/etc"}, {"snapshot": "/tmp/a b"}, {"image": "x --privileged"}, {"name": "a;b"}, {"network": "host --x"}, {"uid": 0}):
