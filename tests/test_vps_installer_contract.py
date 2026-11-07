@@ -36,6 +36,32 @@ class VpsInstallerContractTests(unittest.TestCase):
         self.assertIn('docker volume inspect axion_atomic_pgdata', self.script)
         self.assertIn('"$VOLUME_EXISTS" == 1', self.script)
 
+    def test_read_only_vps_inventory_is_present_and_scoped(self):
+        inventory = (ROOT / "scripts/inspect_vps_state.sh").read_text(encoding="utf-8")
+        for token in (
+            "axion-atomic",
+            "axyron-atomic",
+            "axion_atomic_pgdata",
+            "docker volume inspect",
+            "docker ps -a",
+            "ss -ltnH",
+            "No se mostraron secretos",
+        ):
+            self.assertIn(token, inventory)
+        for forbidden in (
+            "docker compose up",
+            "docker compose down",
+            "docker restart",
+            "docker stop",
+            "docker rm",
+            "docker volume rm",
+            "docker volume prune",
+            "docker system prune",
+            "cat .env",
+            "docker inspect .*Config.Env",
+        ):
+            self.assertNotIn(forbidden, inventory)
+
     def test_workspace_permissions_are_checked_before_deploy(self):
         self.assertIn("WORKSPACE_META", self.script)
         self.assertIn("10001:700", self.script)

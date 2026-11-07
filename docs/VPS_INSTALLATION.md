@@ -50,3 +50,14 @@ Diagnóstico no destructivo:
 
     docker compose --project-name axyron-atomic -f compose.yaml ps
     docker compose --project-name axyron-atomic -f compose.yaml logs --tail=100 api
+
+
+## Reconciliación del VPS existente (solo lectura)
+
+Antes de intentar `--deploy`, recopila el estado actual sin detener ni modificar servicios:
+
+    bash scripts/inspect_vps_state.sh
+
+El script muestra únicamente contenedores/redes etiquetados como `axion-atomic` o `axyron-atomic`, el volumen `axion_atomic_pgdata`, referencias a ese volumen, puertos 8070/5433 y metadatos básicos del repositorio. No lee ni imprime `.env`, no inspecciona variables de entorno y no ejecuta operaciones de escritura sobre Docker.
+
+Comparte la salida para diseñar una transición que conserve el volumen y los servicios existentes. No ejecutes `--deploy` hasta completar esa reconciliación y autorizar el despliegue.
