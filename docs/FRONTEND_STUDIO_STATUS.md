@@ -184,3 +184,42 @@ Durante esta validación se corrigió una regla de presentación que hacía visi
 | 13 | Auditoría final y lanzamiento | 0% |
 
 Los porcentajes son estimaciones de implementación, no certificaciones de seguridad ni disponibilidad pública. El promedio simple de estas fases es aproximadamente 58%; no sustituye un criterio de salida a producción.
+
+
+## Continuación autónoma V1.0 — corte técnico del 7 de noviembre de 2026
+
+### Seguridad de sesión: corrección verificada
+
+La revisión de `api/auth_routes.py` encontró que la cookie de sesión emitida tras login con contraseña no declaraba `HttpOnly`, aunque los flujos OAuth y MFA sí lo hacían. Se corrigió el atributo a `httponly=True` y se añadió una regresión en `tests/test_auth_routes.py` que inspecciona la cookie emitida. La cookie CSRF continúa siendo legible por JavaScript de forma intencional; la cookie de sesión no.
+
+También quedaron implementados y probados en el corte anterior los siguientes controles de interfaz: el portal administrativo distingue sesión válida de rol administrativo global, mantiene la opción de cerrar sesión cuando la cuenta no tiene permisos y las aprobaciones del agente solo se muestran a propietarios/administradores del proyecto. El backend sigue siendo la autoridad y vuelve a comprobar esos permisos al recibir cada decisión.
+
+### Validación automatizada del corte
+
+GitHub Actions `42399587370`, commit `5f82e01dba972309e8ae15e6c6b7ee5afd6b76de`, terminó en **success**. Los cinco trabajos terminaron correctamente: `python-tests`, `studio-browser-e2e`, `container-image-build`, `postgres-migrations` y `qdrant-cloud-integration`. La imagen solo se construyó en CI; no hubo despliegue ni cambios en el VPS.
+
+### Progreso por las nueve fases obligatorias
+
+Estimaciones de implementación basadas en código inspeccionado, pruebas disponibles y bloqueos de producción documentados. No son certificación ni disponibilidad pública.
+
+| Fase | Avance estimado | Evidencia / bloqueo principal |
+|---|---:|---|
+| 1. Auditoría y arquitectura | 85% | Arquitectura, rutas, gates y roadmap documentados; falta auditoría independiente completa |
+| 2. Backend | 78% | API, auth, proyectos, chat, RAG y agente; faltan flujos comerciales y algunas operaciones de cuenta |
+| 3. Frontend | 88% | SPA y portal admin conectados a rutas reales; faltan aceptación visual y recorrido completo con cuenta real |
+| 4. Inteligencia artificial | 70% | Ollama, chat, RAG y runtime supervisado implementados; falta verificación de runtime/modelo con cuenta en entorno de staging |
+| 5. Seguridad | 65% | CSRF, sesiones, rate limits, MFA, OAuth y RBAC cubiertos por pruebas; faltan rotación de claves en staging, revisión externa y pruebas de abuso |
+| 6. Base de datos e infraestructura | 80% | Migraciones PostgreSQL y Qdrant Cloud validadas en CI; falta prueba de restauración y aceptación de infraestructura desplegada |
+| 7. Integraciones | 55% | SMTP/OAuth implementados; falta entrega real y callback de proveedores; QvaPay requiere integración de órdenes/webhook/conciliación |
+| 8. Pruebas y calidad | 85% | Cinco trabajos CI aprobados; falta carga, pruebas de recuperación y aceptación E2E de proveedores reales |
+| 9. Lanzamiento V1.0 | 30% | Documentación y build CI; falta staging, gates comerciales/seguridad, despliegue aprobado y smoke test productivo |
+
+**Promedio simple de las nueve fases: 70.7% (71%).** La cifra no significa que V1.0 esté lista: las fases de lanzamiento, integraciones reales y seguridad operativa siguen bloqueadas.
+
+### Siguientes tareas técnicas
+
+1. Completar pruebas de sesión y MFA para flujos de login normal, OAuth y administrador, incluyendo cookies, no-store y revocación.
+2. Verificar el recorrido de Atomic Code con usuario autenticado, historial persistente y runtime real; mantener Shadow Usage sin cobro.
+3. Completar la revisión de aislamiento y autorización del agente, fuentes RAG y recuperación de ejecuciones.
+4. Preparar aceptación de SMTP/OAuth y el subdominio admin en staging; no cambiar DNS/Nginx ni desplegar producción sin autorización específica.
+5. Mantener facturación y checkout deshabilitados hasta cerrar el gate de producción y la integración QvaPay verificada.
