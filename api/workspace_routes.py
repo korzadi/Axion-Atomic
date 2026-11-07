@@ -344,7 +344,10 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
         except Exception:
             pass
 
-    # El historial es privado por usuario y proyecto; solo se guarda tras una inferencia validada.
+    # El historial es secundario: un fallo al guardarlo no debe convertir una
+    # inferencia ya completada en HTTP 503, porque el cliente podría repetirla.
+    # La respuesta válida se entrega y se informa explícitamente del estado.
+    history_saved = True
     try:
         await run_in_threadpool(
             _save_chat_history,
@@ -355,15 +358,16 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
             ],
         )
     except Exception:
+        history_saved = False
         try:
-            logger.warning("No se pudo persistir el historial de chat")
+            logger.warning("No se pudo guardar el historial de chat; se entrega la respuesta ya generada")
         except Exception:
             pass
-        raise HTTPException(status_code=503, detail="No se pudo guardar el historial de la conversación") from None
 
     return {
         "id": f"chatcmpl-{request_id}", "object": "chat.completion", "created": 0,
         "model": req.model,
+        "history_saved": history_saved,
         "choices": [{"index": 0, "message": {"role": "assistant", "content": result.content}, "finish_reason": "stop"}],
     }
 
