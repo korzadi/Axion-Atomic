@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import uuid
 
 
@@ -47,8 +48,13 @@ def request_payload_sha256(
         raise ValueError("policy_version inválida")
     if not isinstance(messages, list) or not messages or len(messages) > 100:
         raise ValueError("messages inválidos")
-    if isinstance(temperature, bool) or not isinstance(temperature, (int, float)):
-        raise ValueError("temperature inválida")
+    if (
+        isinstance(temperature, bool)
+        or not isinstance(temperature, (int, float))
+        or not math.isfinite(temperature)
+        or not 0 <= temperature <= 2
+    ):
+        raise ValueError("temperature debe ser un número finito entre 0 y 2")
     if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or not 1 <= max_tokens <= 8192:
         raise ValueError("max_tokens inválido")
     payload = {
