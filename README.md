@@ -181,6 +181,8 @@ El repositorio incluye un instalador por etapas y conservador para levantar los 
 
 El instalador no modifica servicios existentes, Nginx, UFW, Ollama ni KorzadiVPN; si detecta el proyecto/volumen anterior o puertos ocupados, se detiene para evitar una segunda base de datos. No realiza despliegues automáticamente desde GitHub Actions.
 
+La conectividad privada API→Ollama se diagnostica y configura aparte con `scripts/configure_ollama_firewall.sh --check` / `--apply`; detecta la subred e interfaz bridge reales y limita UFW a esa red, IP privada y puerto 11434. No modifica `OLLAMA_HOST`, no expone Ollama en `eth0` y no toca KorzadiVPN. Detalles y confirmación: [docs/VPS_INSTALLATION.md](docs/VPS_INSTALLATION.md#conexión-privada-con-ollama).
+
 
 ## Contexto seguro de construcción Docker
 
