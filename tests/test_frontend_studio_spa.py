@@ -34,7 +34,7 @@ def test_spa_uses_only_existing_backend_routes_for_available_modules():
         assert endpoint in source
     assert "Próxima actualización" in source
     assert "checkout_enabled" in source
-    assert "Mutaciones deshabilitadas" in source
+    assert "/admin/access/me" not in source
     for section in ("privacidad", "integraciones", "herramientas"):
         assert '"' + section + '"' in source
 
