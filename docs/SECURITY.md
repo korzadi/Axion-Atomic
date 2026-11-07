@@ -23,6 +23,16 @@ AXION ATOMIC dispone de controles implementados en el repositorio, pero **no est
 - Configurar credenciales OAuth fuera del repositorio y verificar callbacks HTTPS definitivos.
 - Probar cookies Secure, CSRF, proxy de confianza y sesiones detrás de la infraestructura real. El rate limit usa `request.client.host`; confirmar en staging la IP efectiva del cliente detrás del proxy sin confiar en encabezados `X-Forwarded-*` no validados.
 - Completar revisión del rol administrativo global y MFA para operaciones sensibles.
+
+### Diseño obligatorio antes de implementar MFA
+- No almacenar secretos TOTP en texto plano. Cifrarlos en reposo con una clave de aplicación independiente de la base de datos, suministrada por el entorno de ejecución y rotatable.
+- Separar el secreto de enrolamiento pendiente del secreto MFA activo; no activar MFA hasta confirmar un código TOTP válido.
+- Guardar el último contador TOTP aceptado y rechazar códigos repetidos para impedir replay.
+- Generar códigos de recuperación de un solo uso; almacenar únicamente hashes, limitar intentos y registrar su consumo.
+- Tras validar contraseña, no emitir cookie/sesión ni completar OAuth hasta superar el desafío MFA cuando la cuenta lo requiera.
+- Aplicar rate limiting específico al desafío, auditar enrolamiento, activación, uso de recuperación, desactivación y rotación.
+- Diseñar recuperación de acceso y rotación de la clave de cifrado antes de habilitar MFA; si falta la clave o falla el descifrado, denegar el acceso sensible (fail closed).
+- Cubrir TOTP expirado, reloj fuera de tolerancia, replay, códigos de recuperación repetidos, concurrencia, revocación de sesiones y fallos de clave con pruebas automatizadas.
 - Definir monitoreo, alertas, retención y limpieza de tokens/sesiones/rate limits expirados.
 - Revisar logs, telemetría y frontend para asegurar que no expongan tokens ni datos sensibles.
 - Realizar revisión independiente de seguridad y privacidad y pruebas de abuso.
