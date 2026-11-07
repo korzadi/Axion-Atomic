@@ -4,7 +4,7 @@ import smtplib
 import ssl
 
 def email_delivery_configured(settings) -> bool:
-    return bool(settings.smtp_host and settings.email_from and (settings.smtp_starttls or settings.smtp_ssl))
+    return bool(\n        settings.smtp_host\n        and settings.email_from\n        and (settings.smtp_starttls or settings.smtp_ssl)\n        and not (settings.smtp_starttls and settings.smtp_ssl)\n        and (not settings.smtp_username or settings.smtp_password)\n    )
 
 def send_transactional_email(*, settings, recipient: str, subject: str, body: str) -> None:
     if not email_delivery_configured(settings):
