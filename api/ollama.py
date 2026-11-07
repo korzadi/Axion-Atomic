@@ -85,7 +85,12 @@ async def chat_with_usage(messages, temperature=0.2, max_tokens=2048) -> Inferen
 
 
 async def chat(messages, temperature=0.2, max_tokens=2048):
+    """Devuelve texto solo si Ollama confirma el modelo autorizado y una inferencia completa."""
     result = await chat_with_usage(messages, temperature, max_tokens)
+    if result.requested_model != settings.chat_model or result.returned_model != settings.chat_model:
+        raise RuntimeError("El modelo ejecutado no coincide con el modelo autorizado")
+    if result.done is not True:
+        raise RuntimeError("La inferencia no terminó correctamente")
     return result.content
 
 
