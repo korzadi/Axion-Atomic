@@ -51,6 +51,27 @@ jobs:
         uses: actions/checkout@v4
       - name: Build the production Docker image (no deployment)
         run: docker build --pull --tag axion-atomic:ci .
+      - name: Smoke-test the packaged API and AXION STUDIO
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --rm --name axion-atomic-ci -p 127.0.0.1:18080:8000 axion-atomic:ci
+          cleanup() { docker stop axion-atomic-ci >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18080/health/live >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+          curl --fail --silent http://127.0.0.1:18080/ | grep -q "AXION STUDIO"
+          curl --fail --silent http://127.0.0.1:18080/health/live | grep -q '"status":"alive"'
+          api_status="$(curl --silent --output /tmp/axion-auth-response --write-out '%{http_code}' http://127.0.0.1:18080/auth/me)"
+          test "$api_status" = "503"
+          ! grep -qi '<!doctype html>' /tmp/axion-auth-response
 
   studio-browser-e2e:
     runs-on: ubuntu-24.04
