@@ -111,7 +111,7 @@
     try {
       const data = await request("/workspace/chat/completions", {
         method: "POST",
-        body: JSON.stringify({ model: "atomic-code", project_id: currentProject, messages: nextHistory, temperature: 0.2, max_tokens: 2048, stream: false })
+        body: JSON.stringify({ model: "atomic-code", project_id: currentProject, messages: nextHistory, temperature: Number($("ws-temperature").value), max_tokens: Number.parseInt($("ws-max-tokens").value, 10), stream: false })
       });
       const answer = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
       if (typeof answer !== "string" || !answer.trim()) throw new Error("El servidor devolvió una respuesta vacía.");
