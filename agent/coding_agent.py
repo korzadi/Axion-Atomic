@@ -6,6 +6,7 @@ repite automáticamente porque su efecto externo podría haberse producido.
 """
 import inspect
 import json
+import unicodedata
 import uuid
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable
@@ -45,9 +46,9 @@ class AgentRun:
 
 
 _TASK_SKILL_RULES = {
-    "codebase-summary": ("analiza el proyecto", "analizar el proyecto", "mapa del proyecto", "codebase", "repository overview", "auditoria general"),
+    "codebase-summary": ("analiza el proyecto", "analizar el proyecto", "mapa del proyecto", "codebase", "repository overview", "auditoria", "repositorio", "estructura del proyecto", "resumen del codigo", "inventario del proyecto"),
     "agent-skills": ("skill", "skills", "skill.md", "agent skills", "crear skill", "instalar skill"),
-    "gravity-ui": ("gravity ui", "@gravity-ui", "gravity-ui"),
+    "gravity-ui": ("gravity", "gravity ui", "@gravity-ui", "gravity-ui"),
     "feature-design": ("nueva funcionalidad", "nueva función", "feature", "requisito", "funcionalidad"),
     "implementation-planning": ("planificar", "plan de implementación", "implementacion", "implementar", "fase"),
     "architecture-design": ("arquitectura", "modular", "refactor", "dependencias entre módulos"),
@@ -72,7 +73,7 @@ def _automatic_skill_context(tools: dict[str, Tool], goal: str, max_chars: int =
     reader = tools.get("read_skill")
     if reader is None or reader.run is None:
         return ""
-    text = goal.casefold()
+    text = "".join(ch for ch in unicodedata.normalize("NFKD", goal.casefold()) if not unicodedata.combining(ch))
     selected = ["programming-workflow"]
     for name, terms in _TASK_SKILL_RULES.items():
         if any(term in text for term in terms) and name not in selected:
