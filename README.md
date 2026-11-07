@@ -57,6 +57,8 @@ El alcance de medición de tokens, cuotas, costes por modelo, créditos, suscrip
 
 ## Estado de implementación
 
+- [Matriz de aceptación y seguimiento V1.0](docs/V1_ACCEPTANCE_MATRIX.md)
+
 Este repositorio está en desarrollo por fases. La presencia de una carpeta, documento o esquema no demuestra por sí sola que una capacidad esté integrada. Cada fase debe informar qué se implementó, qué pruebas se ejecutaron realmente y qué queda pendiente.
 
 ## Seguridad y contribuciones
@@ -179,7 +181,7 @@ El repositorio incluye un instalador por etapas y conservador para levantar los 
 - Validación previa: `sudo bash scripts/install_vps.sh --check`.
 - Despliegue explícito, con confirmación y respaldo PostgreSQL antes de migraciones: `sudo bash scripts/install_vps.sh --deploy`.
 
-El instalador no modifica servicios existentes, Nginx, UFW, Ollama ni KorzadiVPN; si detecta el proyecto/volumen anterior o puertos ocupados, se detiene para evitar una segunda base de datos. No realiza despliegues automáticamente desde GitHub Actions.
+El instalador no modifica servicios existentes, Nginx, UFW, Ollama ni KorzadiVPN; si detecta el proyecto existente, cualquiera de los volúmenes PostgreSQL legado/actual o puertos ocupados, se detiene para evitar una segunda base de datos. No realiza despliegues automáticamente desde GitHub Actions.
 
 La conectividad privada API→Ollama se diagnostica y configura aparte con `scripts/configure_ollama_firewall.sh --check` / `--apply`; detecta la subred e interfaz bridge reales y limita UFW a esa red, IP privada y puerto 11434. No modifica `OLLAMA_HOST`, no expone Ollama en `eth0` y no toca KorzadiVPN. Detalles y confirmación: [docs/VPS_INSTALLATION.md](docs/VPS_INSTALLATION.md#conexión-privada-con-ollama).
 
