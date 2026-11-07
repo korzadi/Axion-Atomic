@@ -50,7 +50,9 @@ El pack upstream evoluciona; para producción, fijar un tag o commit revisado en
 ## Integración en el runtime de AXYRON
 
 Implementado en esta rama:
-- Descubrimiento de `.agents/skills` y compatibilidad histórica con `.agent/skills`.
+- Descubrimiento de `.agents/skills` y compatibilidad histórica con `.agent/skills` tanto en el workspace del proyecto como en raíces confiables empaquetadas con la aplicación.
+- `Dockerfile` incorpora `.agents/` en la imagen para que el runtime desplegado pueda leer las skills globales sin copiarlas a cada workspace.
+- La fábrica de workspaces pasa explícitamente la raíz de la aplicación como raíz confiable; los skills del usuario y los skills globales conservan límites de descubrimiento y validación separados.
 - Soporte de skills sueltas y bundles con subdirectorio `skills/`.
 - Lectura de metadatos `name` y `description` del frontmatter YAML.
 - Herramientas de solo lectura `list_skills` y `read_skill` para que AXYRON seleccione y cargue una skill bajo demanda.
@@ -62,8 +64,10 @@ Las skills son guías de procedimiento, no permisos. No pueden anular las instru
 
 ## Estado y límites
 
-- El runtime ya puede descubrir y leer skills instaladas en el workspace.
-- El pack upstream de 25 skills está identificado y documentado, pero **no está copiado ni instalado automáticamente dentro de este repositorio**. La instalación requiere que el operador decida qué workspace debe recibirlo.
+- El runtime ya puede descubrir y leer skills instaladas en el workspace y skills globales empaquetadas con la aplicación.
+- La activación automática carga `programming-workflow` y selecciona skills pertinentes por tema; la comparación de palabras clave normaliza acentos y cubre expresiones habituales en español.
+- El repositorio contiene 20 manifiestos `SKILL.md` versionados. El CI del HEAD debe confirmar la prueba de descubrimiento desde un workspace aislado.
+- El pack upstream de Addy Osmani de 25 skills está identificado y documentado, pero **no está copiado ni instalado automáticamente dentro de este repositorio**; las 20 skills locales son un conjunto propio de AXYRON. La instalación requiere que el operador decida qué workspace debe recibirlo.
 - La compatibilidad de formato con Antigravity no significa que AXYRON ejecute Antigravity, use su modelo, comparta credenciales o controle su IDE.
 - El runtime HTTP de AXYRON sigue sin tener conectado el backend Docker aislado; estas skills no habilitan terminal ni ejecución arbitraria.
 - No declarar skills instaladas hasta que existan los archivos y las pruebas de descubrimiento confirmen su presencia.
