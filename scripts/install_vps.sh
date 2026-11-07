@@ -12,13 +12,19 @@ die(){ printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 usage(){ printf '%s\n' 'Uso: bash scripts/install_vps.sh [--prepare|--check|--deploy]'; }
 case "$MODE" in --prepare|--check|--deploy) ;; -h|--help) usage; exit 0 ;; *) usage; die "Opción desconocida";; esac
 command -v python3 >/dev/null || die "Se requiere Python 3."
+command -v openssl >/dev/null || die "Se requiere OpenSSL para generar secretos aleatorios."
+command -v curl >/dev/null || die "Se requiere curl para las comprobaciones HTTP."
 command -v docker >/dev/null || die "Docker Engine no está instalado."
 docker compose version >/dev/null 2>&1 || die "Se requiere Docker Compose v2."
 [[ -f "$ROOT/compose.yaml" && -f "$ROOT/.env.example" ]] || die "Faltan compose.yaml o .env.example."
 
 prepare(){
-  mkdir -p "$ROOT/workspace" "$ROOT/knowledge" "$BACKUPS"
-  chmod 700 "$ROOT/workspace" "$ROOT/knowledge" "$BACKUPS"
+  if [[ ! -e "$ROOT/workspace" || ! -e "$ROOT/knowledge" || ! -e "$BACKUPS" ]]; then
+    [[ "$EUID" -eq 0 ]] || die "Ejecuta --prepare como root para crear directorios con permisos correctos para el usuario de la API (UID 10001)."
+  fi
+  [[ -e "$ROOT/workspace" ]] || install -d -o 10001 -g 10001 -m 700 "$ROOT/workspace"
+  [[ -e "$ROOT/knowledge" ]] || install -d -o 10001 -g 10001 -m 500 "$ROOT/knowledge"
+  [[ -e "$BACKUPS" ]] || install -d -m 700 "$BACKUPS"
   if [[ ! -e "$ENV_FILE" ]]; then
     install -m 600 "$ROOT/.env.example" "$ENV_FILE"
     DB_PASS="$(openssl rand -hex 32)"
