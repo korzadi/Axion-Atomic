@@ -29,11 +29,25 @@ for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
     if not line or line.startswith("#"):
         continue
     if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", line):
-        errors.append(f"línea {number}: formato KEY=VALUE inválido")
+        if re.match(r"^AXYRON_MFA_ENCRYPTION_KEY_B64\\s*:", line):
+            errors.append(
+                f"línea {number}: AXYRON_MFA_ENCRYPTION_KEY_B64 usa ':'; "
+                "el formato requerido es KEY=VALUE. No se corrige automáticamente."
+            )
+        else:
+            errors.append(f"línea {number}: formato KEY=VALUE inválido")
         continue
     key = line.split("=", 1)[0]
     if key in seen:
-        errors.append(f"línea {number}: variable duplicada {key} (también en línea {seen[key]})")
+        if key == "AXYRON_MFA_ENCRYPTION_KEY_B64":
+            errors.append(
+                f"línea {number}: clave MFA activa duplicada (también en línea {seen[key]}). "
+                "Conserva una sola clave activa; las claves históricas deben ir en "
+                "AXYRON_MFA_ENCRYPTION_KEYRING_B64 como JSON Base64 por key_id. "
+                "No se modifica .env automáticamente."
+            )
+        else:
+            errors.append(f"línea {number}: variable duplicada {key} (también en línea {seen[key]})")
     else:
         seen[key] = number
 if errors:
