@@ -57,3 +57,13 @@ def test_admin_portal_is_separate_and_host_routed():
     assert 'src="/admin.js"' in portal
     assert '/admin/access/me' in admin_js
     assert '["admin"' not in studio
+
+
+def test_admin_portal_preserves_logout_for_authenticated_non_admin():
+    admin_js = (ROOT / "frontend" / "admin.js").read_text(encoding="utf-8")
+    admin_html = (ROOT / "frontend" / "admin.html").read_text(encoding="utf-8")
+    assert "function showDenied()" in admin_js
+    assert "if(!d.administration_enabled){showDenied();return}" in admin_js
+    assert 'api("/auth/me").then(()=>loadAccess()).catch(()=>showLogin())' in admin_js
+    assert 'id="logout"' in admin_html
+    assert 'api("/auth/logout"' in admin_js
