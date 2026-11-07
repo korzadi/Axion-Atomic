@@ -4,6 +4,11 @@ from api.commercial_catalog import public_catalog
 
 
 class CommercialCatalogTests(unittest.TestCase):
+    def test_catalog_uses_final_axyron_brand(self):
+        catalog = public_catalog()
+        self.assertIn("AXYRON ATOMIC", catalog["models"][0]["description"])
+        self.assertNotIn("AXION ATOMIC", catalog["models"][0]["description"])
+
     def test_only_atomic_code_is_marked_as_billing_candidate(self):
         catalog = public_catalog()
         self.assertEqual([model["code"] for model in catalog["models"]], ["atomic-code"])
