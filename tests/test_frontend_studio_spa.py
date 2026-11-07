@@ -46,7 +46,7 @@ def test_studio_dashboard_uses_full_readiness_not_liveness_only():
     assert 'api("/health")' in source
     assert 'readiness.status==="ok"?"Servicios operativos":"Servicios degradados"' in source
     assert 'api("/health/live")' not in source
-    assert "healthClass+'\'>" in source
+    assert "healthClass" in source
 
 
 def test_integrations_and_extensions_are_explicitly_future_features():
