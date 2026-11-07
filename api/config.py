@@ -54,8 +54,14 @@ class Settings(BaseSettings):
             raise ValueError("OAUTH_PUBLIC_BASE_URL no debe contener credenciales, query ni fragmentos")
         if parsed.path not in ("", "/"):
             raise ValueError("OAUTH_PUBLIC_BASE_URL debe ser un origen, sin ruta")
-        if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
-            raise ValueError("OAUTH_PUBLIC_BASE_URL no puede apuntar a un host local")
+        if host == "localhost" or host.endswith((".localhost", ".local", ".internal")) or "." not in host:
+            raise ValueError("OAUTH_PUBLIC_BASE_URL debe usar un hostname público")
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("OAUTH_PUBLIC_BASE_URL debe usar un dominio, no una IP")
         return f"https://{host}" + (f":{parsed.port}" if parsed.port else "")
 
     qdrant_api_key: str | None = None
