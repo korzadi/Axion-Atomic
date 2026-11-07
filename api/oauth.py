@@ -75,6 +75,35 @@ def consume_state(engine: Engine, provider: str, state: str) -> dict:
         return {"nonce": row["nonce"], "terms_accepted": row["terms_accepted"]}
 
 
+def _validate_google_claims(claims: dict, *, nonce: str, client_id: str, now: int | None = None) -> None:
+    """Valida los claims OIDC esenciales y la parte autorizada del token."""
+    instant = int(time.time()) if now is None else now
+    audience = claims.get("aud")
+    if audience != client_id and not (
+        isinstance(audience, list) and client_id in audience
+    ):
+        raise ValueError("Audiencia Google inválida")
+    if isinstance(audience, list) and len(audience) > 1 and claims.get("azp") != client_id:
+        raise ValueError("Parte autorizada Google inválida")
+    if claims.get("azp") is not None and claims.get("azp") != client_id:
+        raise ValueError("Parte autorizada Google inválida")
+    if claims.get("iss") not in ("accounts.google.com", "https://accounts.google.com"):
+        raise ValueError("Emisor Google inválido")
+    if claims.get("nonce") != nonce or claims.get("email_verified") is not True:
+        raise ValueError("Google no verificó el correo o nonce")
+    try:
+        expires_at = int(claims.get("exp", 0))
+        issued_at = int(claims.get("iat", 0))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("Fechas del token Google inválidas") from exc
+    if expires_at <= instant or issued_at <= 0 or issued_at > instant + 60:
+        raise ValueError("Token Google expirado o con fecha de emisión inválida")
+    if not isinstance(claims.get("sub"), str) or not claims["sub"]:
+        raise ValueError("Identificador Google inválido")
+    if not isinstance(claims.get("email"), str) or "@" not in claims["email"]:
+        raise ValueError("Correo Google inválido")
+
+
 def provider_profile(provider: str, code: str, nonce: str, settings) -> dict:
     callback = settings.oauth_public_base_url.rstrip("/") + "/auth/oauth/" + provider + "/callback"
     with httpx.Client(timeout=12.0, follow_redirects=False) as client:
@@ -105,17 +134,9 @@ def provider_profile(provider: str, code: str, nonce: str, settings) -> dict:
                                               int.from_bytes(decode(jwk["n"]), "big")).public_key()
             public_key.verify(decode(parts[2]), (parts[0] + "." + parts[1]).encode("ascii"),
                               padding.PKCS1v15(), hashes.SHA256())
-            audience = claims.get("aud")
-            if audience != settings.google_oauth_client_id and not (
-                isinstance(audience, list) and settings.google_oauth_client_id in audience
-            ):
-                raise ValueError("Audiencia Google inválida")
-            if claims.get("iss") not in ("accounts.google.com", "https://accounts.google.com"):
-                raise ValueError("Emisor Google inválido")
-            if claims.get("nonce") != nonce or claims.get("email_verified") not in (True, "true"):
-                raise ValueError("Google no verificó el correo o nonce")
-            if int(claims.get("exp", 0)) <= int(time.time()):
-                raise ValueError("Token Google expirado")
+            _validate_google_claims(
+                claims, nonce=nonce, client_id=settings.google_oauth_client_id,
+            )
             email, subject = claims.get("email"), claims.get("sub")
             name = claims.get("name") or (email or "").split("@")[0]
         elif provider == "github":
