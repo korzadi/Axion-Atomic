@@ -12,7 +12,8 @@ class AxionStudioServingTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/html", response.headers.get("content-type", ""))
-        self.assertIn("AXYRON STUDIO", response.text)
+        self.assertIn("Tu asistente de IA", response.text)
+        self.assertIn("Axyron Atomic", response.text)
         self.assertIn('data-open="register"', response.text)
 
     def test_api_routes_keep_priority_over_frontend_mount(self):
