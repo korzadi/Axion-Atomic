@@ -312,3 +312,55 @@ Commits:
 - `528982b` — documentación de la condición.
 
 Estado de verificación: GitHub Actions para el commit `528982b7dcf91838d6771999680e5d7cc620504c` se encontraba en ejecución durante esta actualización. Los cambios no se consideran probados hasta que finalicen los jobs. No se ejecutó el instalador en el VPS, no se leyó el contenido de `.env` y no se modificó infraestructura.
+
+
+---
+
+## Auditoría de continuidad V1.0 — 7 de noviembre de 2026
+
+**HEAD inspeccionado:** `07a3c09053f04a11d2e8884e9ade6d3fcc1eb579` (`main`).  
+**Repositorio:** `korzadi/Axion-Atomic`.  
+**Alcance real de esta pasada:** inspección estática de README, AGENTS, Compose, workflow CI, instalador VPS, documentación de instalación, API principal/configuración/autenticación/MFA, rutas de pagos y administración, Studio, pruebas E2E y contratos del instalador. No se descargó ni ejecutó el repositorio completo en un entorno local. No se accedió al VPS desde GitHub ni se modificó producción.
+
+### Evidencia actual
+
+- El último commit consultado en `main` es `07a3c090` (`Lint dynamic Ollama firewall script in CI`).
+- La consulta de estados combinados del SHA exacto devolvió una lista vacía; la consulta de runs asociadas al commit tampoco devolvió ejecuciones (el conector consultado solo expone aquí runs asociadas a PR). **CI del HEAD actual: no confirmada**, no debe interpretarse como éxito ni fallo.
+- El workflow declara jobs de pruebas Python, build/smoke de imagen, E2E de Studio con Playwright, integración Qdrant Cloud y migraciones PostgreSQL. La definición del workflow no demuestra que esos jobs hayan pasado en el HEAD actual.
+- El VPS informó en esta conversación `/health` con `status=ok` y los checks `database`, `ollama`, `chat_model`, `embedding_model`, `qdrant` y `redis` en `ok`. Esto acredita readiness del servicio consultado en ese momento; no acredita flujos de usuario, agente, seguridad, facturación ni aceptación V1.0.
+- La instalación activa utiliza Compose `axyron-atomic` y el volumen PostgreSQL `axyron_atomic_pgdata`. El instalador y el inventario solo contemplaban explícitamente el volumen legado `axion_atomic_pgdata`, aunque el instalador sí bloqueaba los contenedores etiquetados como proyecto `axyron-atomic`.
+
+### Hallazgos priorizados
+
+1. **Riesgo de reconciliación de PostgreSQL:** el preflight no detectaba un volumen `axyron_atomic_pgdata` desconectado si no existían contenedores etiquetados. El inventario tampoco inspeccionaba ese volumen actual. Esto dejaba incompleta la salvaguarda ante instalaciones parciales o contenedores eliminados. Se corrige en esta actualización para detectar ambos nombres (legado y actual), tanto volúmenes existentes como referencias desde contenedores.
+2. **Documentación de MFA ambigua/incorrecta:** `api/mfa.py` usa `json.loads` directamente sobre `AXYRON_MFA_ENCRYPTION_KEYRING_B64`; por tanto espera un objeto JSON literal cuyos valores individuales son claves Base64, no un objeto JSON codificado en Base64. Se corrige el comentario de `.env.example`. No se cambian claves ni valores runtime.
+3. **Instalador VPS:** ofrece `--prepare`, `--check`, `--deploy`; el preflight verifica variables, Compose, permisos y puertos; el despliegue requiere confirmación, crea backup PostgreSQL antes de migrar y no incluye rollback destructivo. Dado que la instalación real ya existe, **no ejecutar `--deploy`**: la reconciliación debe preceder cualquier actualización y no forma parte de esta pasada.
+4. **Autenticación:** el código incluye rutas y mecanismos de sesión, CSRF, MFA, OAuth, recuperación y correo; la configuración operativa permanece cerrada según el estado comunicado previamente. No activar `AUTH_ENABLED` sin aceptación end-to-end de SMTP/OAuth/MFA, HTTPS, proxy y pruebas negativas.
+5. **Agente/sandbox:** hay runtime persistente, aprobaciones y código de backend Docker aislado, pero la documentación del repositorio identifica que el runtime HTTP no integra un backend de ejecución Docker. La terminal/ejecución de comandos no debe anunciarse como funcional.
+6. **Facturación/pagos:** existen módulos, migraciones y diseños de reservas/ledger/ejecución durable, pero la puerta de lanzamiento documenta que no están conectados a inferencia/Studio para cobros. QvaPay está aprobado comercialmente según el propietario; la integración técnica verificable y los cobros siguen pendientes.
+7. **Studio:** la SPA consume rutas reales y marca capacidades futuras, pero debe verificarse cada flujo de extremo a extremo y su accesibilidad; la prueba Playwright del workflow es una prueba declarada, no una ejecución confirmada para el HEAD actual.
+8. **Observabilidad y recuperación:** health básico está operativo. No se ha aportado evidencia actual de restauración de backup, monitorización/alertas, pruebas de carga, ni recuperación de fallos sobre un entorno aislado.
+
+### Progreso y criterio de medición
+
+- **Readiness técnica del VPS comunicada:** 6/6 checks de health OK en la última comprobación del usuario.
+- **CI del HEAD actual:** no confirmada; no se calcula porcentaje de aprobación sin resultados de jobs.
+- **V1.0 certificada:** 0% de criterios de salida certificados en esta pasada, porque no hay evidencia completa de aceptación E2E, seguridad, restauración, facturación y pruebas del SHA actual. Esto no significa que el código esté vacío ni que el progreso histórico sea cero.
+- Los porcentajes por fase quedan **sin cuantificar** hasta construir un inventario de criterios de aceptación verificables por módulo; no se asignan cifras optimistas a partir de la existencia de archivos o pantallas.
+
+### Acciones de código/documentación de esta actualización
+
+- El preflight del instalador ahora inspecciona ambos volúmenes PostgreSQL: `axion_atomic_pgdata` y `axyron_atomic_pgdata`.
+- El inventario de solo lectura ahora inspecciona metadatos y contenedores asociados a ambos volúmenes.
+- Las pruebas de contrato exigen la detección de ambos nombres.
+- La guía VPS explica la protección de ambos volúmenes.
+- `.env.example` aclara el formato JSON literal del keyring MFA; no se tocan secretos ni archivos `.env`.
+
+### Límites y siguientes pasos
+
+- Los cambios de esta pasada son en GitHub; no se ejecutaron scripts en VPS, Docker, migraciones, builds de producción, reinicios, firewall, Nginx ni cambios de secretos.
+- Ejecutar CI para el nuevo SHA y comprobar todos los jobs antes de considerar verificados los cambios.
+- Continuar con una matriz de aceptación de Studio/API/Agent/Auth/RAG/DB/Payments y mapear cada criterio a pruebas existentes o nuevas.
+- Obtener inventario real de solo lectura del VPS mediante el script actualizado, cuando el propietario decida ejecutar ese diagnóstico. No pedir ni mostrar `.env`.
+- Mantener desactivados auth público, comandos y cobros reales hasta cerrar sus puertas de seguridad.
+- La instalación VPS actual y su volumen deben conservarse; no crear una segunda base, no ejecutar `down -v`, no eliminar volúmenes ni reconstruir el entorno de producción como método de prueba.
