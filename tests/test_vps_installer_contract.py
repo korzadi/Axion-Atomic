@@ -21,7 +21,7 @@ class VpsInstallerContractTests(unittest.TestCase):
         self.assertIn("pre-migration-", self.script)
 
     def test_existing_project_and_persistent_volume_block_deploy(self):
-        for token in ("volume=axion_atomic_pgdata", "volume=axyron_atomic_pgdata", "project=axion-atomic", "8070", "5433"):
+        for token in ("volume=$volume", "for volume in axion_atomic_pgdata axyron_atomic_pgdata", "project=axion-atomic", "8070", "5433"):
             self.assertIn(token, self.script)
 
     def test_knowledge_directory_is_readable_but_not_writable_by_api(self):
