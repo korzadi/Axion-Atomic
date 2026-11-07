@@ -97,6 +97,8 @@ class AuthRouteGateTests(unittest.TestCase):
         self.assertEqual(limiter.call_args_list[1].kwargs["subject"], "test@example.com")
         self.assertEqual(result["user"], user)
         self.assertIn("axion_session=session-token", response.headers["set-cookie"])
+        session_cookie = next(cookie for cookie in response.headers.getlist("set-cookie") if cookie.startswith("axion_session="))
+        self.assertIn("httponly", session_cookie.lower())
 
     def test_password_login_returns_challenge_without_creating_session_when_mfa_enabled(self):
         from api.auth_routes import login
