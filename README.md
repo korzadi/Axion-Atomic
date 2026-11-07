@@ -120,3 +120,15 @@ AXYRON adopta el estándar abierto `SKILL.md` para descubrir workflows especiali
 - Instalación fijada y verificada mediante `bash scripts/install_agent_skills.sh`; instrucciones y seguridad: [docs/AGENT_SKILLS_ANTIGRAVITY_INTEGRATION.md](docs/AGENT_SKILLS_ANTIGRAVITY_INTEGRATION.md).
 - Las skills no conceden permisos: siguen vigentes aislamiento por proyecto, aprobación humana y políticas del agente.
 - El pack upstream está documentado, pero no se incorpora automáticamente ni se declara instalado en el repositorio.
+
+
+## Skills especializadas de AXYRON
+
+Las siguientes skills quedan versionadas dentro del repositorio y se descubren desde `.agents/skills/` mediante el registro Agent Skills del agente:
+
+- **Gravity UI** (`.agents/skills/gravity-ui/`): guía técnica para el ecosistema React `@gravity-ui/*`; ayuda a elegir paquetes, consultar APIs según la versión instalada, aplicar temas y evitar componentes o propiedades inventados. No instala dependencias ni convierte Gravity UI en el diseño obligatorio de Axyron Studio.
+- **Codebase Summary** (`.agents/skills/codebase-summary/`): análisis general del repositorio en tres fases (explorar, sintetizar y validar). Genera y mantiene el contexto persistente en `.agents/project-context/SUMMARY.md` y `.agents/project-context/summary.json`, con arquitectura, tecnologías, módulos, flujos, interfaces/API, configuración y brechas verificadas.
+
+Para generar el mapa inicial del proyecto, solicita a AXYRON: **«Usa la skill codebase-summary para analizar todo este repositorio y guardar/actualizar el contexto del proyecto»**. Para refrescarlo tras cambios importantes, vuelve a solicitar el análisis. AXYRON debe leer el resumen al comenzar trabajos de ingeniería, contrastarlo con el código vigente y nunca tratarlo como sustituto de la fuente.
+
+Ambas skills son guías de solo lectura durante su análisis; no habilitan ejecución de scripts de terceros, instalaciones, despliegues ni acciones fuera de las aprobaciones existentes. No deben incluir secretos ni valores de variables de entorno en los informes.
