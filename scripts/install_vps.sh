@@ -80,12 +80,29 @@ prepare(){
     API_SECRET="$(openssl rand -hex 32)"
     python3 - "$ENV_FILE" "$DB_PASS" "$API_SECRET" <<'PY'
 from pathlib import Path
+from urllib.parse import quote
 import sys
 p=Path(sys.argv[1]); db, api=sys.argv[2:]
+lines=p.read_text(encoding="utf-8").splitlines()
+values={}
+for item in lines:
+    if "=" in item and not item.lstrip().startswith("#"):
+        key, value=item.split("=",1)
+        values[key.strip()]=value.strip()
+pg_user=values.get("POSTGRES_USER") or "axion"
+pg_database=values.get("POSTGRES_DB") or "axion_atomic"
+database_url=(
+    "postgresql+psycopg://"
+    + quote(pg_user, safe="")
+    + ":"
+    + quote(db, safe="")
+    + "@postgres:5432/"
+    + quote(pg_database, safe="")
+)
 out=[]
-for line in p.read_text(encoding="utf-8").splitlines():
+for line in lines:
     if line.startswith("POSTGRES_PASSWORD="): line=f"POSTGRES_PASSWORD={db}"
-    elif line.startswith("DATABASE_URL="): line=f"DATABASE_URL=postgresql+psycopg://axion:{db}@postgres:5432/axion_atomic"
+    elif line.startswith("DATABASE_URL="): line=f"DATABASE_URL={database_url}"
     elif line.startswith("API_KEY="): line=f"API_KEY={api}"
     out.append(line)
 p.write_text("\n".join(out)+"\n",encoding="utf-8"); p.chmod(0o600)
