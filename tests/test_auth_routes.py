@@ -81,5 +81,16 @@ class AuthRouteGateTests(unittest.TestCase):
         self.assertEqual(limiter.call_args_list[1].kwargs["subject"], "test@example.com")
 
 
+    def test_oauth_provider_discovery_exposes_only_availability_flags(self):
+        import asyncio
+        from api.auth_routes import oauth_providers
+        with patch("api.auth_routes.configured", side_effect=lambda settings, provider: provider == "google"):
+            result = asyncio.run(oauth_providers())
+        self.assertEqual(result, {"google": True, "github": False})
+        self.assertTrue(all(isinstance(value, bool) for value in result.values()))
+        self.assertNotIn("client_id", result)
+        self.assertNotIn("client_secret", result)
+
+
 if __name__ == "__main__":
     unittest.main()
