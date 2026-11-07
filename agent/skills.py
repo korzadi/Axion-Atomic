@@ -12,18 +12,26 @@ _MAX_ACTIVE_CHARS = 20000
 class SkillRegistry:
     """Lee SKILL.md bajo .agents/skills o .agent/skills sin seguir symlinks."""
 
-    def __init__(self, workspace_root):
+    def __init__(self, workspace_root, trusted_roots=()):
         self.root = Path(workspace_root).resolve()
+        self.trusted_roots = tuple(Path(root).resolve() for root in trusted_roots)
 
     def _roots(self):
-        for relative in (".agents/skills", ".agent/skills"):
-            path = self.root / relative
-            if path.is_symlink() or not path.exists():
-                continue
-            resolved = path.resolve()
-            if resolved == self.root or self.root not in resolved.parents or not resolved.is_dir():
-                continue
-            yield resolved
+        # Los skills del proyecto son locales; los skills empaquetados por AXYRON
+        # proceden de una raíz de aplicación confiable y no necesitan copiarse
+        # dentro de cada workspace de usuario.
+        seen = set()
+        for base in (self.root, *self.trusted_roots):
+            for relative in (".agents/skills", ".agent/skills"):
+                path = base / relative
+                if path.is_symlink() or not path.exists():
+                    continue
+                resolved = path.resolve()
+                if resolved == base or base not in resolved.parents or not resolved.is_dir():
+                    continue
+                if resolved not in seen:
+                    seen.add(resolved)
+                    yield resolved
 
     @staticmethod
     def _manifest(path):
