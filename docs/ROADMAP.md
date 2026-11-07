@@ -68,3 +68,10 @@ La lectura estática de `api/auth.py` y `api/auth_routes.py` detectó que tanto 
 Se añadieron `api/mfa.py` y `tests/test_mfa.py` como primera capa criptográfica aislada: TOTP RFC 6238, detección de replay mediante contador devuelto al llamador, cifrado AES-256-GCM con AAD ligada al usuario y generación/hash de códigos de recuperación. La clave AES se inyecta mediante proveedor externo; no se crea ni persiste desde este módulo.
 
 **No equivale a MFA funcional:** falta integrar persistencia PostgreSQL, enrolamiento pendiente/activo, desafío temporal, consumo atómico del contador y recovery codes, rate limiting, auditoría y el bloqueo de emisión de sesión en login de contraseña y callback OAuth. Las pruebas están añadidas, pero su resultado CI está pendiente. `AUTH_ENABLED=false` se mantiene.
+
+
+### Persistencia MFA (7 de noviembre de 2026)
+
+Se añadió la migración `021_mfa_security.sql` para secretos cifrados, contador TOTP anti-replay, códigos de recuperación hasheados, desafíos de inicio de sesión con expiración/intentos y auditoría append-only. Se añadió `api/mfa_store.py` con transacciones y bloqueos de fila para enrolamiento, activación, emisión y consumo de desafíos.
+
+**Pendiente para considerar MFA integrado:** conectar el flujo de contraseña y OAuth a estos servicios, emitir desafío en lugar de sesión cuando la cuenta tenga MFA activo, completar sesión solo tras segundo factor, aplicar rate limiting específico, probar concurrencia y validar el flujo completo en staging. La migración y los nuevos módulos todavía están sujetos a CI. No se habilita `AUTH_ENABLED`.
