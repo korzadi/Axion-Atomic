@@ -43,6 +43,7 @@ p.write_text("\n".join(out)+"\n",encoding="utf-8"); p.chmod(0o600)
 PY
     log "Creado .env privado con secretos aleatorios; configura QDRANT_URL y QDRANT_API_KEY."
   else
+    ensure_env_file_safe
     chmod 600 "$ENV_FILE"
     log "Se conserva el .env existente sin sobrescribirlo."
   fi
@@ -71,7 +72,7 @@ finally: s.close()
 PY
 }
 validate(){
-  [[ -f "$ENV_FILE" ]] || die "Ejecuta primero --prepare."
+  ensure_env_file_safe
   QURL="$(value QDRANT_URL)"; QKEY="$(value QDRANT_API_KEY)"
   DBPASS="$(value POSTGRES_PASSWORD)"; APIKEY="$(value API_KEY)"
   OLLAMA="$(value OLLAMA_BASE_URL)"
