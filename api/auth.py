@@ -1,4 +1,4 @@
-"""Servicios de identidad y sesiones para AXION ATOMIC.
+"""Servicios de identidad y sesiones para AXYRON ATOMIC.
 
 Este módulo no expone rutas por sí solo. Las rutas deben usar current_user y
 authorize_project antes de acceder a cualquier recurso de un proyecto.
