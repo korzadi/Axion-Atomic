@@ -8,6 +8,8 @@ const html = await readFile(new URL("Axyron Atomic — Tu asistente de IA, más 
 const workspaceJs = await readFile(new URL("workspace.js", frontend));
 const studioJs = await readFile(new URL("studio.js", frontend));
 const studioCss = await readFile(new URL("studio.css", frontend));
+const adminHtml = await readFile(new URL("admin.html", frontend));
+const adminJs = await readFile(new URL("admin.js", frontend));
 const server = createServer((request, response) => {
   if (request.url === "/studio.js") {
     response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
@@ -17,6 +19,16 @@ const server = createServer((request, response) => {
   if (request.url === "/studio.css") {
     response.writeHead(200, { "content-type": "text/css; charset=utf-8" });
     response.end(studioCss);
+    return;
+  }
+  if (request.url === "/admin.js") {
+    response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+    response.end(adminJs);
+    return;
+  }
+  if (request.url === "/admin-test") {
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(adminHtml);
     return;
   }
   if (request.url === "/workspace.js") {
@@ -54,7 +66,44 @@ try {
   await page.locator('[data-open="login"]:visible').first().click();
   await page.locator("#e").waitFor();
   assert.equal(await page.locator("#termsRow").isVisible(), false);
-  process.stdout.write("Axyron Atomic landing browser E2E: passed\\n");
+  const adminPage = await browser.newPage();
+  await adminPage.route("**/auth/me", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ user: { id: "test-user", email: "user@example.test", display_name: "Test User" } })
+  }));
+  await adminPage.route("**/admin/access/me", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ administration_enabled: false, mutations_enabled: false, roles: [], permissions: [] })
+  }));
+  await adminPage.route("**/auth/logout", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ status: "logged_out" })
+  }));
+  await adminPage.route("**/auth/login", route => route.fulfill({
+    status: 202, contentType: "application/json",
+    body: JSON.stringify({ mfa_required: true, challenge_token: "opaque-test-challenge", expires_in: 300 })
+  }));
+  await adminPage.route("**/auth/mfa/challenge/verify", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ status: "authenticated", expires_in: 43200 })
+  }));
+  await adminPage.goto(baseUrl + "/admin-test");
+  await adminPage.getByText("Acceso administrativo no autorizado").waitFor();
+  assert.equal(await adminPage.locator("#logout").isVisible(), true);
+  await adminPage.locator("#logout").click();
+  assert.equal(await adminPage.locator("#login-form").isVisible(), true);
+  assert.equal(await adminPage.locator("#mfa-view").isHidden(), true);
+  await adminPage.locator("#email").fill("user@example.test");
+  await adminPage.locator("#password").fill("TestPassword123!");
+  await adminPage.locator("#login-submit").click();
+  assert.equal(await adminPage.locator("#login-form").isHidden(), true);
+  assert.equal(await adminPage.locator("#mfa-view").isVisible(), true);
+  assert.equal(await adminPage.locator("#password").inputValue(), "");
+  await adminPage.locator("#mfa-code").fill("123456");
+  await adminPage.locator("#mfa-form button[type=submit]").click();
+  await adminPage.getByText("Acceso administrativo no autorizado").waitFor();
+  assert.equal(await adminPage.locator("#logout").isVisible(), true);
+  await adminPage.close();
+  process.stdout.write("Axyron Atomic landing and admin MFA browser E2E: passed\\n");
 } finally {
   await browser.close();
   await new Promise(resolve => server.close(resolve));
