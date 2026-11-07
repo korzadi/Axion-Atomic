@@ -24,7 +24,18 @@ _INSERT_USAGE = text("""
 
 def persist_shadow_usage_event(*, request_id: str, user_id: str, project_id: str, result) -> None:
     """Guarda una medición sin contenido conversacional y con UUID idempotente."""
-    with engine.begin() as conn:
+    # No convertir contadores corruptos en consumo plausible: conservar NULL
+    # para desconocidos y rechazar valores negativos/no enteros.
+    for field in (
+        "prompt_eval_count", "eval_count", "total_duration_ns",
+        "load_duration_ns", "prompt_eval_duration_ns", "eval_duration_ns",
+    ):
+        value = getattr(result, field, None)
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+        ):
+            raise ValueError(f"Contador de inferencia inválido: {field}")
+    with engine.begin():
         conn.execute(_INSERT_USAGE, {
             "request_id": request_id,
             "user_id": str(user_id),
