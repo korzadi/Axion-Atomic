@@ -1,6 +1,8 @@
+import asyncio
 import unittest
-from unittest.mock import patch
-from fastapi import HTTPException
+from unittest.mock import Mock, patch
+
+from fastapi import HTTPException, Request, Response
 
 from api.auth_routes import _require_auth_feature, _authenticated_user
 from api.schemas import LoginRequest, RegisterRequest
@@ -33,78 +35,65 @@ class AuthRouteGateTests(unittest.TestCase):
         self.assertEqual(len(request.password), 1024)
 
     def test_register_enforces_ip_rate_limit(self):
-        from unittest.mock import Mock
-        from fastapi import Request
         from api.auth_routes import register
         request = Mock(spec=Request)
         request.client.host = "198.51.100.10"
-        with patch("api.auth_routes.settings.auth_enabled", True), patch("api.auth_routes._enforce_rate_limit"):
-            response = asyncio.run(oauth_callback(
-             patch("api.auth_routes.email_delivery_configured", return_value=True), \
-             patch("api.auth_routes.settings.oauth_public_base_url", "https://axion.example"), \
-             patch("api.auth_routes.create_user", return_value=None):
-            import asyncio
-            asyncio.run(register(
-                RegisterRequest(email="new@example.com", password="StrongPassword123!", display_name="New", terms_accepted=True),
-                request,
-            ))
+        with patch("api.auth_routes.settings.auth_enabled", True):
+            with patch("api.auth_routes._enforce_rate_limit") as limiter:
+                with patch("api.auth_routes.email_delivery_configured", return_value=True):
+                    with patch("api.auth_routes.settings.oauth_public_base_url", "https://axion.example"):
+                        with patch("api.auth_routes.create_user", return_value=None):
+                            asyncio.run(register(
+                                RegisterRequest(email="new@example.com", password="StrongPassword123!", display_name="New", terms_accepted=True),
+                                request,
+                            ))
         self.assertEqual(limiter.call_count, 2)
 
     def test_oauth_callback_rejects_mismatched_browser_state_without_server_error(self):
-        import asyncio
-        from unittest.mock import Mock
-        from fastapi import Request
         from api.auth_routes import oauth_callback
         request = Mock(spec=Request)
         request.client.host = "198.51.100.13"
-        with patch("api.auth_routes.settings.auth_enabled", True), \\
-            response = asyncio.run(oauth_callback(
-                "google", request, code="authorization-code", state="provider-state",
-                browser_state="different-browser-state",
-            ))
+        with patch("api.auth_routes.settings.auth_enabled", True):
+            with patch("api.auth_routes._enforce_rate_limit"):
+                response = asyncio.run(oauth_callback(
+                    "google", request, code="authorization-code", state="provider-state",
+                    browser_state="different-browser-state",
+                ))
         self.assertEqual(response.status_code, 303)
         self.assertIn("oauth_error=cancelled", response.headers["location"])
 
     def test_oauth_callback_enforces_provider_ip_rate_limit(self):
-        import asyncio
-        from unittest.mock import Mock
-        from fastapi import Request
         from api.auth_routes import oauth_callback
         request = Mock(spec=Request)
         request.client.host = "198.51.100.12"
-        with patch("api.auth_routes.settings.auth_enabled", True), \
-             patch("api.auth_routes._enforce_rate_limit") as limiter:
-            response = asyncio.run(oauth_callback(
-                "github", request, code="authorization-code", state="provider-state",
-                browser_state="different-browser-state",
-            ))
+        with patch("api.auth_routes.settings.auth_enabled", True):
+            with patch("api.auth_routes._enforce_rate_limit") as limiter:
+                response = asyncio.run(oauth_callback(
+                    "github", request, code="authorization-code", state="provider-state",
+                    browser_state="different-browser-state",
+                ))
         self.assertEqual(response.status_code, 303)
         limiter.assert_called_once()
         self.assertEqual(limiter.call_args.kwargs["namespace"], "auth:oauth:callback:github")
         self.assertEqual(limiter.call_args.kwargs["limit"], 20)
 
     def test_login_enforces_ip_and_account_rate_limits(self):
-        from unittest.mock import Mock
-        from fastapi import Request, Response
         from api.auth_routes import login
         request = Mock(spec=Request)
         request.client.host = "198.51.100.11"
         request.headers.get.return_value = "test-agent"
         user = {"id": "user-1", "email": "test@example.com", "display_name": "Test"}
-        with patch("api.auth_routes.settings.auth_enabled", True), \
-             patch("api.auth_routes._enforce_rate_limit") as limiter, \
-             patch("api.auth_routes.authenticate", return_value=(user, "session-token", "csrf-token")):
-            import asyncio
-            asyncio.run(login(
-                LoginRequest(email="test@example.com", password="StrongPassword123!"),
-                request, Response(),
-            ))
+        with patch("api.auth_routes.settings.auth_enabled", True):
+            with patch("api.auth_routes._enforce_rate_limit") as limiter:
+                with patch("api.auth_routes.authenticate", return_value=(user, "session-token", "csrf-token")):
+                    asyncio.run(login(
+                        LoginRequest(email="test@example.com", password="StrongPassword123!"),
+                        request, Response(),
+                    ))
         self.assertEqual(limiter.call_count, 2)
         self.assertEqual(limiter.call_args_list[1].kwargs["subject"], "test@example.com")
 
-
     def test_oauth_provider_discovery_exposes_only_availability_flags(self):
-        import asyncio
         from api.auth_routes import oauth_providers
         with patch("api.auth_routes.configured", side_effect=lambda settings, provider: provider == "google"):
             result = asyncio.run(oauth_providers())
