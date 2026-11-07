@@ -242,11 +242,11 @@ async def mfa_enroll(request: Request, response: Response, user=Depends(_csrf_gu
     except (MfaError, ValueError) as exc:
         raise HTTPException(status_code=503 if isinstance(exc, MfaError) else 409,
                             detail="No se pudo iniciar el enrolamiento MFA.") from exc
-    label = quote("AXION ATOMIC:" + user["email"])
-    issuer = quote("AXION ATOMIC")
+    label = quote("AXYRON ATOMIC:" + user["email"])
+    issuer = quote("AXYRON ATOMIC")
     uri = f"otpauth://totp/{label}?secret={secret}&issuer={issuer}&algorithm=SHA1&digits=6&period=30"
     response.headers["Cache-Control"] = "no-store"
-    return {"secret": secret, "otpauth_uri": uri, "issuer": "AXION ATOMIC"}
+    return {"secret": secret, "otpauth_uri": uri, "issuer": "AXYRON ATOMIC"}
 
 
 @router.post("/mfa/confirm")
