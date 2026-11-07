@@ -159,7 +159,7 @@ class GitManager:
         if self._fingerprint(message, rels) != proposal.fingerprint:
             raise ConflictError("El contenido cambió antes de preparar el commit")
         ident = []
-        for key, default in (("user.name", "Axion Atomic"), ("user.email", "axion-atomic@localhost")):
+        for key, default in (("user.name", "Axyron Atomic"), ("user.email", "axyron-atomic@localhost")):
             try:
                 if not self._run(["config", "--get", key]).strip():
                     raise GitError("")
