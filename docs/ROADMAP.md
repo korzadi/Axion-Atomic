@@ -56,22 +56,48 @@ No comenzar hasta que la fase 1 esté cerrada y aceptada.
 - No habilitar ejecución de comandos ni autonomía de agentes sin sandbox aislado y aprobación verificable.
 
 
-## Revisión adicional de MFA (7 de noviembre de 2026)
+## MFA — integración de código completada, validación operativa pendiente
 
-La lectura estática de `api/auth.py` y `api/auth_routes.py` detectó que tanto el login por contraseña como el callback OAuth crean una sesión inmediatamente tras validar el primer factor/identidad. No hay desafío MFA ni enrolamiento TOTP implementado. El diseño MFA documentado debe cubrir ambos caminos antes de habilitar autenticación pública. No se cambió el código de autenticación ni se ejecutaron pruebas dinámicas en esta revisión.
+Se integró MFA en login por contraseña y callback OAuth. Las cuentas con MFA activo reciben un desafío de cinco minutos y no obtienen sesión hasta validar TOTP o un código de recuperación. Los desafíos distinguen su propósito, limitan intentos y se consumen transaccionalmente. AXION STUDIO dispone de pantalla de Seguridad para enrolamiento y recuperación.
 
-**Estado:** brecha de MFA confirmada en código; implementación pendiente. Mantener `AUTH_ENABLED=false`. El cierre de Fase 1 requiere implementar MFA completo, añadir pruebas de regresión para contraseña y OAuth y validar el flujo en staging.
+### Submódulos MFA
+| Submódulo | Avance |
+|---|---:|
+| Primitivas TOTP RFC 6238 | 100% |
+| Cifrado AES-256-GCM y AAD por usuario | 100% |
+| Persistencia PostgreSQL cifrada | 100% |
+| Anti-replay y consumo atómico | 100% |
+| Códigos de recuperación (128 bits, hash y uso único) | 100% |
+| Desafíos con TTL, intentos y propósito | 100% |
+| Bloqueo de sesión antes del segundo factor en contraseña | 100% código |
+| Bloqueo de sesión antes del segundo factor en OAuth | 100% código |
+| Endpoints de enrolamiento y confirmación | 100% código |
+| Pantalla de Seguridad AXION STUDIO | 100% código |
+| Rate limiting y auditoría MFA | 95% |
+| Clave runtime configurada en backend | Pendiente |
+| Rotación y claves históricas | 0% |
+| Pruebas en staging | 0% |
+| Revisión independiente y aceptación | Pendiente |
 
+### CI confirmado
 
-## Progreso incremental de MFA (7 de noviembre de 2026)
+El run 42324288766 terminó **success** en el commit c5aff40043873f0ace54e0f5cec0aac2c716242b:
+- Python: 622 passed, 9 skipped, 3 warnings.
+- PostgreSQL: 46 passed, incluidas pruebas de persistencia MFA.
+- Migraciones e idempotencia: success.
+- Qdrant Cloud: success.
+- AXION STUDIO browser E2E: success.
+- JavaScript syntax y Python compile: success.
 
-Se añadieron `api/mfa.py` y `tests/test_mfa.py` como primera capa criptográfica aislada: TOTP RFC 6238, detección de replay mediante contador devuelto al llamador, cifrado AES-256-GCM con AAD ligada al usuario y generación/hash de códigos de recuperación. La clave AES se inyecta mediante proveedor externo; no se crea ni persiste desde este módulo.
+El commit siguiente e2a6829a7856bc1c684fe2bf206d35900989ab2e agrega encabezados no-cache adicionales; debe completar su propio CI.
 
-**No equivale a MFA funcional:** falta integrar persistencia PostgreSQL, enrolamiento pendiente/activo, desafío temporal, consumo atómico del contador y recovery codes, rate limiting, auditoría y el bloqueo de emisión de sesión en login de contraseña y callback OAuth. Las pruebas están añadidas, pero su resultado CI está pendiente. `AUTH_ENABLED=false` se mantiene.
+### Condiciones para cerrar Fase 1
 
+- [ ] Inyectar las dos variables MFA en el gestor de secretos del backend runtime. Las variables de GitHub Actions no se transfieren automáticamente al servidor.
+- [ ] Implementar y probar rotación de claves históricas y recuperación ante pérdida.
+- [ ] Configurar SMTP y Google/GitHub OAuth reales en staging.
+- [ ] Validar cookies HTTPS Secure, CSRF, proxy de confianza, recuperación y suspensión.
+- [ ] Completar revisión independiente de seguridad y aceptación funcional.
 
-### Persistencia MFA (7 de noviembre de 2026)
+**No activar AUTH_ENABLED ni desplegar basándose solo en CI.** No se ha cambiado VPS, Docker ni producción.
 
-Se añadió la migración `021_mfa_security.sql` para secretos cifrados, contador TOTP anti-replay, códigos de recuperación hasheados, desafíos de inicio de sesión con expiración/intentos y auditoría append-only. Se añadió `api/mfa_store.py` con transacciones y bloqueos de fila para enrolamiento, activación, emisión y consumo de desafíos.
-
-**Pendiente para considerar MFA integrado:** conectar el flujo de contraseña y OAuth a estos servicios, emitir desafío en lugar de sesión cuando la cuenta tenga MFA activo, completar sesión solo tras segundo factor, aplicar rate limiting específico, probar concurrencia y validar el flujo completo en staging. La migración y los nuevos módulos todavía están sujetos a CI. No se habilita `AUTH_ENABLED`.
