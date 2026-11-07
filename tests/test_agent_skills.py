@@ -19,7 +19,7 @@ class SkillRegistryTests(unittest.TestCase):
         skill = self.skills / "test-driven-development"
         skill.mkdir(parents=True)
         (skill / "SKILL.md").write_text(
-            "---\\nname: test-driven-development\\ndescription: Guides test-first implementation.\\n---\\n# TDD\\nWrite a failing test first.\\n",
+            "---\nname: test-driven-development\ndescription: Guides test-first implementation.\n---\n# TDD\nWrite a failing test first.\n",
             encoding="utf-8",
         )
         registry = SkillRegistry(self.root)
@@ -29,10 +29,10 @@ class SkillRegistryTests(unittest.TestCase):
     def test_rejects_invalid_manifest_and_symlinked_skill(self):
         bad = self.skills / "bad"
         bad.mkdir(parents=True)
-        (bad / "SKILL.md").write_text("---\\nname: ../bad\\ndescription: invalid\\n---\\n")
+        (bad / "SKILL.md").write_text("---\nname: ../bad\ndescription: invalid\n---\n")
         outside = self.root / "outside"
         outside.mkdir()
-        (outside / "SKILL.md").write_text("---\\nname: outside\\ndescription: outside\\n---\\n")
+        (outside / "SKILL.md").write_text("---\nname: outside\ndescription: outside\n---\n")
         (self.skills / "linked").symlink_to(outside, target_is_directory=True)
         self.assertEqual(SkillRegistry(self.root).discover(), [])
 
