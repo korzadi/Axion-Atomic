@@ -7,6 +7,18 @@ from api.main import app
 
 
 class GlobalAdminRbacTests(unittest.TestCase):
+ def test_global_admin_authentication_fails_closed_when_auth_disabled(self):
+  from api.global_admin import authenticated_admin_user
+  with patch("api.global_admin.settings.auth_enabled", False), patch("api.global_admin.current_user") as current:
+   with self.assertRaises(HTTPException) as caught:
+    authenticated_admin_user("session-token")
+  self.assertEqual(caught.exception.status_code, 503)
+  current.assert_not_called()
+
+ def test_unknown_global_role_grants_no_permissions(self):
+  unknown_permissions = {p for role in ("unexpected_role",) for p in ROLE_PERMISSIONS.get(role, ())}
+  self.assertEqual(unknown_permissions, set())
+
  def test_project_roles_do_not_grant_global_permissions(self):
   self.assertNotIn("billing.manage", ROLE_PERMISSIONS.get("owner", ()))
   self.assertNotIn("billing.manage", ROLE_PERMISSIONS.get("admin", ()))
