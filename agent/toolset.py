@@ -8,6 +8,7 @@ from agent.approval_gate import ActionProposal, ApprovedAction
 from agent.git import GitManager
 from agent.repo import analyze, render
 from agent.workspace import Workspace
+from agent.skills import SkillRegistry
 
 MAX_ARG_CHARS = 200_000
 TYPES = {"str": str, "int": int, "bool": bool, "list": list}
@@ -74,6 +75,7 @@ def build_tools(ws: Workspace, git: GitManager, sandbox=None) -> dict[str, Tool]
         prop = git.propose_create_branch(a["name"], a["reason"])
         return prop, (lambda ap: git.apply_create_branch(a["name"], prop, ap))
 
+    skills = SkillRegistry(ws.root)
     S, I = "str", "int"
     tools = [
         Tool("list_dir", "Lista un directorio del proyecto", {"path": (S, False)},
@@ -85,6 +87,8 @@ def build_tools(ws: Workspace, git: GitManager, sandbox=None) -> dict[str, Tool]
         Tool("search", "Busca texto literal en el proyecto", {"query": (S, True), "glob": (S, False)},
              run=lambda a: "\n".join(f"{h['path']}:{h['line']}: {h['text']}" for h in ws.search(a["query"], a.get("glob"))) or "(sin resultados)"),
         Tool("repo_summary", "Resumen estructural del proyecto", {}, run=lambda a: render(analyze(ws))),
+        Tool("list_skills", "Descubre skills Agent Skills instaladas en .agents/skills o .agent/skills", {}, run=lambda a: skills.list_text()),
+        Tool("read_skill", "Lee las instrucciones SKILL.md de una skill por su identificador; nunca ejecuta scripts incluidos", {"name": (S, True)}, run=lambda a: skills.read_text(a["name"])),
         Tool("git_status", "Estado del repositorio Git", {}, run=lambda a: git.status()),
         Tool("git_diff", "Diferencias sin confirmar", {"path": (S, False), "staged": ("bool", False)},
              run=lambda a: git.diff(a.get("path"), a.get("staged", False)) or "(sin cambios)"),
