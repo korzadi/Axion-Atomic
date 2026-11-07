@@ -12,6 +12,7 @@ def test_spa_assets_are_linked_from_the_selected_landing_page():
     assert 'href="/studio.css"' in html
     assert 'src="/studio.js"' in html
     assert 'href="#app/inicio"' in html
+    assert '<style id="axyron-hidden-state-fix">[hidden]{display:none!important}</style>' in html
 
 
 def test_spa_uses_only_existing_backend_routes_for_available_modules():
