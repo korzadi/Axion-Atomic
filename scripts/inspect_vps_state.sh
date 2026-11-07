@@ -4,7 +4,7 @@
 set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-VOLUME="axion_atomic_pgdata"
+VOLUMES=("axion_atomic_pgdata" "axyron_atomic_pgdata")
 PROJECTS=("axion-atomic" "axyron-atomic")
 
 section(){ printf '\n===== %s =====\n' "$1"; }
@@ -39,18 +39,21 @@ for project in "${PROJECTS[@]}"; do
 done
 
 section "VOLUMEN POSTGRESQL PERSISTENTE"
-if docker volume inspect "$VOLUME" >/dev/null 2>&1; then
-  docker volume inspect --format 'Name={{.Name}} Driver={{.Driver}} Mountpoint={{.Mountpoint}}' "$VOLUME"
-else
-  echo 'El volumen nombrado no existe.'
-fi
-attached="$(docker ps -a --filter "volume=$VOLUME" --format 'Name={{.Names}} Status={{.Status}} Image={{.Image}}' || true)"
-if [[ -n "$attached" ]]; then
-  echo 'Contenedores que referencian el volumen:'
-  printf '%s\n' "$attached"
-else
-  echo 'Ningún contenedor actual referencia el volumen.'
-fi
+for VOLUME in "${VOLUMES[@]}"; do
+  printf -- '-- Volumen: %s --\n' "$VOLUME"
+  if docker volume inspect "$VOLUME" >/dev/null 2>&1; then
+    docker volume inspect --format 'Name={{.Name}} Driver={{.Driver}} Mountpoint={{.Mountpoint}}' "$VOLUME"
+  else
+    echo 'El volumen no existe.'
+  fi
+  attached="$(docker ps -a --filter "volume=$VOLUME" --format 'Name={{.Names}} Status={{.Status}} Image={{.Image}}' || true)"
+  if [[ -n "$attached" ]]; then
+    echo 'Contenedores que referencian el volumen:'
+    printf '%s\n' "$attached"
+  else
+    echo 'Ningún contenedor actual referencia este volumen.'
+  fi
+done
 
 section "REDES DE LOS PROYECTOS AXYRON"
 for project in "${PROJECTS[@]}"; do
