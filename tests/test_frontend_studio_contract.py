@@ -81,4 +81,6 @@ def test_email_verification_link_uses_registered_api_route():
     assert "api('/auth/verify-email'" not in source
     assert "api('/auth/password/forgot'" in source
     assert "api('/auth/password/reset'" in source
+    assert "api('/auth/email/resend'" in source
+    assert 'id="resend"' in source
 
