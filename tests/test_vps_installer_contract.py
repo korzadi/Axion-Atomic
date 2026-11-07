@@ -21,7 +21,7 @@ class VpsInstallerContractTests(unittest.TestCase):
         self.assertIn("pre-migration-", self.script)
 
     def test_existing_project_and_persistent_volume_block_deploy(self):
-        for token in ("volume=axion_atomic_pgdata", "project=axion-atomic", "8070", "5433"):
+        for token in ("volume=axion_atomic_pgdata", "volume=axyron_atomic_pgdata", "project=axion-atomic", "8070", "5433"):
             self.assertIn(token, self.script)
 
     def test_knowledge_directory_is_readable_but_not_writable_by_api(self):
@@ -36,7 +36,8 @@ class VpsInstallerContractTests(unittest.TestCase):
         self.assertNotIn('--check) [[ -f "$ENV_FILE" ]] || prepare', self.script)
 
     def test_existing_named_volume_blocks_even_without_running_container(self):
-        self.assertIn('docker volume inspect axion_atomic_pgdata', self.script)
+        self.assertIn('docker volume inspect "$volume"', self.script)
+        self.assertIn('for volume in axion_atomic_pgdata axyron_atomic_pgdata', self.script)
         self.assertIn('"$VOLUME_EXISTS" == 1', self.script)
 
     def test_read_only_vps_inventory_is_present_and_scoped(self):
@@ -45,6 +46,7 @@ class VpsInstallerContractTests(unittest.TestCase):
             "axion-atomic",
             "axyron-atomic",
             "axion_atomic_pgdata",
+            "axyron_atomic_pgdata",
             "docker volume inspect",
             "docker ps -a",
             "ss -ltnH",
@@ -116,6 +118,7 @@ esac
 
     def test_documentation_warns_about_existing_vps_resources(self):
         self.assertIn("axion_atomic_pgdata", self.doc)
+        self.assertIn("axyron_atomic_pgdata", self.doc)
         self.assertIn("No borres ni detengas", self.doc)
 
 
