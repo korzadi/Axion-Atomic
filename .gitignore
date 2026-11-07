@@ -11,3 +11,7 @@ workspace/
 .env.local
 .env.production
 .env.development
+
+# Local VPS backups and private knowledge data
+backups/
+knowledge/
