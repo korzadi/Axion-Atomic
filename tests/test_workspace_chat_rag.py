@@ -58,6 +58,7 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('UNTRUSTED_PROJECT_KNOWLEDGE_JSON_STRING="CONTEXTO DEL PROYECTO"', messages[0]["content"])
         self.assertEqual(messages[1], {"role": "user", "content": "Resume la documentación"})
         self.assertEqual(response["choices"][0]["message"]["content"], "Respuesta de prueba")
+        self.assertTrue(response["history_saved"])
         self.assertEqual(response["model"], "atomic-code")
         
     async def test_chat_denies_non_member_before_rag_or_inference(self):
