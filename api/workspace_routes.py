@@ -13,6 +13,11 @@ from api.auth import current_user, authorize_project, require_csrf, COOKIE_NAME,
 from api.config import settings
 from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest
 from api.ollama import chat_with_usage
+from api.billing_budget import (
+    ContextBudgetExceeded,
+    SUPPORTED_TOKENIZER_CONTRACT,
+    calculate_preflight_budget,
+)
 from api.usage_events import persist_shadow_usage_event
 from rag.service import EmbeddingServiceUnavailable, KnowledgeStoreUnavailable, SensitiveContentError, delete_source, ingest_text, list_sources, replace_source, retrieve
 from rag.document_loader import DocumentLoadError, extract_document
@@ -283,9 +288,33 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
     except KnowledgeStoreUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     system = _build_workspace_chat_system_prompt(context)
+    inference_messages = [{"role": "system", "content": system}] + [
+        m.model_dump() for m in req.messages
+    ]
+    try:
+        # Rechaza prompts que no caben antes de consumir CPU/RAM en Ollama.
+        # La cota incluye system prompt, historial, RAG, framing y salida máxima.
+        calculate_preflight_budget(
+            inference_messages,
+            req.max_tokens,
+            settings.num_ctx,
+            runtime_model=settings.chat_model,
+            expected_runtime_model=settings.chat_model,
+            tokenizer_contract=SUPPORTED_TOKENIZER_CONTRACT,
+        )
+    except ContextBudgetExceeded:
+        raise HTTPException(
+            status_code=413,
+            detail="La conversación y la salida solicitada superan la ventana de contexto disponible.",
+        ) from None
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudo validar de forma segura el presupuesto de contexto del modelo.",
+        ) from None
     try:
         result = await chat_with_usage(
-            [{"role": "system", "content": system}] + [m.model_dump() for m in req.messages],
+            inference_messages,
             req.temperature, req.max_tokens,
         )
     except Exception:
