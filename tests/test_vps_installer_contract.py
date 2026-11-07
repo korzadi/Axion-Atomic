@@ -160,5 +160,45 @@ exit 0
             self.assertEqual(target.stat().st_mode & 0o777, 0o644)
             self.assertEqual(target.read_text(encoding="utf-8"), "do-not-change")
 
+
+    def test_prepare_rejects_dangling_env_symlink_before_creating_files(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            (scripts / "install_vps.sh").write_text(self.script, encoding="utf-8")
+            (root / "compose.yaml").write_text("services: {}", encoding="utf-8")
+            (root / ".env.example").write_text("API_KEY=placeholder", encoding="utf-8")
+            for name in ("workspace", "knowledge", "backups"):
+                (root / name).mkdir()
+            target = root / "missing-target"
+            (root / ".env").symlink_to(target)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            docker = fake_bin / "docker"
+            docker.write_text(
+                """#!/usr/bin/env sh
+if [ "$1" = compose ] && [ "$2" = version ]; then exit 0; fi
+exit 0
+""",
+                encoding="utf-8",
+            )
+            docker.chmod(0o755)
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+            completed = subprocess.run(
+                ["bash", str(scripts / "install_vps.sh"), "--prepare"],
+                cwd=root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=10,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("archivo regular y no un enlace simbólico", completed.stderr)
+            self.assertTrue((root / ".env").is_symlink())
+            self.assertFalse(target.exists())
+
 if __name__ == "__main__":
     unittest.main()
