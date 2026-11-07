@@ -55,7 +55,7 @@ class SkillRegistryTests(unittest.TestCase):
         self.assertIn("list_skills", prompt)
         self.assertIn("programming-workflow", prompt)
         self.assertIn("read_skill", prompt)
-        self.assertIn("no ejecuta scripts", prompt.lower())
+        self.assertIn("no ejecutes scripts", prompt.lower())
 
     def test_skills_are_exposed_as_read_only_agent_tools(self):
         self.skills.mkdir(parents=True)
