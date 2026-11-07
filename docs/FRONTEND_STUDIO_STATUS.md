@@ -120,3 +120,8 @@ Se incorporó una primera estructura SPA ligera dentro de la aplicación FastAPI
 - La autenticación del VPS permanece deshabilitada hasta completar sus gates.
 - No se habilitaron cobros, operaciones administrativas mutables, ni modelos Atomic aún no disponibles.
 - No se desplegó ni reinició el VPS y no se modificaron datos, volúmenes o servicios.
+
+
+### Ampliación de navegación SPA
+
+Se añadieron además las secciones **Privacidad y legal**, **API e integraciones** y **Herramientas**. Presentan los controles técnicos que sí existen y marcan como próximas actualizaciones los portales de derechos/gestión de claves, conectores y sandbox visual que todavía no tienen un flujo completo en el backend. No se inventan endpoints ni operaciones.
