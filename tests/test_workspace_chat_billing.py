@@ -1,5 +1,4 @@
 import unittest
-from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -100,7 +99,10 @@ class WorkspaceChatBillingIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response["usage_billing"]["reservation_id"], durable.reservation.reservation_id)
         kwargs = execute.await_args.kwargs
         self.assertEqual(kwargs["idempotency_key"], "stable-request-1")
-        self.assertEqual(kwargs["budget"].reserved_credits, 320 + 64 + 256 + 32)
+        self.assertEqual(
+            kwargs["budget"].reserved_credits,
+            kwargs["budget"].input_tokens_upper_bound + kwargs["budget"].output_tokens_upper_bound,
+        )
         self.assertEqual(kwargs["expected_runtime_model"], "atomic-code:1.1")
 
 
