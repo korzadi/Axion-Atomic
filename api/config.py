@@ -39,6 +39,25 @@ class Settings(BaseSettings):
         if "." not in host:
             raise ValueError("QDRANT_URL debe usar un hostname público")
         return value.strip()
+    @field_validator("oauth_public_base_url")
+    @classmethod
+    def require_secure_oauth_public_origin(cls, value: str | None) -> str | None:
+        """OAuth callbacks and email links must use a trusted HTTPS origin."""
+        if value is None or not value.strip():
+            return None
+        normalized = value.strip()
+        parsed = urlsplit(normalized)
+        host = (parsed.hostname or "").rstrip(".").lower()
+        if parsed.scheme != "https" or not host:
+            raise ValueError("OAUTH_PUBLIC_BASE_URL debe ser un origen HTTPS público")
+        if parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise ValueError("OAUTH_PUBLIC_BASE_URL no debe contener credenciales, query ni fragmentos")
+        if parsed.path not in ("", "/"):
+            raise ValueError("OAUTH_PUBLIC_BASE_URL debe ser un origen, sin ruta")
+        if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
+            raise ValueError("OAUTH_PUBLIC_BASE_URL no puede apuntar a un host local")
+        return f"https://{host}" + (f":{parsed.port}" if parsed.port else "")
+
     qdrant_api_key: str | None = None
     qdrant_collection: str = "qwen_knowledge"
     database_url: str = "postgresql+psycopg://axion:change-me@localhost:5433/axion_atomic"
