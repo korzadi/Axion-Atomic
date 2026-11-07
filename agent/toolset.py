@@ -44,9 +44,11 @@ def validate_args(tool: Tool, args) -> dict:
         v = args[name]
         ok = isinstance(v, TYPES[tname]) and not (tname == "int" and isinstance(v, bool))
         if tname == "list":
-            ok = ok and all(isinstance(x, str) for x in v)
+            ok = ok and len(v) <= 1000 and all(isinstance(x, str) for x in v)
+            if ok and sum(len(x) for x in v) > MAX_ARG_CHARS:
+                ok = False
         if not ok:
-            raise ValueError(f"'{name}' debe ser {tname}")
+            raise ValueError(f"'{name}' debe ser {tname} válido y estar dentro de los límites")
         if isinstance(v, str) and len(v) > MAX_ARG_CHARS:
             raise ValueError(f"'{name}' excede el tamaño máximo")
     return args
