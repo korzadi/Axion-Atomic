@@ -14,6 +14,18 @@ class EmailDeliveryTests(unittest.TestCase):
         settings.smtp_starttls = True
         self.assertTrue(email_delivery_configured(settings))
 
+    def test_rejects_username_without_password(self):
+        settings = Mock(smtp_host="smtp.example", email_from="no-reply@example",
+                        smtp_starttls=True, smtp_ssl=False,
+                        smtp_username="smtp-user", smtp_password=None)
+        self.assertFalse(email_delivery_configured(settings))
+
+    def test_rejects_conflicting_tls_modes(self):
+        settings = Mock(smtp_host="smtp.example", email_from="no-reply@example",
+                        smtp_starttls=True, smtp_ssl=True,
+                        smtp_username=None, smtp_password=None)
+        self.assertFalse(email_delivery_configured(settings))
+
     def test_refuses_plaintext_smtp(self):
         settings = Mock(smtp_host="smtp.example", email_from="no-reply@example",
                         smtp_starttls=False, smtp_ssl=False)
