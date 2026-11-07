@@ -468,22 +468,23 @@ async def workspace_chat(
     if result.done is not True:
         raise HTTPException(status_code=503, detail="La inferencia no terminó correctamente")
 
-    # Solo registrar uso después de validar identidad del modelo y finalización.
-    # Respuestas de un modelo inesperado o incompletas no cuentan como uso aceptado.
-    # Shadow mode no crea cargos, reservas ni saldos.
-    try:
-        await run_in_threadpool(
-            persist_shadow_usage_event,
-            request_id=request_id,
-            user_id=user["id"],
-            project_id=req.project_id,
-            result=result,
-        )
-    except Exception:
+    # El ledger ya registra y liquida el uso cuando la facturación está activa.
+    # El evento shadow se reserva exclusivamente para el modo sin cargos, evitando
+    # duplicar la telemetría de consumo de una ejecución ya liquidada.
+    if billing_result is None:
         try:
-            logger.warning("No se pudo persistir el evento de uso shadow")
+            await run_in_threadpool(
+                persist_shadow_usage_event,
+                request_id=request_id,
+                user_id=user["id"],
+                project_id=req.project_id,
+                result=result,
+            )
         except Exception:
-            pass
+            try:
+                logger.warning("No se pudo persistir el evento de uso shadow")
+            except Exception:
+                pass
 
     # El historial es secundario: un fallo al guardarlo no debe convertir una
     # inferencia ya completada en HTTP 503, porque el cliente podría repetirla.
