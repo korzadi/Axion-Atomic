@@ -129,7 +129,7 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(caught.exception.status_code, 503)
         self.assertIn("modelo ejecutado no coincide", caught.exception.detail)
 
-    async def test_chat_returns_503_when_validated_response_cannot_be_persisted(self):
+    async def test_chat_returns_completed_response_when_history_storage_fails(self):
         request = ChatRequest(
             project_id="project-a",
             messages=[Message(role="user", content="Guarda esta conversación")],
@@ -145,14 +145,10 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
             patch("api.workspace_routes._save_chat_history", side_effect=RuntimeError("database unavailable")),
             patch("api.workspace_routes.settings.chat_model", "atomic-code:16k-8k"),
         ):
-            with self.assertRaises(HTTPException) as caught:
-                await workspace_chat(request, {"id": "user-a"})
+            response = await workspace_chat(request, {"id": "user-a"})
 
-        self.assertEqual(caught.exception.status_code, 503)
-        self.assertEqual(
-            caught.exception.detail,
-            "No se pudo guardar el historial de la conversación",
-        )
+        self.assertEqual(response["choices"][0]["message"]["content"], "Respuesta de prueba")
+        self.assertFalse(response["history_saved"])
 
     async def test_chat_does_not_persist_history_when_inference_fails(self):
         request = ChatRequest(
