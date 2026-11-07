@@ -38,7 +38,7 @@ def test_unreleased_models_and_commercial_features_are_roadmap_items():
     assert "Atomic Vision" in source
     assert "Atomic Reasoning" in source
     assert "Checkout deshabilitado" in source
-    assert "precios y cuotas pendientes de aprobación" in source
+    assert "Precios y cuotas pendientes de aprobación" in source
 
 
 def test_public_indicators_are_loaded_from_backend_not_fake_counters():
