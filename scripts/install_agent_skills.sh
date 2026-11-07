@@ -28,6 +28,7 @@ fi
 
 mkdir -p "$DEST"
 cp -a "$tmp/skills" "$DEST/"
+if [[ -d "$tmp/references" ]]; then cp -a "$tmp/references" "$DEST/"; fi
 cp "$tmp/LICENSE" "$DEST/LICENSE"
 printf 'Instalado pack Agent Skills (%s skills) en %s\n' "$count" "$DEST"
 printf 'Commit upstream fijado: %s\n' "$PINNED_COMMIT"
