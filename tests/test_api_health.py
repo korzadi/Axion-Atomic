@@ -21,7 +21,7 @@ class FakeHttpClient:
     async def __aexit__(self, *args):
         return False
 
-    async def get(self, url):
+    async def get(self, url, headers=None):
         if "/api/tags" in url:
             return FakeResponse(self.ollama_ok)
         return FakeResponse(self.qdrant_ok)
