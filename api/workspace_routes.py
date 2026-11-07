@@ -295,22 +295,6 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
             pass
         raise HTTPException(status_code=503, detail="El servicio de inferencia no está disponible") from None
 
-    # Shadow mode: persiste medición técnica, pero no crea cargos, reservas ni saldos.
-    # La persistencia best-effort no debe interrumpir una inferencia ya completada.
-    try:
-        await run_in_threadpool(
-            persist_shadow_usage_event,
-            request_id=request_id,
-            user_id=user["id"],
-            project_id=req.project_id,
-            result=result,
-        )
-    except Exception:
-        try:
-            logger.warning("No se pudo persistir el evento de uso shadow")
-        except Exception:
-            pass
-
     # Telemetría sin prompts ni respuestas para observabilidad operativa.
     try:
         logger.info(json.dumps({
@@ -342,6 +326,23 @@ async def workspace_chat(req: ChatRequest, user=Depends(_csrf_user)):
         raise HTTPException(status_code=503, detail="El modelo ejecutado no coincide con el modelo autorizado")
     if result.done is not True:
         raise HTTPException(status_code=503, detail="La inferencia no terminó correctamente")
+
+    # Solo registrar uso después de validar identidad del modelo y finalización.
+    # Respuestas de un modelo inesperado o incompletas no cuentan como uso aceptado.
+    # Shadow mode no crea cargos, reservas ni saldos.
+    try:
+        await run_in_threadpool(
+            persist_shadow_usage_event,
+            request_id=request_id,
+            user_id=user["id"],
+            project_id=req.project_id,
+            result=result,
+        )
+    except Exception:
+        try:
+            logger.warning("No se pudo persistir el evento de uso shadow")
+        except Exception:
+            pass
 
     # El historial es privado por usuario y proyecto; solo se guarda tras una inferencia validada.
     try:
