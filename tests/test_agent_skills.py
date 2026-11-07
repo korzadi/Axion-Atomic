@@ -30,7 +30,7 @@ class SkillRegistryTests(unittest.TestCase):
         skill = self.skills / "agent-skills-pack" / "skills" / "security-and-hardening"
         skill.mkdir(parents=True)
         (skill / "SKILL.md").write_text(
-            "---\\nname: security-and-hardening\\ndescription: Security review workflow.\\n---\\n# Security\\n",
+            "---\nname: security-and-hardening\ndescription: Security review workflow.\n---\n# Security\n",
             encoding="utf-8",
         )
         registry = SkillRegistry(self.root)
