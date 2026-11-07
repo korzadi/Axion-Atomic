@@ -1,4 +1,4 @@
-name: AXION ATOMIC CI
+name: AXYRON ATOMIC CI
 
 on:
   push:
@@ -32,7 +32,7 @@ jobs:
           cache-dependency-path: requirements.txt
       - name: Install dependencies
         run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
-      - name: Validate AXION STUDIO JavaScript syntax
+      - name: Validate AXYRON STUDIO JavaScript syntax
         run: python scripts/check_frontend_js.py
       - name: Compile Python modules
         run: python -m compileall -q api agent core rag sandbox audit tests scripts
@@ -50,13 +50,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Build the production Docker image (no deployment)
-        run: docker build --pull --tag axion-atomic:ci .
-      - name: Smoke-test the packaged API and AXION STUDIO
+        run: docker build --pull --tag axyron-atomic:ci .
+      - name: Smoke-test the packaged API and AXYRON STUDIO
         shell: bash
         run: |
           set -euo pipefail
-          docker run --detach --rm --name axion-atomic-ci -p 127.0.0.1:18080:8000 axion-atomic:ci
-          cleanup() { docker stop axion-atomic-ci >/dev/null 2>&1 || true; }
+          docker run --detach --rm --name axyron-atomic-ci -p 127.0.0.1:18080:8000 axyron-atomic:ci
+          cleanup() { docker stop axyron-atomic-ci >/dev/null 2>&1 || true; }
           trap cleanup EXIT
           ready=0
           for attempt in $(seq 1 30); do
@@ -67,8 +67,8 @@ jobs:
             sleep 2
           done
           test "$ready" -eq 1
-          curl --fail --silent --show-error --output /tmp/axion-homepage http://127.0.0.1:18080/
-          grep -q "AXION STUDIO" /tmp/axion-homepage
+          curl --fail --silent --show-error --output /tmp/axyron-homepage http://127.0.0.1:18080/
+          grep -q "AXYRON STUDIO" /tmp/axyron-homepage
           curl --fail --silent --show-error --output /tmp/axion-live http://127.0.0.1:18080/health/live
           grep -q '"status":"alive"' /tmp/axion-live
           api_status="$(curl --silent --output /tmp/axion-auth-response --write-out '%{http_code}' http://127.0.0.1:18080/auth/me)"
@@ -89,7 +89,7 @@ jobs:
         run: npm install --no-save --no-package-lock playwright@1.58.2
       - name: Install Chromium for browser tests
         run: npx playwright install chromium
-      - name: Run AXION STUDIO browser end-to-end tests
+      - name: Run AXYRON STUDIO browser end-to-end tests
         run: node tests/e2e/studio-browser.mjs
 
   qdrant-cloud-integration:
