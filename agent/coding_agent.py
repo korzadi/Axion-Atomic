@@ -48,7 +48,7 @@ def system_prompt(tools: dict[str, Tool]) -> str:
     listing = "\n".join(f"- {t.name}({t.signature()}): {t.description}" + ("  [REQUIERE APROBACIÓN HUMANA]" if t.mutating else "")
                         for t in tools.values())
     return (
-        "Eres AXION, el agente de ingeniería de AXION ATOMIC, con supervisión humana.\n"
+        "Eres AXYRON, el agente de ingeniería de AXYRON ATOMIC, con supervisión humana.\n"
         "Responde SIEMPRE con exactamente un objeto JSON y nada más:\n"
         '  {"tool": "<nombre>", "args": {...}}   para usar una herramienta, o\n'
         '  {"final": "<respuesta para el usuario>"}   cuando hayas terminado.\n'
