@@ -38,7 +38,7 @@ El backend contiene autenticación web y autorización por membresía de proyect
 
 ### 2. AXION STUDIO y entrega
 
-El frontend ya existe como archivo estático `frontend/index.html` y ahora está conectado al servidor FastAPI y al Dockerfile. Esto corrige la brecha previa en la que el archivo no se servía ni se empaquetaba. Aún falta verificar mediante CI y prueba de imagen que la ruta raíz se entregue correctamente en el artefacto final. Los módulos Chat, Modelos, Agentes, Atomic Code, Atomic Video y Conocimiento siguen siendo principalmente vistas informativas; no declarar sus flujos operativos. Administración no tiene API global ni RBAC superadmin verificado.
+El frontend ya existe como archivo estático `frontend/Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html` y ahora está conectado al servidor FastAPI y al Dockerfile. Esto corrige la brecha previa en la que el archivo no se servía ni se empaquetaba. Aún falta verificar mediante CI y prueba de imagen que la ruta raíz se entregue correctamente en el artefacto final. Los módulos Chat, Modelos, Agentes, Atomic Code, Atomic Video y Conocimiento siguen siendo principalmente vistas informativas; no declarar sus flujos operativos. Administración no tiene API global ni RBAC superadmin verificado.
 
 ### 3. Agente, ejecuciones y aprobaciones
 
