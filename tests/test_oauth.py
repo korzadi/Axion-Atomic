@@ -33,6 +33,25 @@ class GoogleOidcClaimsTests(unittest.TestCase):
 
 
 class OAuthConfigurationTests(unittest.TestCase):
+    def test_public_oauth_origin_requires_https_and_normalizes_trailing_slash(self):
+        from api.config import Settings
+        settings = Settings(_env_file=None, oauth_public_base_url=" https://studio.example/ ")
+        self.assertEqual(settings.oauth_public_base_url, "https://studio.example")
+
+    def test_public_oauth_origin_rejects_http_and_non_origin_components(self):
+        from api.config import Settings
+        for value in (
+            "http://studio.example",
+            "https://user:pass@studio.example",
+            "https://studio.example/path",
+            "https://studio.example?next=evil",
+            "https://studio.example#fragment",
+            "https://localhost",
+        ):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    Settings(_env_file=None, oauth_public_base_url=value)
+
     def test_google_requires_client_id_secret_and_public_url(self):
         settings = Mock(google_oauth_client_id="id", google_oauth_client_secret="secret",
                         github_oauth_client_id=None, github_oauth_client_secret=None,
