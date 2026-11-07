@@ -41,6 +41,22 @@
     (items || []).forEach((item) => say(item.content, item.role));
   }
   function setStatus(text) { status.textContent = text; }
+  function createIdempotencyKey() {
+    const cryptoApi = window.crypto;
+    if (cryptoApi && typeof cryptoApi.randomUUID === "function") return cryptoApi.randomUUID();
+    if (!cryptoApi || typeof cryptoApi.getRandomValues !== "function") {
+      throw new Error("Este navegador no permite generar una clave segura para reintentos.");
+    }
+    const bytes = new Uint8Array(16);
+    cryptoApi.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+    return hex.slice(0, 8) + "-" + hex.slice(8, 12) + "-" + hex.slice(12, 16)
+      + "-" + hex.slice(16, 20) + "-" + hex.slice(20);
+  }
+  let pendingIdempotencyKey = null;
+  let pendingRequestFingerprint = null;
   function setBusy(value) {
     busy = Boolean(value);
     send.disabled = busy;
@@ -117,14 +133,30 @@
     say(content, "user"); prompt.value = "";
     setStatus("Axyron está consultando Atomic Code…");
     try {
+      const chatPayload = {
+        model: "atomic-code",
+        project_id: currentProject,
+        messages: nextHistory,
+        temperature: Number($("ws-temperature").value),
+        max_tokens: Number.parseInt($("ws-max-tokens").value, 10),
+        stream: false
+      };
+      const requestFingerprint = JSON.stringify(chatPayload);
+      if (!pendingIdempotencyKey || pendingRequestFingerprint !== requestFingerprint) {
+        pendingIdempotencyKey = createIdempotencyKey();
+        pendingRequestFingerprint = requestFingerprint;
+      }
       const data = await request("/workspace/chat/completions", {
         method: "POST",
-        body: JSON.stringify({ model: "atomic-code", project_id: currentProject, messages: nextHistory, temperature: Number($("ws-temperature").value), max_tokens: Number.parseInt($("ws-max-tokens").value, 10), stream: false })
+        headers: { "Idempotency-Key": pendingIdempotencyKey },
+        body: JSON.stringify(chatPayload)
       });
       const answer = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
       if (typeof answer !== "string" || !answer.trim()) throw new Error("El servidor devolvió una respuesta vacía.");
       history = nextHistory.concat([{ role: "assistant", content: answer }]);
       say(answer, "assistant");
+      pendingIdempotencyKey = null;
+      pendingRequestFingerprint = null;
       const historyStatus = data.history_saved === false
         ? "Respuesta recibida; el historial no pudo guardarse."
         : "Respuesta recibida y guardada.";

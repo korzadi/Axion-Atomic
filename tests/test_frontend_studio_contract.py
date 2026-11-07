@@ -75,6 +75,14 @@ def test_atomic_code_sends_user_selected_generation_settings_to_real_api():
     assert 'temperature: 0.2, max_tokens: 2048' not in workspace
     assert '"/workspace/chat/completions"' in workspace
 
+def test_workspace_sends_stable_idempotency_key_for_metered_chat_retries():
+    workspace = (FRONTEND.parent / "workspace.js").read_text(encoding="utf-8")
+    assert 'headers: { "Idempotency-Key": pendingIdempotencyKey }' in workspace
+    assert "function createIdempotencyKey()" in workspace
+    assert "pendingRequestFingerprint !== requestFingerprint" in workspace
+    assert "pendingIdempotencyKey = null;" in workspace
+
+
 def test_chat_discloses_shadow_billing_state_without_claiming_a_charge():
     workspace = (FRONTEND.parent / "workspace.js").read_text(encoding="utf-8")
     assert 'const billing = data.usage_billing;' in workspace
