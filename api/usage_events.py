@@ -35,7 +35,7 @@ def persist_shadow_usage_event(*, request_id: str, user_id: str, project_id: str
             isinstance(value, bool) or not isinstance(value, int) or value < 0
         ):
             raise ValueError(f"Contador de inferencia inválido: {field}")
-    with engine.begin():
+    with engine.begin() as conn:
         conn.execute(_INSERT_USAGE, {
             "request_id": request_id,
             "user_id": str(user_id),
