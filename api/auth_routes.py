@@ -16,10 +16,8 @@ from api.auth import (
 from api.config import settings
 from api.schemas import (
     LoginRequest, RegisterRequest, ProjectCreateRequest,
-    MfaChallengeVerifyRequest, MfaConfirmRequest, EmailTokenRequest,
-    PasswordResetRequest, EmailAddressRequest,
+    MfaChallengeVerifyRequest, MfaConfirmRequest,
 )
-from api.password_reset import issue_password_reset_token, consume_password_reset_token
 from api.mfa import AesGcmTotpCipher, EnvironmentMfaKeyProvider, MfaError
 from api.mfa_store import (
     begin_enrollment, confirm_enrollment, get_mfa_status, is_mfa_enabled,
@@ -30,7 +28,7 @@ from api.projects import list_user_projects
 from api.database import engine
 from api.rate_limit import consume_rate_limit, rate_limit_key
 from api.oauth import begin, consume_state, configured, provider_profile, resolve_user
-from api.email_delivery import email_delivery_configured, send_verification_email, send_password_reset_email
+from api.email_delivery import email_delivery_configured, send_verification_email
 from api.email_verification import issue_email_verification_token
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -118,96 +116,6 @@ async def register(req: RegisterRequest, request: Request):
             raise HTTPException(status_code=503, detail="No se pudo enviar el correo. Solicita un nuevo envío más tarde.") from None
     return {"status": "pending_verification",
             "message": "Si los datos son válidos, recibirás un correo con los pasos para activar tu cuenta."}
-
-
-@router.post("/email/verify")
-async def verify_email(req: EmailTokenRequest, request: Request, response: Response):
-    """Consume un token de verificación de correo de un solo uso."""
-    _require_auth_feature()
-    await run_in_threadpool(
-        _enforce_rate_limit, request, namespace="auth:email:verify:ip",
-        limit=20, window=timedelta(minutes=10),
-    )
-    from api.email_verification import consume_email_verification_token
-    valid = await run_in_threadpool(
-        consume_email_verification_token, engine=engine, token=req.token,
-    )
-    response.headers["Cache-Control"] = "no-store"
-    if not valid:
-        raise HTTPException(status_code=400, detail="El enlace de verificación no es válido o ha caducado.")
-    return {"status": "verified", "message": "Correo verificado. Ya puedes iniciar sesión."}
-
-
-@router.post("/email/resend")
-async def resend_email_verification(req: EmailAddressRequest, request: Request):
-    """Reenvía verificación sin revelar si la cuenta existe."""
-    _require_auth_feature()
-    email = req.email.strip().casefold()
-    await run_in_threadpool(
-        _enforce_rate_limit, request, namespace="auth:email:resend:ip",
-        limit=10, window=timedelta(minutes=10),
-    )
-    await run_in_threadpool(
-        _enforce_rate_limit, request, namespace="auth:email:resend:account",
-        subject=email, limit=3, window=timedelta(hours=1),
-    )
-    if not email_delivery_configured(settings) or not settings.oauth_public_base_url:
-        raise HTTPException(status_code=503, detail="El correo transaccional no está disponible temporalmente.")
-    with engine.connect() as conn:
-        user_id = conn.execute(text(
-            "SELECT id FROM users WHERE email_normalized=:email AND status='pending_verification'"
-        ), {"email": email}).scalar_one_or_none()
-    if user_id:
-        try:
-            issued = await run_in_threadpool(issue_email_verification_token, engine=engine, user_id=str(user_id))
-            await run_in_threadpool(send_verification_email, settings=settings, recipient=email, token=issued.token)
-        except Exception:
-            # Respuesta uniforme: no confirmar existencia ni estado de la cuenta.
-            pass
-    return {"status": "accepted", "message": "Si la cuenta necesita verificación, recibirás un correo."}
-
-
-@router.post("/password/forgot", status_code=202)
-async def password_forgot(req: EmailAddressRequest, request: Request):
-    """Solicita recuperación sin revelar si el correo pertenece a una cuenta."""
-    _require_auth_feature()
-    email = req.email.strip().casefold()
-    await run_in_threadpool(
-        _enforce_rate_limit, request, namespace="auth:password:forgot:ip",
-        limit=10, window=timedelta(minutes=10),
-    )
-    await run_in_threadpool(
-        _enforce_rate_limit, request, namespace="auth:password:forgot:account",
-        subject=email, limit=3, window=timedelta(hours=1),
-    )
-    if not email_delivery_configured(settings) or not settings.oauth_public_base_url:
-        raise HTTPException(status_code=503, detail="El correo transaccional no está disponible temporalmente.")
-    try:
-        issued = await run_in_threadpool(issue_password_reset_token, engine=engine, email=email)
-        if issued:
-            await run_in_threadpool(send_password_reset_email, settings=settings, recipient=email, token=issued.token)
-    except Exception:
-        pass
-    return {"status": "accepted", "message": "Si la cuenta está activa, recibirás instrucciones para recuperar el acceso."}
-
-
-@router.post("/password/reset")
-async def password_reset(req: PasswordResetRequest, request: Request, response: Response):
-    """Cambia contraseña con token único y revoca todas las sesiones existentes."""
-    _require_auth_feature()
-    await run_in_threadpool(
-        _enforce_rate_limit, request, namespace="auth:password:reset:ip",
-        limit=10, window=timedelta(minutes=10),
-    )
-    from api.password_reset import consume_password_reset_token
-    valid = await run_in_threadpool(
-        consume_password_reset_token, engine=engine, token=req.token,
-        new_password=req.new_password,
-    )
-    response.headers["Cache-Control"] = "no-store"
-    if not valid:
-        raise HTTPException(status_code=400, detail="El enlace no es válido, ha caducado o la contraseña no cumple los requisitos.")
-    return {"status": "password_updated", "message": "Contraseña actualizada. Inicia sesión nuevamente."}
 
 
 @router.post("/login")
