@@ -215,6 +215,14 @@ class CodingAgent:
                 self._observe(run, f"ERROR en {value}", str(exc))
                 self._persist(run)
                 continue
+            except Exception:
+                # Un fallo inesperado de una herramienta no debe escapar de HTTP
+                # ni dejar una ejecución persistida como running indefinidamente.
+                run.status = "failed"
+                run.error = "Una herramienta del agente falló inesperadamente; la ejecución se cerró sin repetir la operación."
+                self._emit(run, "tool_error", tool=value, error="unexpected_tool_failure")
+                self._persist(run)
+                return run
 
             if self.run_store is not None:
                 existing = self.run_store.get_project_action(run.project_id, prop.action_hash)
@@ -313,6 +321,11 @@ class CodingAgent:
                         self.run_store.transition_action(stored["run_id"] if stored else (p.action_run_id or run.id), p.action_hash, ("running",), "applied", result)
                 except HANDLED as exc:
                     result = f"ERROR al aplicar: {exc}"
+                    if self.run_store is not None:
+                        self.run_store.transition_action(stored["run_id"] if stored else (p.action_run_id or run.id), p.action_hash, ("running",), "failed", result)
+                except Exception:
+                    # La operación ya fue reclamada: no se reintenta a ciegas.
+                    result = "ERROR al aplicar: fallo inesperado; el resultado requiere revisión antes de repetir."
                     if self.run_store is not None:
                         self.run_store.transition_action(stored["run_id"] if stored else (p.action_run_id or run.id), p.action_hash, ("running",), "failed", result)
             self._emit(run, "approval_result", tool=p.tool, proposal_id=p.proposal_id, result=result)
