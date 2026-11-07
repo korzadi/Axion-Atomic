@@ -183,3 +183,14 @@ La inspección estática de `Dockerfile`, `compose.yaml` y `sandbox/backends.py`
 - La prueba `test_workspace_authorization.py` verifica que el helper recibe el usuario autenticado y los roles solicitados, pero no ejecuta una matriz HTTP completa de cada endpoint para cada rol. Esa cobertura sigue pendiente.
 
 **Decisión de seguridad:** no crear un mecanismo manual para marcar usuarios como `active` ni habilitar autenticación solo para sortear el bloqueo. La verificación debe ser un flujo verificable y auditable, no un cambio directo de estado.
+
+
+## Estado actualizado: runtime persistente conectado a la API
+
+La revisión del código actual confirma que el runtime de ejecuciones sí está conectado a `POST /workspace/agent/runs` y `POST /workspace/agent/runs/{run_id}/resume`, a través de `ProjectAgentRuntime`, `build_authorized_project_toolset` y el adaptador SQLAlchemy de persistencia. El runtime verifica membresía antes de resolver el workspace, limita cada proyecto a su directorio privado y conserva el gate de aprobación por acción. El backend no permite reejecutar automáticamente acciones que quedaron en estado `running`; las marca para reconciliación humana.
+
+La interfaz de Axyron Studio ya podía iniciar tareas y registrar aprobaciones, pero no exponía una acción para reanudar una ejecución tras la aprobación. Se añadió un botón visible solo para ejecuciones en estado `awaiting_approval`. Al usarlo, solicita confirmación y llama al endpoint real de reanudación. Si la aprobación sigue pendiente, el backend devuelve la ejecución sin aplicar nada; si una acción requiere reconciliación, la interfaz lo comunica y no intenta repetirla.
+
+**Limitación de ejecución:** el runtime HTTP construye el toolset de proyecto sin un backend Docker inyectado por defecto. Las herramientas de lectura y cambios de archivos aprobados existen, pero comandos de shell/pruebas en sandbox no se ofrecen hasta configurar y validar un backend Docker aislado. No se debe describir la terminal/sandbox como disponible.
+
+Pruebas: `tests/test_frontend_studio_spa.py` ahora exige la ruta de reanudación, el control de confirmación y el botón para ejecuciones pendientes de aprobación. Las pruebas HTTP existentes en `tests/test_workspace_agent_runtime_http.py` cubren inicio, reanudación, permisos, CSRF y fallos cerrados. La ejecución CI de este commit debe completar antes de considerar el cambio validado.
