@@ -66,3 +66,27 @@ Este repositorio está en desarrollo por fases. La presencia de una carpeta, doc
 - Los datos deben aislarse por proyecto y usuario.
 - No indexar archivos de entorno, credenciales, claves privadas, tokens ni otros secretos.
 - Revisar los cambios y ejecutar las pruebas pertinentes antes de fusionar.
+
+
+## AXYRON STUDIO — primera versión SPA
+
+La interfaz web autenticada se organiza como una SPA ligera servida por FastAPI desde `frontend/`, sin framework ni proceso de compilación adicional. La página principal seleccionada se conserva y carga `studio.css` y `studio.js` como recursos estáticos propios.
+
+### Secciones de la primera versión
+
+- **Resumen:** estado HTTP de la API, proyectos y consumo real disponible.
+- **Proyectos:** lista y creación mediante `/auth/projects`.
+- **Atomic Code:** chat autenticado mediante `/workspace/chat/history` y `/workspace/chat/completions`; no ofrece streaming porque el backend no lo implementa.
+- **Conocimiento:** indexación de texto y carga de documentos, listado y eliminación de fuentes por proyecto.
+- **Agente Axyron:** ejecuciones persistentes y decisiones de aprobación disponibles en el backend. La aprobación registra una decisión; no debe interpretarse como ejecución automática de la acción.
+- **Modelos Atomic:** catálogo del servidor. Atomic Video, Atomic Vision y Atomic Reasoning se identifican como próximas actualizaciones mientras no estén publicados como disponibles.
+- **Consumo:** telemetría por proyecto cuando existen mediciones.
+- **Facturación:** catálogo y órdenes propias en modo informativo; no se inicia checkout ni se acreditan créditos desde la interfaz.
+- **Cuenta y seguridad:** datos de sesión y estado/enrolamiento MFA; las operaciones no expuestas por el backend no se simulan.
+- **Administración:** permisos y roles de solo lectura. No se presentan controles de mutación porque la API administrativa actual no los ofrece.
+
+### Identidad visual
+
+La experiencia usa una paleta futurista oscura azul profundo, cian eléctrico, azul y violeta, paneles translúcidos, estados explícitos y navegación responsive. El tema claro permanece disponible como preferencia del usuario.
+
+La SPA usa únicamente rutas ya existentes en el backend. Las capacidades no implementadas se muestran como **Próxima actualización** o como operaciones deshabilitadas. Esta interfaz no habilita por sí sola autenticación, pagos, servicios ni despliegue en producción.
