@@ -60,6 +60,9 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response["choices"][0]["message"]["content"], "Respuesta de prueba")
         self.assertTrue(response["history_saved"])
         self.assertEqual(response["model"], "atomic-code")
+        self.assertEqual(response["usage_billing"], {
+            "mode": "shadow", "charged": False, "credits_reserved": False,
+        })
         
     async def test_chat_denies_non_member_before_rag_or_inference(self):
         request = ChatRequest(
@@ -153,6 +156,8 @@ class WorkspaceChatRagTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response["choices"][0]["message"]["content"], "Respuesta de prueba")
         self.assertFalse(response["history_saved"])
+        self.assertEqual(response["usage_billing"]["mode"], "shadow")
+        self.assertFalse(response["usage_billing"]["charged"])
 
     async def test_chat_does_not_persist_history_when_inference_fails(self):
         request = ChatRequest(
