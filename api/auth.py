@@ -168,16 +168,19 @@ def create_session(user_id: str, user_agent: str | None = None) -> tuple[str, st
     csrf = secrets.token_urlsafe(32)
     now = _now()
     with engine.begin() as conn:
-        conn.execute(text("""
+        inserted = conn.execute(text("""
             INSERT INTO user_sessions
               (id, user_id, token_hash, csrf_hash, created_at, expires_at, last_seen_at, user_agent_hash)
-            VALUES (:id, :user_id, :token_hash, :csrf_hash, :now, :expires, :now, :ua_hash)
+            SELECT :id, u.id, :token_hash, :csrf_hash, :now, :expires, :now, :ua_hash
+            FROM users u WHERE u.id=:user_id AND u.status='active'
         """), {
             "id": secrets.token_urlsafe(24), "user_id": user_id,
             "token_hash": _digest(token), "csrf_hash": _digest(csrf),
             "now": now, "expires": now + SESSION_TTL,
             "ua_hash": _digest(user_agent or "") if user_agent else None,
         })
-        conn.execute(text("UPDATE users SET last_login_at=:now WHERE id=:id"),
+        if inserted.rowcount != 1:
+            raise HTTPException(status_code=401, detail="La cuenta ya no está habilitada")
+        conn.execute(text("UPDATE users SET last_login_at=:now WHERE id=:id AND status='active'"),
                      {"now": now, "id": user_id})
     return token, csrf
