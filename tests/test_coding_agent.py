@@ -66,6 +66,21 @@ class ToolsetTests(AgentBase):
         self.assertIn("test-engineering", loaded)
         self.assertIn("CONTENIDO DE programming-workflow", context)
 
+    def test_skill_matching_normalizes_accents_and_project_audit_terms(self):
+        from agent.toolset import Tool
+        loaded = []
+        def read_skill(args):
+            loaded.append(args["name"])
+            return f"SKILL {args['name']}"
+        tools = {"read_skill": Tool("read_skill", "read", {"name": ("str", True)}, run=read_skill)}
+        context = _automatic_skill_context(
+            tools,
+            "Realiza una auditoría del repositorio y continúa con la implementación de la versión 1.0",
+        )
+        self.assertIn("codebase-summary", loaded)
+        self.assertIn("implementation-planning", loaded)
+        self.assertIn("SKILL codebase-summary", context)
+
     def test_agent_system_prompt_uses_final_axyron_identity(self):
         prompt = system_prompt(self.tools)
         self.assertIn("Eres AXYRON, el agente de ingeniería de AXYRON ATOMIC", prompt)
