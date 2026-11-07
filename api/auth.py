@@ -144,3 +144,40 @@ def authorize_project(user_id: str, project_id: str, minimum_roles: tuple[str, .
         # 404 avoids disclosing whether another user's project exists.
         raise HTTPException(status_code=404, detail="Proyecto no encontrado")
     return role
+
+
+def verify_credentials(email: str, password: str) -> dict:
+    """Verifica el primer factor sin crear sesión; permite exigir MFA antes de autenticar."""
+    normalized = email.strip().casefold()
+    with engine.connect() as conn:
+        row = conn.execute(text("""
+            SELECT id, email, display_name, password_hash, status
+            FROM users WHERE email_normalized = :email
+        """), {"email": normalized}).mappings().first()
+    if row is None:
+        _passwords.hash("invalid-login-placeholder-password")
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+    if row["status"] != "active" or not verify_password(row["password_hash"], password):
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+    return {"id": row["id"], "email": row["email"], "display_name": row["display_name"]}
+
+
+def create_session(user_id: str, user_agent: str | None = None) -> tuple[str, str]:
+    """Crea una sesión únicamente después de completar todos los factores requeridos."""
+    token = secrets.token_urlsafe(48)
+    csrf = secrets.token_urlsafe(32)
+    now = _now()
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO user_sessions
+              (id, user_id, token_hash, csrf_hash, created_at, expires_at, last_seen_at, user_agent_hash)
+            VALUES (:id, :user_id, :token_hash, :csrf_hash, :now, :expires, :now, :ua_hash)
+        """), {
+            "id": secrets.token_urlsafe(24), "user_id": user_id,
+            "token_hash": _digest(token), "csrf_hash": _digest(csrf),
+            "now": now, "expires": now + SESSION_TTL,
+            "ua_hash": _digest(user_agent or "") if user_agent else None,
+        })
+        conn.execute(text("UPDATE users SET last_login_at=:now WHERE id=:id"),
+                     {"now": now, "id": user_id})
+    return token, csrf
