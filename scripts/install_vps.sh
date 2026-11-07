@@ -43,7 +43,7 @@ for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             errors.append(
                 f"línea {number}: clave MFA activa duplicada (también en línea {seen[key]}). "
                 "Conserva una sola clave activa; las claves históricas deben ir en "
-                "AXYRON_MFA_ENCRYPTION_KEYRING_B64 como JSON Base64 por key_id. "
+                "AXYRON_MFA_ENCRYPTION_KEYRING_B64 como JSON literal con valores Base64 por key_id. "
                 "No se modifica .env automáticamente."
             )
         else:
@@ -147,11 +147,63 @@ preflight(){
   port_busy 5433 && die "Puerto 5433 ocupado; no se detendrá PostgreSQL existente."
   OLD="$(docker ps -aq --filter label=com.docker.compose.project=axion-atomic || true)"
   NEW="$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT_NAME" || true)"
-  USERS="$(docker ps -aq --filter volume=axion_atomic_pgdata || true)"
+  USERS=""
   VOLUME_EXISTS=0
-  docker volume inspect axion_atomic_pgdata >/dev/null 2>&1 && VOLUME_EXISTS=1
+  for volume in axion_atomic_pgdata axyron_atomic_pgdata; do
+    attached="$(docker ps -aq --filter "volume=$volume" || true)"
+    [[ -z "$attached" ]] || USERS+="$attached"
+  log "Preflight correcto: Compose, variables, puertos y recursos existentes."
+}
+deploy(){
+  [[ -t 0 ]] || die "--deploy requiere confirmación interactiva."
+  preflight
+  printf 'Se iniciarán PostgreSQL/Redis, se respaldará la DB, se migrará y se iniciará la API.\nEscribe DEPLOY AXYRON ATOMIC: '
+  read -r answer
+  [[ "$answer" == "DEPLOY AXYRON ATOMIC" ]] || die "Cancelado; no se desplegó."
+  cd "$ROOT"
+  C=(docker compose --project-name "$PROJECT_NAME" -f "$ROOT/compose.yaml" --env-file "$ENV_FILE")
+  "${C[@]}" up -d postgres redis
+  PG="$("${C[@]}" ps -q postgres)"
+  [[ -n "$PG" ]] || die "No se identificó PostgreSQL."
+  HEALTH=""
+  for _ in $(seq 1 60); do
+    HEALTH="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$PG" 2>/dev/null || true)"
+    [[ "$HEALTH" == healthy ]] && break
+    [[ "$HEALTH" == exited || "$HEALTH" == dead ]] && die "PostgreSQL terminó; no se migró."
+    sleep 2
+  done
+  [[ "$HEALTH" == healthy ]] || die "PostgreSQL no alcanzó healthy; no se migró."
+  BACKUP="$BACKUPS/pre-migration-$(date -u +%Y%m%dT%H%M%SZ).dump"
+  "${C[@]}" exec -T postgres pg_dump --no-owner --no-acl -U "$(value POSTGRES_USER)" -d "$(value POSTGRES_DB)" -Fc > "$BACKUP"
+  [[ -s "$BACKUP" ]] || die "Backup vacío; se cancela antes de migrar."
+  chmod 600 "$BACKUP"
+  log "Backup PostgreSQL previo guardado en $BACKUP."
+  "${C[@]}" build api
+  "${C[@]}" run --rm --no-deps api python -m api.migrate
+  "${C[@]}" up -d api
+  LIVE=0
+  for _ in $(seq 1 45); do
+    if curl -fsS http://127.0.0.1:8070/health/live >/dev/null 2>&1; then LIVE=1; break; fi
+    sleep 2
+  done
+  [[ "$LIVE" == 1 ]] || die "API no responde. Se conservan datos y backup; no hay rollback destructivo."
+  log "API viva en 127.0.0.1:8070."
+  if curl -fsS http://127.0.0.1:8070/health >/dev/null 2>&1; then log "Health integral OK."
+  else log "AVISO: health integral degradado; revisa Ollama/modelos y Qdrant. No se declara producción."; fi
+  log "Contenedores levantados. Proxy HTTPS/DNS y activación de auth se validan aparte."
+}
+case "$MODE" in
+  --prepare) prepare ;;
+  --check) [[ -f "$ENV_FILE" ]] || die "No existe .env; ejecuta primero --prepare."; preflight; log "Validación completada sin modificar archivos ni iniciar servicios." ;;
+  --deploy) [[ -f "$ENV_FILE" ]] || die "No existe .env; ejecuta primero --prepare."; deploy ;;
+esac
+\n'
+    if docker volume inspect "$volume" >/dev/null 2>&1; then
+      VOLUME_EXISTS=1
+    fi
+  done
   if [[ -n "$OLD" || -n "$NEW" || -n "$USERS" || "$VOLUME_EXISTS" == 1 ]]; then
-    die "Hay contenedores existentes o un contenedor usa axion_atomic_pgdata. No se modifica nada: reconciliación manual obligatoria."
+    die "Hay contenedores o volúmenes PostgreSQL existentes (legados o actuales). No se modifica nada: reconciliación obligatoria."
   fi
   log "Preflight correcto: Compose, variables, puertos y recursos existentes."
 }
