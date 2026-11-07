@@ -71,14 +71,15 @@ class VpsInstallerContractTests(unittest.TestCase):
             fake_bin.mkdir()
             docker = fake_bin / "docker"
             docker.write_text(
-                "#!/usr/bin/env bash\\n"
-                "case \"$1 $2\" in\\n"
-                "  'info ') exit 0 ;;\\n"
-                "  'ps -a') exit 0 ;;\\n"
-                "  'volume inspect') exit 1 ;;\\n"
-                "  'network ls') exit 0 ;;\\n"
-                "  *) exit 0 ;;\\n"
-                "esac\\n",
+                """#!/usr/bin/env bash
+case "$1 $2" in
+  'info ') exit 0 ;;
+  'ps -a') exit 0 ;;
+  'volume inspect') exit 1 ;;
+  'network ls') exit 0 ;;
+  *) exit 0 ;;
+esac
+""",
                 encoding="utf-8",
             )
             docker.chmod(0o755)
