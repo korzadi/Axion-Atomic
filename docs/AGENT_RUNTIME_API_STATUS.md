@@ -212,3 +212,19 @@ Esta actualización prevalece sobre las secciones históricas anteriores que ind
 ### Endurecimiento de autorización antes de cuotas
 
 El 7 de noviembre se corrigió el orden de las rutas de inicio y reanudación: ambas llaman a `_project_role(..., ("owner", "admin", "editor"))` antes de consumir rate limit. Se añadieron pruebas para confirmar que una cuenta ajena recibe 403 y no consume cuota ni invoca el runtime. La corrección está pendiente de la ejecución CI más reciente para considerarse verificada.
+
+
+## Estado actualizado de integración HTTP — 7 de noviembre de 2026
+
+Esta sección prevalece sobre las observaciones históricas anteriores cuando describen etapas ya completadas:
+
+- La API multiusuario ahora construye `ProjectAgentRuntime` después de validar sesión, CSRF (en operaciones mutables), membresía y rol del proyecto.
+- `POST /workspace/agent/runs` inicia ejecuciones persistidas y `POST /workspace/agent/runs/{run_id}/resume` restaura y continúa ejecuciones por la combinación de ID y proyecto autorizado.
+- Las rutas de listado y detalle siguen filtradas por proyecto. Las decisiones de aprobación se vinculan al hash de acción; aprobar no equivale por sí solo a ejecutar ni a reanudar.
+- Si la restauración detecta una acción que quedó en estado `running`, la ejecución pasa a reconciliación humana y no vuelve a ejecutar esa acción automáticamente.
+- La composición HTTP actual NO inyecta `DockerBackend`. Por tanto, las herramientas de lectura/escritura/Git con aprobación pueden estar disponibles, pero la ejecución de comandos/sandbox no está habilitada desde el runtime HTTP. No se debe anunciar terminal ni ejecución arbitraria como capacidad disponible.
+- La integración Docker continúa bloqueada por la elección y configuración segura del daemon, transferencia de snapshots, permisos, límites, limpieza y pruebas de aislamiento. No montar el socket privilegiado del host ni usar `LocalBackend` como sustituto de aislamiento.
+- La autorización de inicio/reanudación debe ocurrir antes del rate limit y de construir el runtime. La CI asociada al HEAD actual debe confirmar las pruebas de regresión antes de considerar este cambio verificado.
+- `AUTH_ENABLED=false` continúa siendo el estado operativo informado; el código de runtime integrado no habilita por sí mismo el acceso público ni autoriza cambiar la configuración del VPS.
+
+**Alcance de verificación:** esta actualización documenta la inspección del código de `main`. No certifica ejecución en VPS, Docker real, autenticación pública, ni aislamiento de contenedores.
