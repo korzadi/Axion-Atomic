@@ -1,4 +1,4 @@
-"""Primitivas MFA para AXION ATOMIC.
+"""Primitivas MFA para AXYRON ATOMIC.
 
 No gestiona sesiones ni persiste datos: las rutas deben usar transacciones
 atómicas al guardar last_counter y consumir códigos de recuperación.
@@ -45,13 +45,16 @@ class EnvironmentMfaKeyProvider:
     todas las claves deben proceder del gestor de secretos del runtime.
     """
 
-    KEY_ENV = "AXION_MFA_ENCRYPTION_KEY_B64"
-    ID_ENV = "AXION_MFA_ENCRYPTION_KEY_ID"
-    KEYRING_ENV = "AXION_MFA_ENCRYPTION_KEYRING_B64"
+    KEY_ENV = "AXYRON_MFA_ENCRYPTION_KEY_B64"
+    LEGACY_KEY_ENV = "AXION_MFA_ENCRYPTION_KEY_B64"
+    ID_ENV = "AXYRON_MFA_ENCRYPTION_KEY_ID"
+    LEGACY_ID_ENV = "AXION_MFA_ENCRYPTION_KEY_ID"
+    KEYRING_ENV = "AXYRON_MFA_ENCRYPTION_KEYRING_B64"
+    LEGACY_KEYRING_ENV = "AXION_MFA_ENCRYPTION_KEYRING_B64"
 
     def active_key(self) -> tuple[str, bytes]:
-        key_id = os.environ.get(self.ID_ENV, "").strip()
-        encoded = os.environ.get(self.KEY_ENV, "").strip()
+        key_id = (os.environ.get(self.ID_ENV) or os.environ.get(self.LEGACY_ID_ENV) or "").strip()
+        encoded = (os.environ.get(self.KEY_ENV) or os.environ.get(self.LEGACY_KEY_ENV) or "").strip()
         if not key_id or not encoded:
             raise MfaError("Proveedor de claves MFA no configurado")
         try:
@@ -68,7 +71,7 @@ class EnvironmentMfaKeyProvider:
 
         # JSON object: { "historical-key-id": "BASE64_32_BYTE_KEY" }.
         # It must be injected by the runtime secret manager, never committed.
-        encoded_ring = os.environ.get(self.KEYRING_ENV, "").strip()
+        encoded_ring = (os.environ.get(self.KEYRING_ENV) or os.environ.get(self.LEGACY_KEYRING_ENV) or "").strip()
         if not encoded_ring:
             raise MfaError("La clave histórica MFA no está disponible")
         try:
