@@ -14,14 +14,14 @@ class AxionStudioServingTests(unittest.TestCase):
         self.assertIn("text/html", response.headers.get("content-type", ""))
         self.assertIn("Tu asistente de IA", response.text)
         self.assertIn("Axyron Atomic", response.text)
-        self.assertIn('data-open="register"', response.text)
+        self.assertIn('data-open="reg"', response.text)
 
     def test_api_routes_keep_priority_over_frontend_mount(self):
         with TestClient(app) as client:
             response = client.get("/auth/me")
 
         # AUTH_ENABLED remains closed by default; the API must not fall through
-        # to index.html or be shadowed by the frontend mount.
+        # to the landing page or be shadowed by the frontend mount.
         self.assertEqual(response.status_code, 503)
         self.assertNotIn("<!doctype html>", response.text.lower())
 
