@@ -24,11 +24,11 @@ class VpsInstallerContractTests(unittest.TestCase):
             (scripts / "install_vps.sh").write_text(self.script, encoding="utf-8")
             (root / "compose.yaml").write_text("services: {}", encoding="utf-8")
             (root / ".env.example").write_text(
-                "POSTGRES_DB=atomic_custom\\n"
-                "POSTGRES_USER=atomic_user\\n"
-                "POSTGRES_PASSWORD=CHANGE_THIS\\n"
-                "DATABASE_URL=postgresql+psycopg://old:old@postgres:5432/old\\n"
-                "API_KEY=REPLACE_ME\\n",
+                "POSTGRES_DB=atomic_custom\n"
+                "POSTGRES_USER=atomic_user\n"
+                "POSTGRES_PASSWORD=CHANGE_THIS\n"
+                "DATABASE_URL=postgresql+psycopg://old:old@postgres:5432/old\n"
+                "API_KEY=REPLACE_ME\n",
                 encoding="utf-8",
             )
             for name in ("workspace", "knowledge", "backups"):
@@ -37,9 +37,9 @@ class VpsInstallerContractTests(unittest.TestCase):
             fake_bin.mkdir()
             docker = fake_bin / "docker"
             docker.write_text(
-                "#!/usr/bin/env sh\\n"
-                "if [ \"$1\" = compose ] && [ \"$2\" = version ]; then exit 0; fi\\n"
-                "exit 0\\n",
+                "#!/usr/bin/env sh\n"
+                "if [ \"$1\" = compose ] && [ \"$2\" = version ]; then exit 0; fi\n"
+                "exit 0\n",
                 encoding="utf-8",
             )
             docker.chmod(0o755)
