@@ -169,3 +169,50 @@ Esta sección prevalece sobre las observaciones históricas anteriores cuando ex
 7. Verificar restauración de backups, monitorización, DNS/TLS del subdominio admin y plan de despliegue con autorización explícita.
 
 El progreso de implementación no equivale a preparación para producción. No se han realizado cambios en VPS, Docker, datos persistentes ni servicios ajenos.
+
+
+---
+
+## Reconciliación del estado — 7 de noviembre de 2026
+
+Esta sección actualiza las afirmaciones históricas anteriores. La inspección se realizó sobre el código de `main`; no equivale a pruebas en VPS ni a validación de producción.
+
+### Identidad vigente
+- Producto: **Axyron Atomic**.
+- Agente: **AXYRON**.
+- Interfaz: **Axyron Studio**.
+- Modelo previsto: **Atomic Code 1.1**.
+- Se conserva el HTML principal `frontend/Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html`.
+- El repositorio puede conservar nombres internos históricos de módulos/paquetes; no deben mostrarse como identidad de producto.
+
+### Corrección del estado del agente
+Las rutas HTTP de ejecuciones persistentes están implementadas: inicio, listado/detalle, decisiones de aprobación y reanudación autenticada por proyecto. Las aprobaciones de acciones se vinculan a su hash y a una ejecución/proyecto. La reanudación es explícita; aprobar una acción no la ejecuta automáticamente. Las acciones recuperadas en estado `running` requieren reconciliación humana y no se repiten automáticamente.
+
+Esto corrige la descripción histórica que afirmaba que el ciclo de inicio/reanudación seguía completamente pendiente. La validación end-to-end de todos los estados y recuperación aún debe completarse.
+
+### Sandbox: capacidades del código frente a integración HTTP
+El repositorio contiene:
+- `sandbox/snapshot.py`: snapshot temporal con límites de archivos/tamaño, omisión de symlinks y apertura segura con `O_NOFOLLOW`.
+- `sandbox/policy.py`: clasificación de comandos en bloqueados, automáticos y sujetos a aprobación; no invoca shell.
+- `sandbox/executor.py`: ejecuta sobre una copia temporal y registra auditoría.
+- `sandbox/backends.py`: `DockerBackend` con contenedor efímero, red `none`, root filesystem de solo lectura, usuario no root, capacidades eliminadas, límites de CPU/memoria/PIDs y timeout. `LocalBackend` declara explícitamente que no aísla el filesystem y exige opt-in inseguro para desarrollo/pruebas.
+
+**Bloqueo de integración:** `api/workspace_routes.py` construye `ProjectAgentRuntime` sin inyectar `backend`. Por tanto, las herramientas de ejecución de comandos no están disponibles desde el runtime HTTP. No habilitar terminal, compilación ni ejecución arbitraria en la interfaz hasta integrar un Docker daemon dedicado/no privilegiado con imágenes fijadas, permisos mínimos, límites de concurrencia/cuotas, limpieza, observabilidad y pruebas de aislamiento. No montar el socket privilegiado del Docker del host como atajo. La salida de red permanece deshabilitada; el backend rechaza configuración egress no verificada.
+
+### Seguridad y operación
+- `AUTH_ENABLED=false` permanece como estado operativo informado; no activar sin cerrar las pruebas de autenticación, correo, recuperación, MFA/OAuth, sesiones y autorización.
+- El runtime no debe usar `LocalBackend` como fallback.
+- El sandbox no debe heredar secretos del proceso API ni exponer `.env`, credenciales o sockets del host.
+- La aprobación de comandos desconocidos/red no debe confundirse con autorización para ejecutar fuera del contenedor.
+- No se han ejecutado pruebas en el VPS ni se ha validado la configuración Docker real de producción en esta revisión.
+
+### Estado de verificación
+Los cambios documentales recientes generaron ejecuciones CI `42402384870` y `42402401857`; al momento de la revisión no había una conclusión final satisfactoria para el HEAD actual. No marcar CI como aprobada hasta que un run asociado al SHA exacto termine con `success`.
+
+### Próximos bloqueos priorizados
+1. Integrar el backend Docker mediante un límite de confianza separado y no privilegiado; mantener terminal deshabilitada mientras tanto.
+2. Añadir pruebas de integración HTTP para start/resume/approval/reconciliation y autorización cruzada entre proyectos.
+3. Ejecutar pruebas de aislamiento reales del contenedor (filesystem, red, capabilities, UID, recursos, timeout y limpieza) en runner dedicado.
+4. Probar inferencia real de Atomic Code 1.1 desde el servicio configurado, con límites de contexto/timeout y evaluación reproducible.
+5. Completar verificación de correo, recuperación, MFA/OAuth y pruebas negativas de sesiones antes de habilitar Auth.
+6. Cerrar integración de pagos solo con contrato técnico, firma, idempotencia y conciliación verificables; no habilitar cobros/créditos por inferencia.
