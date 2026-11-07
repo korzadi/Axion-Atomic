@@ -10,7 +10,7 @@ El instalador ofrece tres etapas y evita modificar servicios ajenos.
 - Qdrant Cloud con URL HTTPS y API key.
 - DNS y proxy HTTPS configurados por separado.
 
-No instala Docker/Ollama, no descarga modelos, no configura Nginx, DNS, TLS ni UFW.
+No instala Docker/Ollama, no descarga modelos, no configura Nginx, DNS ni TLS.
 
 ## 1. Preparar sin desplegar
 
@@ -37,6 +37,24 @@ Requiere escribir exactamente `DEPLOY AXYRON ATOMIC`. Después inicia PostgreSQL
 No hace `git pull`, `compose down`, ni elimina contenedores, volúmenes o datos. No realiza rollback destructivo automático.
 
 **Si detecta recursos existentes, se detiene. No borres ni detengas esos recursos para forzar la instalación.** Primero debe inspeccionarse el despliegue actual y diseñarse una transición que conserve el volumen PostgreSQL y los servicios existentes.
+
+## Conexión privada con Ollama
+
+Ollama puede escuchar en una dirección privada del host (por ejemplo, `172.16.0.1:11434`) mientras que el contenedor API entra al host por la interfaz bridge de la red Compose de Axyron. La regla UFW debe permitir el tráfico entrante desde la subred de Axyron por su interfaz bridge actual hacia la IP privada donde escucha Ollama.
+
+El script `scripts/configure_ollama_firewall.sh` resuelve dinámicamente la red Compose, su subred, la interfaz bridge, la resolución de `host.docker.internal` dentro de la API y el listener TCP de Ollama. No fija nombres `br-...`, no cambia `OLLAMA_HOST`, no abre el puerto en `eth0`, no elimina reglas anteriores y no reinicia servicios.
+
+Primero ejecuta la inspección de solo lectura:
+
+    sudo bash scripts/configure_ollama_firewall.sh --check
+
+Si el diagnóstico identifica correctamente la red y el destino privados, aplica la única regla limitada a esa interfaz/subred/IP/puerto:
+
+    sudo bash scripts/configure_ollama_firewall.sh --apply
+
+La aplicación exige escribir exactamente `CONFIGURE AXYRON OLLAMA FIREWALL`. Si la red Compose, el contenedor API, la resolución del host, el listener o UFW no coinciden con las condiciones esperadas, el script se detiene sin modificar el firewall. No borra reglas antiguas porque podrían pertenecer a otro despliegue; su limpieza requiere una revisión independiente.
+
+Después, comprueba el health integral de la API. El script de firewall no reinicia Ollama, Docker ni Axyron y no modifica `.env`.
 
 ## Después
 
