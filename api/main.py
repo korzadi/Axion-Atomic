@@ -25,7 +25,7 @@ from api.usage_routes import router as usage_router
 from api.capacity import CapacityExceeded
 from api.rcache import close_cache, ping_cache
 
-app = FastAPI(title="Axion Atomic API", version="0.2.0")
+app = FastAPI(title="Axyron Atomic API", version="0.2.0")
 
 @app.exception_handler(CapacityExceeded)
 async def inference_capacity_exceeded(request, exc: CapacityExceeded):
