@@ -47,3 +47,12 @@ AXION ATOMIC dispone de controles implementados en el repositorio, pero **no est
 - Vincular cualquier aprobación a un hash inmutable de la acción/diff para evitar TOCTOU.
 - Tratar salidas del modelo y contenido recuperado por RAG como datos no confiables.
 - Los cambios de despliegue, VPS, Docker y datos de producción requieren autorización explícita.
+
+
+## Hallazgo adicional: MFA aún no protege los inicios de sesión OAuth
+
+La revisión estática de `api/auth_routes.py` y `api/auth.py` confirma que el login con contraseña llama a `authenticate()`, que emite una sesión inmediatamente después de validar la contraseña. El callback OAuth también llama a `_create_oauth_session()` inmediatamente después de resolver la identidad del proveedor. No existe un desafío MFA intermedio ni almacenamiento/enrolamiento TOTP en estos flujos.
+
+Por tanto, **MFA no está implementado** y no debe describirse como parcialmente activo. Cuando se implemente, deberá cubrir de forma uniforme contraseña y OAuth: si la cuenta requiere MFA, ambos flujos deben emitir únicamente un desafío temporal y no una cookie de sesión hasta completar el segundo factor. También deben cubrirse recuperación, revocación de desafíos, límites de intentos y concurrencia.
+
+Esta conclusión procede de lectura estática del código en la rama `main`; no se ejecutó una prueba dinámica ni se modificó el comportamiento de autenticación. Mantener `AUTH_ENABLED=false` hasta completar la implementación y la validación de staging.
