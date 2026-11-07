@@ -92,4 +92,21 @@ La interfaz web autenticada se organiza como una SPA ligera servida por FastAPI 
 
 La experiencia usa una paleta futurista oscura azul profundo, cian eléctrico, azul y violeta, paneles translúcidos, estados explícitos y navegación responsive. El tema claro permanece disponible como preferencia del usuario.
 
+### Ecosistema extensible — roadmap de próximas actualizaciones
+
+AXYRON STUDIO contempla una capa de extensibilidad para conectar AXYRON con servicios y herramientas externas. **Estas capacidades forman parte del roadmap; no se consideran disponibles hasta que exista implementación de backend, controles de seguridad y pruebas verificadas.**
+
+- **AXYRON CONNECT:** centro de conexiones para vincular aplicaciones y servicios externos, por ejemplo plataformas de desarrollo, almacenamiento, comunicación y servicios cloud.
+- **App Connectors:** conectores autenticados mediante OAuth u otros mecanismos apropiados, con permisos mínimos, autorización explícita, renovación y revocación de credenciales.
+- **Plugin Hub:** catálogo de plugins de terceros y propios, con procedencia, firma o verificación, versión, permisos declarados y ciclo de actualización.
+- **Skill Library:** biblioteca de skills que amplíen las capacidades del agente mediante instrucciones y flujos especializados, con revisión de contenido y límites de uso.
+- **Tool Registry:** registro de herramientas invocables por AXYRON, con esquemas de entrada/salida, validación, permisos por proyecto y aprobación humana para acciones sensibles.
+- **Protocolos y APIs:** evaluación de compatibilidad con MCP, APIs HTTP y webhooks; cada transporte deberá aplicar autenticación, autorización, límites y validación de entradas.
+- **Automation Hub:** flujos y automatizaciones programadas, condicionados a controles de ejecución, auditoría, cuotas, cancelación y recuperación segura.
+- **Security Center:** vista de conexiones activas, permisos concedidos, actividad, auditoría y desconexión/revocación.
+
+**Estado actual:** la SPA presenta estos módulos como **Próxima actualización**. No existe todavía un catálogo operativo de plugins/skills, instalador de extensiones, gestor universal de conectores ni autorización automática de herramientas. No anunciar ni simular esas funciones como disponibles.
+
+**Criterios mínimos antes de habilitar una extensión:** identidad y procedencia verificables; permisos mínimos y aislados por usuario/proyecto; secretos almacenados fuera del repositorio y protegidos; validación de entradas y salidas; límites de recursos y red; aprobación explícita para operaciones sensibles; registro auditable; revocación y desinstalación seguras; pruebas de aislamiento y compatibilidad.
+
 La SPA usa únicamente rutas ya existentes en el backend. Las capacidades no implementadas se muestran como **Próxima actualización** o como operaciones deshabilitadas. Esta interfaz no habilita por sí sola autenticación, pagos, servicios ni despliegue en producción.
