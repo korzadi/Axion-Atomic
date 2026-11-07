@@ -321,7 +321,7 @@ tp.onclick=function(){scrollTo({top:0,behavior:'smooth'})};
 var ck=document.getElementById('ck'),ok=false;try{ok=localStorage.getItem('axyron-ck')}catch(e){}
 if(!ok)setTimeout(function(){ck.classList.add('show')},1500);
 document.getElementById('cka').onclick=function(){ck.classList.remove('show');try{localStorage.setItem('axyron-ck','1')}catch(e){}};
-document.getElementById('nlf').onsubmit=function(e){e.preventDefault();var m=document.getElementById('nlm');m.textContent=/^\S+@\S+\.\S+$/.test(document.getElementById('nle').value)?'El boletín estará disponible en una próxima actualización.':'Correo no válido.'};
+var newsletterForm=document.getElementById('nlf');if(newsletterForm)newsletterForm.onsubmit=function(e){e.preventDefault();var message=document.getElementById('nlm'),email=document.getElementById('nle');if(message&&email)message.textContent=/^\S+@\S+\.\S+$/.test(email.value)?'El boletín estará disponible en una próxima actualización.':'Correo no válido.'};
 /* Sesión real validada por el backend mediante cookie HttpOnly. */
  function setU(u){cur=u;document.querySelectorAll('.acts [data-open],.mauth').forEach(function(x){x.style.display=u?'none':''});var el=document.getElementById('usr');el.hidden=!u;var workspaceNav=document.getElementById('workspace-nav');if(workspaceNav)workspaceNav.hidden=!u;if(u){var n=u.display_name||u.email||'Usuario';document.getElementById('av').textContent=n.charAt(0).toUpperCase();document.getElementById('un').textContent=n}window.dispatchEvent(new CustomEvent('axyron:user',{detail:{user:u}}))}
  var cur=null;loadUser();loadPublicData();
