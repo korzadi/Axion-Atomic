@@ -43,6 +43,15 @@ jobs:
         run: python -m pytest -q
 
 
+  container-image-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build the production Docker image (no deployment)
+        run: docker build --pull --tag axion-atomic:ci .
+
   studio-browser-e2e:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
