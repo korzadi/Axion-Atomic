@@ -18,7 +18,7 @@ Este documento separa lo implementado en el repositorio de lo que todavía requi
 - [x] Migraciones PostgreSQL y pruebas de navegador.
 
 ### Evidencia CI más reciente
-- Run [42324560749](https://github.com/korzadi/Axion-Atomic/actions/runs/42324560749), commit `54451588`: los cuatro jobs terminaron correctamente.
+- Run [42360807143](https://github.com/korzadi/Axion-Atomic/actions/runs/42360807143), commit `3620e4d2`: los cuatro jobs terminaron correctamente (Python, PostgreSQL, Qdrant Cloud y AXION STUDIO browser E2E).
 - Python: 625 aprobadas, 9 omitidas, 3 advertencias.
 - PostgreSQL migrations, Qdrant Cloud integration y AXION STUDIO browser E2E: success.
 - PostgreSQL migrations: correcto.
@@ -92,7 +92,7 @@ El run 42324560749 terminó **success** en el commit `54451588a88fcfc5c801f3b1aa
 
 ### Condiciones para cerrar Fase 1
 
-- [ ] Inyectar las dos variables MFA en el gestor de secretos del backend runtime. Las variables de GitHub Actions no se transfieren automáticamente al servidor.
+- [ ] Inyectar las tres variables MFA necesarias en el gestor de secretos del backend runtime: clave activa, ID activo y anillo histórico (si existen registros cifrados con claves anteriores). Las variables de GitHub Actions no se transfieren automáticamente al servidor.
 - [ ] Validar en staging la rotación multi-clave, la custodia y la recuperación ante pérdida.
 - [ ] Configurar SMTP y Google/GitHub OAuth reales en staging.
 - [ ] Validar cookies HTTPS Secure, CSRF, proxy de confianza, recuperación y suspensión.
