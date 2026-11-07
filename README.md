@@ -110,3 +110,13 @@ AXYRON STUDIO contempla una capa de extensibilidad para conectar AXYRON con serv
 **Criterios mínimos antes de habilitar una extensión:** identidad y procedencia verificables; permisos mínimos y aislados por usuario/proyecto; secretos almacenados fuera del repositorio y protegidos; validación de entradas y salidas; límites de recursos y red; aprobación explícita para operaciones sensibles; registro auditable; revocación y desinstalación seguras; pruebas de aislamiento y compatibilidad.
 
 La SPA usa únicamente rutas ya existentes en el backend. Las capacidades no implementadas se muestran como **Próxima actualización** o como operaciones deshabilitadas. Esta interfaz no habilita por sí sola autenticación, pagos, servicios ni despliegue en producción.
+
+
+## AXYRON Agent Skills y Google Antigravity
+
+AXYRON adopta el estándar abierto `SKILL.md` para descubrir workflows especializados instalados por workspace, incluyendo bundles compatibles con Google Antigravity. El runtime puede listar y cargar skills bajo demanda mediante herramientas de solo lectura; nunca ejecuta scripts de terceros incluidos en ellas. La compatibilidad de formato no implica dependencia de Antigravity ni habilita ejecución de terminal.
+
+- Pack de ingeniería de Addy Osmani: 25 skills (24 workflows + una meta-skill), licencia MIT.
+- Instalación y seguridad, compatibilidad Antigravity y estado real: [docs/AGENT_SKILLS_ANTIGRAVITY_INTEGRATION.md](docs/AGENT_SKILLS_ANTIGRAVITY_INTEGRATION.md).
+- Las skills no conceden permisos: siguen vigentes aislamiento por proyecto, aprobación humana y políticas del agente.
+- El pack upstream está documentado, pero no se incorpora automáticamente ni se declara instalado en el repositorio.
