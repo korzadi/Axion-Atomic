@@ -61,9 +61,9 @@ La integración de MFA ya está implementada en el código para los dos caminos 
 
 ### Validación automatizada
 
-El workflow [42360807143](https://github.com/korzadi/Axion-Atomic/actions/runs/42360807143) terminó correctamente en el commit `3620e4d2bd6ef01adb5177a7e4d38692477b7251`: los cuatro jobs (Python, PostgreSQL, Qdrant Cloud y AXION STUDIO browser E2E) finalizaron en success. La ejecución anterior [42324560749](https://github.com/korzadi/Axion-Atomic/actions/runs/42324560749) cubrió además las pruebas directas de rutas MFA:
+El workflow [42360939407](https://github.com/korzadi/Axion-Atomic/actions/runs/42360939407) terminó correctamente en el commit `0101daeff0c9f82fa615e19917a879a408df945c`: los cuatro jobs (Python, PostgreSQL, Qdrant Cloud y AXION STUDIO browser E2E) finalizaron en success. Python: 626 passed, 9 skipped, 3 warnings. La ejecución anterior [42324560749](https://github.com/korzadi/Axion-Atomic/actions/runs/42324560749) cubrió además las pruebas directas de rutas MFA:
 
-- Python: **625 aprobadas, 9 omitidas, 3 advertencias**.
+- Python: **626 aprobadas, 9 omitidas, 3 advertencias**.
 - PostgreSQL migrations e idempotencia: success.
 - Qdrant Cloud integration: success.
 - AXION STUDIO browser E2E: success.
