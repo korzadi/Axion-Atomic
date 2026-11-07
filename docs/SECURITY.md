@@ -49,34 +49,37 @@ AXION ATOMIC dispone de controles implementados en el repositorio, pero **no est
 - Tratar salidas del modelo y contenido recuperado por RAG como datos no confiables.
 - Los cambios de despliegue, VPS, Docker y datos de producción requieren autorización explícita.
 
-## Hallazgo: MFA aún no protege los inicios de sesión
+## Estado MFA actualizado — integración de aplicación completada, operación pendiente
 
-La lectura estática de `api/auth_routes.py` y `api/auth.py` confirma que el login con contraseña y el callback OAuth crean una sesión inmediatamente después de validar el primer factor/identidad. No existe todavía un desafío MFA intermedio ni almacenamiento/enrolamiento TOTP en esos flujos.
+La integración de MFA ya está implementada en el código para los dos caminos de autenticación:
 
-**MFA no está implementado de extremo a extremo.** Mantener `AUTH_ENABLED=false` hasta cubrir ambos caminos y validar staging.
+- **Contraseña:** el primer factor se verifica sin crear sesión. Si la cuenta tiene MFA activo, la API devuelve un desafío temporal y no emite cookies de sesión. La sesión se crea únicamente después de validar TOTP o un código de recuperación.
+- **Google/GitHub OAuth:** el callback resuelve la identidad y, si la cuenta tiene MFA activo, guarda el desafío en una cookie HttpOnly, Secure según configuración y limitada a la ruta de verificación. No crea sesión hasta validar el segundo factor.
+- **Verificación:** los desafíos distinguen login de oauth, expiran a los cinco minutos, limitan intentos y se consumen junto con el contador TOTP o el código de recuperación en transacciones PostgreSQL.
+- **Enrolamiento:** existen rutas protegidas por sesión y CSRF para consultar estado, iniciar y confirmar MFA. AXION STUDIO incluye una pantalla de Seguridad para configurar la aplicación TOTP y mostrar los códigos de recuperación una sola vez.
+- **Protección de datos:** el secreto TOTP se cifra con AES-256-GCM; PostgreSQL conserva solo ciphertext, nonce y key ID. Los códigos de recuperación tienen 128 bits aleatorios y se almacenan como hashes SHA-256. Las respuestas que entregan secretos/códigos usan Cache-Control: no-store.
 
-### Avance técnico inicial de MFA
+### Validación automatizada
 
-Se añadieron `api/mfa.py` y `tests/test_mfa.py` para establecer primitivas aisladas: generación TOTP RFC 6238, validación que devuelve un contador para consumo atómico, cifrado AES-256-GCM ligado al ID de usuario, y generación/hash de códigos de recuperación. La clave se inyecta mediante un proveedor externo; el módulo no genera ni persiste claves.
+El workflow 42324288766 terminó correctamente en el commit c5aff40043873f0ace54e0f5cec0aac2c716242b:
 
-Estas primitivas **no están conectadas a rutas, sesiones ni PostgreSQL**. El llamador todavía debe persistir el contador y consumir códigos de recuperación en transacciones atómicas, añadir rate limits/auditoría y garantizar que contraseña y OAuth no emitan sesión antes del desafío. La cobertura automatizada de estas primitivas está pendiente del CI del commit correspondiente.
+- Python: **622 aprobadas, 9 omitidas, 3 advertencias**.
+- PostgreSQL: **46 pruebas aprobadas**, incluidas persistencia MFA, consumo de TOTP, replay, recuperación y expiración.
+- Migraciones PostgreSQL e idempotencia: correctas.
+- Qdrant Cloud: correcto.
+- AXION STUDIO browser E2E: correcto.
+- Sintaxis JavaScript y compilación Python: correctas.
 
+El commit posterior e2a6829a7856bc1c684fe2bf206d35900989ab2e añadió no-store también a la respuesta de finalización MFA y a la redirección OAuth MFA; su ejecución CI todavía debe confirmarse.
 
-### Proveedor de clave MFA en runtime
+### Pendientes operativos antes de activar autenticación pública
 
-Se añadió `EnvironmentMfaKeyProvider` en `api/mfa.py`. Falla de forma cerrada si faltan variables, si Base64 no es válido, si la clave no tiene exactamente 32 bytes o si se solicita un ID histórico distinto del activo.
+1. Configurar las variables de MFA en el **entorno runtime del backend**. Los GitHub Actions secrets/variables que ya configuraste no se inyectan automáticamente en el proceso del servidor:
+   - AXION_MFA_ENCRYPTION_KEY_ID: identificador no secreto, por ejemplo runtime-v1.
+   - AXION_MFA_ENCRYPTION_KEY_B64: clave AES-256 de 32 bytes en Base64. Nunca compartirla por chat ni guardarla en Git.
+2. Diseñar y probar rotación multi-clave y recuperación ante pérdida de clave. El proveedor actual resuelve solo la clave activa; no permite descifrar con IDs históricos.
+3. Configurar SMTP y OAuth reales en staging y validar los flujos completos desde navegador.
+4. Validar proxy HTTPS, cookies Secure, CSRF, recuperación de cuenta, suspensión de usuarios, observabilidad y alertas.
+5. Ejecutar revisión independiente de seguridad y aceptación funcional.
 
-Variables requeridas en el **entorno de ejecución del backend** (no basta con configurarlas como GitHub Actions secrets):
-
-- `AXION_MFA_ENCRYPTION_KEY_ID`: identificador no secreto, por ejemplo `runtime-v1`.
-- `AXION_MFA_ENCRYPTION_KEY_B64`: clave AES-256 de 32 bytes codificada en Base64.
-
-La clave debe generarse y cargarse directamente en el gestor de secretos del entorno de ejecución. No pegarla en chats, issues, commits ni archivos versionados. No activar MFA hasta que el proveedor de secretos y la persistencia de claves históricas/rotación estén resueltos. El proveedor actual solo acepta la clave activa; no implementa rotación multi-clave.
-
-### Segunda capa MFA: esquema y persistencia transaccional
-
-Se añadió la migración `021_mfa_security.sql` con almacenamiento de secreto pendiente/activo cifrado (solo ciphertext/nonce/key ID), contador TOTP monotónico, hashes de códigos de recuperación, desafíos temporales almacenados por hash y auditoría append-only. La clave AES no se almacena en PostgreSQL.
-
-También se añadió `api/mfa_store.py`: inicio/confirmación de enrolamiento, emisión de desafío y consumo transaccional de TOTP o código de recuperación. Los desafíos caducan a los cinco minutos y limitan intentos. Los bloqueos `FOR UPDATE` coordinan consumo de contador, código y desafío.
-
-**Integración de autenticación todavía pendiente:** `api/auth.py` y `api/auth_routes.py` aún emiten sesiones directamente después del primer factor. Hasta modificar y probar esos flujos, estas funciones de persistencia no hacen que MFA esté activo en los inicios de sesión. La migración solo se aplica en CI/entornos donde se ejecute expresamente; no se ha tocado ninguna base de datos de producción.
+**Estado de activación:** mantener AUTH_ENABLED=false. La integración de código y CI no equivale a validación operativa ni autoriza despliegue. No se ha ejecutado migración ni cambio en la base de datos de producción.
