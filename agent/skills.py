@@ -33,16 +33,16 @@ class SkillRegistry:
             raw = path.read_text(encoding="utf-8")
         except (OSError, UnicodeError):
             return None
-        if not raw.startswith("---\\n"):
+        if not raw.startswith("---\n"):
             return None
-        end = raw.find("\\n---", 4)
+        end = raw.find("\n---", 4)
         if end < 0:
             return None
         fields = {}
         for line in raw[4:end].splitlines():
             key, sep, value = line.partition(":")
             if sep and key.strip() in {"name", "description"}:
-                fields[key.strip()] = value.strip().strip("\\"'").strip()
+                fields[key.strip()] = value.strip().strip("'\"").strip()
         name, description = fields.get("name"), fields.get("description")
         if not name or not _NAME.fullmatch(name) or not description or len(description) > 500:
             return None
@@ -69,7 +69,7 @@ class SkillRegistry:
         items = self.discover()
         if not items:
             return "No hay skills instaladas en .agents/skills ni .agent/skills."
-        return "\\n".join(f"- {item['name']}: {item['description']}" for item in items)
+        return "\n".join(f"- {item['name']}: {item['description']}" for item in items)
 
     def read_text(self, name):
         if not isinstance(name, str) or not _NAME.fullmatch(name):
@@ -78,6 +78,6 @@ class SkillRegistry:
             if item["name"] == name:
                 body = item["content"][:_MAX_ACTIVE_CHARS]
                 if len(item["content"]) > _MAX_ACTIVE_CHARS:
-                    body += "\\n[contenido truncado por límite]"
+                    body += "\n[contenido truncado por límite]"
                 return redact(body)
         raise ValueError("Skill no encontrada o manifiesto no válido")
