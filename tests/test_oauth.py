@@ -1,4 +1,6 @@
+import os
 import unittest
+from unittest.mock import patch
 from unittest.mock import Mock
 from api.oauth import configured, digest, begin, resolve_user
 
@@ -17,6 +19,17 @@ class OAuthConfigurationTests(unittest.TestCase):
                         oauth_public_base_url=None)
         self.assertFalse(configured(settings, "google"))
         self.assertFalse(configured(settings, "github"))
+
+
+    def test_github_oauth_reads_axion_prefixed_environment_variables(self):
+        with patch.dict(os.environ, {
+            "AXION_GITHUB_CLIENT_ID": "github-client-id-test",
+            "AXION_GITHUB_CLIENT_SECRET": "github-client-secret-test",
+        }, clear=False):
+            from api.config import Settings
+            settings = Settings(_env_file=None)
+        self.assertEqual(settings.github_oauth_client_id, "github-client-id-test")
+        self.assertEqual(settings.github_oauth_client_secret, "github-client-secret-test")
 
     def test_oauth_start_rejects_missing_legal_consent_before_database_access(self):
         settings = Mock(google_oauth_client_id="id", google_oauth_client_secret="secret",
