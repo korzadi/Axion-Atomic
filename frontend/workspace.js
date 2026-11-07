@@ -125,7 +125,14 @@
       if (typeof answer !== "string" || !answer.trim()) throw new Error("El servidor devolvió una respuesta vacía.");
       history = nextHistory.concat([{ role: "assistant", content: answer }]);
       say(answer, "assistant");
-      setStatus(data.history_saved === false ? "Respuesta recibida; el historial no pudo guardarse." : "Respuesta recibida y guardada.");
+      const historyStatus = data.history_saved === false
+        ? "Respuesta recibida; el historial no pudo guardarse."
+        : "Respuesta recibida y guardada.";
+      const billing = data.usage_billing;
+      const billingStatus = billing && billing.mode === "shadow" && billing.charged === false && billing.credits_reserved === false
+        ? " Facturación: modo de medición; no se cobraron ni reservaron créditos."
+        : " Estado de facturación no confirmado.";
+      setStatus(historyStatus + billingStatus);
     } catch (error) {
       prompt.value = content;
       try { await loadHistory(); } catch (_) { /* Preserve the original inference error. */ }
