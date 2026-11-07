@@ -8,7 +8,7 @@ ENV_FILE="$ROOT/.env"
 BACKUPS="$ROOT/backups"
 MODE="${1:---prepare}"
 log(){ printf '[AXYRON] %s\n' "$*"; }
-die(){ printf '[ERROR] %s\\n' "$*" >&2; exit 1; }
+die(){ printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 ensure_env_file_safe(){
   [[ -f "$ENV_FILE" && ! -L "$ENV_FILE" ]] || die ".env debe ser un archivo regular y no un enlace simbólico; no se modificó ningún archivo."
 }
