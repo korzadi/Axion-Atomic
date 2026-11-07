@@ -185,3 +185,6 @@ El instalador no modifica servicios existentes, Nginx, UFW, Ollama ni KorzadiVPN
 ## Contexto seguro de construcción Docker
 
 El archivo `.dockerignore` excluye secretos, archivos de entorno reales, workspaces, conocimiento privado, backups, bases de datos locales y metadatos Git del contexto de construcción. Mantiene disponibles las fuentes de la aplicación y las skills versionadas que el Dockerfile empaqueta. No añadas credenciales ni datos de usuarios al contexto de build.
+
+
+Para inventariar los recursos Axyron ya existentes en el VPS sin modificar servicios, ejecuta `bash scripts/inspect_vps_state.sh`. El informe omite valores de `.env` y se limita a contenedores/redes Axyron, el volumen persistente y los puertos de la aplicación.

@@ -35,7 +35,7 @@ jobs:
       - name: Validate AXYRON STUDIO JavaScript syntax
         run: python scripts/check_frontend_js.py
       - name: Validate VPS installer shell syntax
-        run: bash -n scripts/install_vps.sh
+        run: bash -n scripts/install_vps.sh && bash -n scripts/inspect_vps_state.sh
       - name: Compile Python modules
         run: python -m compileall -q api agent core rag sandbox audit tests scripts
       - name: Run unit tests
