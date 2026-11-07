@@ -223,3 +223,12 @@ Estimaciones de implementación basadas en código inspeccionado, pruebas dispon
 3. Completar la revisión de aislamiento y autorización del agente, fuentes RAG y recuperación de ejecuciones.
 4. Preparar aceptación de SMTP/OAuth y el subdominio admin en staging; no cambiar DNS/Nginx ni desplegar producción sin autorización específica.
 5. Mantener facturación y checkout deshabilitados hasta cerrar el gate de producción y la integración QvaPay verificada.
+
+
+### Readiness de IA y marca de correos — verificación adicional
+
+La ruta `/health` ahora valida no solo que Ollama responda, sino que `/api/tags` incluya exactamente el modelo de chat configurado y el modelo de embeddings configurado (normalizando el tag implícito `:latest`). Si falta cualquiera, readiness responde HTTP 503 e identifica el componente ausente; `/health/live` continúa siendo una prueba de liveness independiente. Se añadieron pruebas para readiness correcto y para el caso de modelo de chat ausente.
+
+Los correos de verificación y recuperación y la documentación del servicio de identidad usan ahora la identidad definitiva **AXYRON ATOMIC** en lugar de la marca heredada AXION. Se añadió una prueba de regresión de asunto y cuerpo de ambos correos.
+
+GitHub Actions `42400165930`, commit `e3965f7944b3f330c014413e6df2d597d1249d24`, terminó en **success**: Python, Playwright, build de imagen en CI, migraciones PostgreSQL e integración Qdrant Cloud. Esta ejecución incluye la corrección HttpOnly del login, los textos de marca y la validación de modelos configurados en readiness. No hubo despliegue de VPS.
