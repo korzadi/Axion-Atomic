@@ -252,3 +252,24 @@ GitHub Actions run [42404444729](https://github.com/korzadi/Axion-Atomic/actions
 - Integración autenticada de Qdrant Cloud: success.
 
 Esta CI valida los tests automatizados y los jobs declarados; no certifica ejecución del agente en el VPS ni habilita el sandbox Docker del runtime HTTP.
+
+
+## Límites de tamaño de argumentos de herramientas — 7 de noviembre de 2026
+
+La auditoría de validación encontró que los argumentos de tipo lista solo comprobaban que todos sus elementos fueran cadenas, sin limitar el número de elementos ni el tamaño agregado. Se añadió un límite de 1.000 elementos y un máximo agregado de 200.000 caracteres para listas, manteniendo la validación estricta de claves y tipos.
+
+Se añadieron pruebas para:
+- Rechazar listas con más de 1.000 elementos.
+- Rechazar listas cuyo contenido agregado excede 200.000 caracteres.
+- Aceptar listas pequeñas válidas.
+
+Archivos: `agent/toolset.py` y `tests/test_coding_agent.py`.
+
+GitHub Actions run [42404791578](https://github.com/korzadi/Axion-Atomic/actions/runs/42404791578), asociado al HEAD `e5838f711d2773452d707aee8607cd80cfa5b056`, terminó con **success** en los cinco jobs:
+- Python: **665 passed, 9 skipped, 4 warnings**.
+- Studio Browser E2E: success.
+- Build/smoke de imagen: success.
+- Migraciones y pruebas PostgreSQL: success (**46 passed**).
+- Integración Qdrant Cloud: success.
+
+Esta validación no prueba la ejecución del sandbox desde el runtime HTTP, inferencia real en VPS ni los flujos de autenticación pública.
