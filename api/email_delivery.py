@@ -5,12 +5,15 @@ import ssl
 
 
 def email_delivery_configured(settings) -> bool:
+    username = bool(settings.smtp_username)
+    password = bool(settings.smtp_password)
     return bool(
         settings.smtp_host
         and settings.email_from
         and (settings.smtp_starttls or settings.smtp_ssl)
         and not (settings.smtp_starttls and settings.smtp_ssl)
-        and (not settings.smtp_username or settings.smtp_password)
+        and username == password
+        and 1 <= settings.smtp_port <= 65535
     )
 
 
