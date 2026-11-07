@@ -69,28 +69,63 @@ async def health_live():
     return {"status": "alive"}
 
 
+def _ollama_model_names(payload) -> set[str]:
+    if not isinstance(payload, dict) or not isinstance(payload.get("models"), list):
+        return set()
+    names = set()
+    for item in payload["models"]:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name") or item.get("model")
+        if isinstance(name, str) and name.strip():
+            normalized = name.strip()
+            names.add(normalized if ":" in normalized else normalized + ":latest")
+    return names
+
+
 @app.get("/health")
 async def health():
-    checks = {"database": "unavailable", "ollama": "unavailable", "qdrant": "unavailable"}
+    checks = {
+        "database": "unavailable",
+        "ollama": "unavailable",
+        "chat_model": "unavailable",
+        "embedding_model": "unavailable",
+        "qdrant": "unavailable",
+    }
     try:
         await run_in_threadpool(_database_health_check)
         checks["database"] = "ok"
     except Exception:
         pass
     async with httpx.AsyncClient(timeout=3.0) as client:
-        for key, url in (
-            ("ollama", settings.ollama_base_url.rstrip("/") + "/api/tags"),
-            ("qdrant", settings.qdrant_url.rstrip("/") + "/healthz"),
-        ):
-            try:
-                headers = {"api-key": settings.qdrant_api_key} if key == "qdrant" and settings.qdrant_api_key else {}
-                response = await client.get(url, headers=headers)
-                if response.is_success:
-                    checks[key] = "ok"
-            except httpx.HTTPError:
-                pass
+        try:
+            response = await client.get(settings.ollama_base_url.rstrip("/") + "/api/tags")
+            if response.is_success:
+                checks["ollama"] = "ok"
+                try:
+                    model_names = _ollama_model_names(response.json())
+                    chat_model = settings.chat_model.strip()
+                    embed_model = settings.embed_model.strip()
+                    chat_model = chat_model if ":" in chat_model else chat_model + ":latest"
+                    embed_model = embed_model if ":" in embed_model else embed_model + ":latest"
+                    checks["chat_model"] = "ok" if chat_model in model_names else "unavailable"
+                    checks["embedding_model"] = "ok" if embed_model in model_names else "unavailable"
+                except (TypeError, ValueError):
+                    pass
+        except httpx.HTTPError:
+            pass
+        try:
+            headers = {"api-key": settings.qdrant_api_key} if settings.qdrant_api_key else {}
+            response = await client.get(settings.qdrant_url.rstrip("/") + "/healthz", headers=headers)
+            if response.is_success:
+                checks["qdrant"] = "ok"
+        except httpx.HTTPError:
+            pass
 
-    required_checks_ok = all(checks[key] == "ok" for key in ("database", "ollama", "qdrant"))
+    required_checks_ok = all(
+        checks[key] == "ok"
+        for key in ("database", "ollama", "chat_model", "embedding_model", "qdrant")
+    )
     if settings.redis_cache_enabled:
         # Redis solo acelera embeddings: su caída activa el bypass a Ollama,
         # no debe provocar reinicios ni sacar de servicio una API funcional.
