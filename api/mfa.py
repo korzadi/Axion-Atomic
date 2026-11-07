@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 import os
 import re
 import secrets
@@ -45,6 +46,7 @@ class EnvironmentMfaKeyProvider:
 
     KEY_ENV = "AXION_MFA_ENCRYPTION_KEY_B64"
     ID_ENV = "AXION_MFA_ENCRYPTION_KEY_ID"
+    KEYRING_ENV = "AXION_MFA_ENCRYPTION_KEYRING_B64"
 
     def active_key(self) -> tuple[str, bytes]:
         key_id = os.environ.get(self.ID_ENV, "").strip()
@@ -59,9 +61,29 @@ class EnvironmentMfaKeyProvider:
         return key_id, key
 
     def get_key(self, key_id: str) -> bytes:
-        active_id, key = self.active_key()
-        if not secrets.compare_digest(active_id, key_id):
+        active_id, active_key = self.active_key()
+        if secrets.compare_digest(active_id, key_id):
+            return active_key
+
+        # JSON object: { "historical-key-id": "BASE64_32_BYTE_KEY" }.
+        # It must be injected by the runtime secret manager, never committed.
+        encoded_ring = os.environ.get(self.KEYRING_ENV, "").strip()
+        if not encoded_ring:
             raise MfaError("La clave histórica MFA no está disponible")
+        try:
+            keyring = json.loads(encoded_ring)
+        except (TypeError, ValueError) as exc:
+            raise MfaError("Anillo de claves MFA no válido") from exc
+        if not isinstance(keyring, dict) or len(keyring) > 20:
+            raise MfaError("Anillo de claves MFA no válido")
+        encoded = keyring.get(key_id)
+        if not isinstance(encoded, str):
+            raise MfaError("La clave histórica MFA no está disponible")
+        try:
+            key = base64.b64decode(encoded, validate=True)
+        except (ValueError, base64.binascii.Error) as exc:
+            raise MfaError("Clave histórica MFA no válida") from exc
+        _validate_key(key_id, key)
         return key
 
 
