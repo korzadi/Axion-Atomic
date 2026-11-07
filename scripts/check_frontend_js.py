@@ -33,7 +33,7 @@ def main():
     parser = ScriptExtractor()
     parser.feed(html.read_text(encoding="utf-8"))
     if not parser.scripts:
-        raise SystemExit("No se encontraron scripts inline en frontend/index.html")
+        raise SystemExit("No se encontraron scripts inline en la página principal seleccionada")
     for index, script in enumerate(parser.scripts, start=1):
         with tempfile.NamedTemporaryFile(
             mode="w", encoding="utf-8", suffix=".js"
