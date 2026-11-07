@@ -45,6 +45,8 @@ def test_spa_has_no_fake_admin_or_commercial_mutations():
     assert "/admin/users" not in source
     assert "/billing/checkout" not in source
     assert "payment_intent" not in source
+    assert 'const canDecide=["owner","admin"]' in source
+    assert "Solo propietario o administrador" in source
 
 
 def test_admin_portal_is_separate_and_host_routed():
