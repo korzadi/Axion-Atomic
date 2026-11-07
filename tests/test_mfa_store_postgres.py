@@ -58,7 +58,13 @@ def test_mfa_enrollment_totp_replay_recovery_and_expiry_are_transactional():
         )
         assert verify_login_challenge(
             engine=engine, cipher=cipher, challenge_token=challenge,
-            code=totp_at(secret, int(login_now.timestamp())), now=login_now,
+            code=totp_at(secret, int(login_now.timestamp())),
+            expected_purpose="oauth", now=login_now,
+        ) is None
+        assert verify_login_challenge(
+            engine=engine, cipher=cipher, challenge_token=challenge,
+            code=totp_at(secret, int(login_now.timestamp())),
+            expected_purpose="login", now=login_now,
         ) == user_id
         # Desafío consumido y contador TOTP no pueden reutilizarse.
         assert verify_login_challenge(
