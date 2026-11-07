@@ -292,5 +292,14 @@ exit 0
             self.assertEqual(env_file.read_text(encoding="utf-8"), "API_KEY=keep-this-value")
             self.assertEqual(env_file.stat().st_mode & 0o777, 0o600)
 
+    def test_frontend_upgrade_validates_split_stack_port_ownership(self):
+        upgrade = self.script.split("upgrade_frontend(){", 1)[1].split("\n}\n", 1)[0]
+        self.assertIn('FRONTEND="$(${C[@]} ps -q frontend)"', upgrade)
+        self.assertIn('docker port "$FRONTEND"', upgrade)
+        self.assertIn('API_EXPOSED=', upgrade)
+        self.assertIn('8000/tcp', upgrade)
+        self.assertNotIn('docker port "$API"', upgrade)
+        self.assertIn('frontend existente no está ejecutándose', upgrade)
+
 if __name__ == "__main__":
     unittest.main()
