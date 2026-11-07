@@ -64,6 +64,17 @@ class ToolsetTests(AgentBase):
         self.assertEqual(validate_args(t, {"path": "a", "start_line": 1}), {"path": "a", "start_line": 1})
         with self.assertRaises(ValueError): validate_args(self.tools["git_commit"], {"message": "m", "paths": [1], "reason": "r"})
 
+    def test_list_arguments_are_bounded(self):
+        tool = self.tools["git_commit"]
+        with self.assertRaises(ValueError):
+            validate_args(tool, {"message": "m", "paths": ["x"] * 1001, "reason": "r"})
+        with self.assertRaises(ValueError):
+            validate_args(tool, {"message": "m", "paths": ["x" * 200001], "reason": "r"})
+        self.assertEqual(
+            validate_args(tool, {"message": "m", "paths": ["src/a.py", "src/b.py"], "reason": "r"})["paths"],
+            ["src/a.py", "src/b.py"],
+        )
+
     def test_mutating_flags(self):
         self.assertEqual({n for n, t in self.tools.items() if t.mutating},
                          {"write_file", "edit_file", "delete_file", "git_commit", "git_create_branch"})
