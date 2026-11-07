@@ -106,10 +106,17 @@ def test_usage_endpoint_preserves_unknown_token_totals_as_null():
         }
     ) if "COUNT(*) AS requests" in str(statement) else _Result(rows=[])
 
-    with patch("api.usage_routes.engine", engine):
+    with (
+        patch("api.usage_routes.authorize_project") as authorize,
+        patch("api.usage_routes.engine", engine),
+    ):
         response = project_usage(
             project_id="project-1", limit=50, user={"id": "user-1"}
         )
+
+    authorize.assert_called_once_with(
+        "user-1", "project-1", ("owner", "admin", "editor", "viewer")
+    )
 
     assert response["totals"]["requests"] == 1
     assert response["totals"]["prompt_tokens"] is None
