@@ -41,7 +41,7 @@ try {
   assert.equal(await page.locator('link[href="/studio.css"]').count(), 1);
   assert.equal(await page.locator("#ws-chat-form").count(), 1);
   await page.getByRole("heading", { name: /Tu asistente de IA/ }).waitFor();
-  await page.locator('[data-open="reg"]').first().click();
+  await page.locator('[data-open="reg"]:visible').first().click();
   await page.locator("#e").waitFor();
   await page.locator("#terms").waitFor();
   assert.equal(await page.locator("#terms").isVisible(), true);
@@ -51,7 +51,7 @@ try {
   assert.equal(await page.locator("#workspace-app").isHidden(), true);
   assert.equal(await page.locator("#workspace-app").textContent().then(text => text.includes("Atomic Code")), true);
   await page.locator("#cl").click();
-  await page.locator('[data-open="login"]').first().click();
+  await page.locator('[data-open="login"]:visible').first().click();
   await page.locator("#e").waitFor();
   assert.equal(await page.locator("#termsRow").isVisible(), false);
   process.stdout.write("Axyron Atomic landing browser E2E: passed\\n");
