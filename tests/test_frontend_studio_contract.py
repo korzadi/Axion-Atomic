@@ -121,3 +121,13 @@ def test_email_verification_link_uses_registered_api_route():
     assert "api('/auth/resend-verification'" in source
     assert 'id="resend"' in source
 
+
+
+def test_chat_retry_preserves_original_payload_after_ambiguous_http_failure():
+    workspace = (FRONTEND.parent / "workspace.js").read_text(encoding="utf-8")
+    catch_block = workspace.split("} catch (error) {", 1)[1].split("} finally", 1)[0]
+    assert "prompt.value = content;" in catch_block
+    assert "renderHistory(history);" in catch_block
+    assert "await loadHistory()" not in catch_block
+    assert "pendingIdempotencyKey" in workspace
+    assert "pendingRequestFingerprint" in workspace
