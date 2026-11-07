@@ -1,6 +1,6 @@
 # Matriz de aceptación — AXYRON ATOMIC V1.0
 
-Fecha: 7 de noviembre de 2026. Rama: `main`. HEAD de referencia: `770c086d624dfb56d9179488db5585a169666948`.
+Fecha: 7 de noviembre de 2026. Rama: `main`. Snapshot de auditoría inicial: `770c086d624dfb56d9179488db5585a169666948`. Revisiones incrementales posteriores se registran al final de este documento.
 
 ## Método de medición
 
@@ -51,6 +51,15 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 - `6a8d8564ed1ac653c79e426e778447394ef8ccdb`: 675 passed, 9 skipped, 4 warnings; cinco jobs correctos.
 
 Son resultados de esos SHA, no del HEAD actual. La consulta de estados y runs asociadas al HEAD `770c086d624dfb56d9179488db5585a169666948` no devolvió resultados verificables. **CI actual: no confirmada.**
+
+## Revisiones incrementales posteriores (7 de noviembre de 2026)
+
+- HEAD inspeccionado antes de estas correcciones: `d75a9b7b0fd87fc91c4b562009cefe824f7d8428`.
+- `scripts/install_vps.sh` generaba `DATABASE_URL` con usuario/base de datos codificados como literales, aunque `.env.example` permite configurar `POSTGRES_USER` y `POSTGRES_DB`. Se corrigió para derivar la URL de esos valores y codificar de forma segura sus componentes.
+- Se añadió `test_new_env_database_url_uses_configured_postgres_identity`, que prepara un entorno temporal con identidad PostgreSQL personalizada y comprueba la URL resultante y el modo privado de `.env`. La prueba está añadida, todavía no ejecutada/confirmada por CI.
+- Se corrigió el comentario de `.env.example`: el keyring MFA es JSON literal; no se codifica el objeto JSON en Base64. Cada valor de clave dentro del JSON sí es Base64, conforme a `api/mfa.py`.
+- Commits de corrección: `afd4fc38eaa6627ebe239505599c646153359e2a`, `20aeb3e2280ba74ef07e46648e668c098b0cdd02`, `4410e65ee7762c0b163700a0121c4f6f8dac3232`, `7389eba27bb561c4818476d82010cc680e1a47b8`.
+- El estado combinado de checks y la consulta de runs accesible para el último commit no devolvieron resultados. **CI del HEAD actual: no confirmada.**
 
 ## Puertas obligatorias antes de producción
 
