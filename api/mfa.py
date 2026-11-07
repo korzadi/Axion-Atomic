@@ -35,6 +35,36 @@ class MfaKeyProvider(Protocol):
         ...
 
 
+class EnvironmentMfaKeyProvider:
+    """Proveedor runtime desde variables de entorno; nunca registra ni genera claves.
+
+    Requiere AXION_MFA_ENCRYPTION_KEY_B64 (32 bytes en Base64) y
+    AXION_MFA_ENCRYPTION_KEY_ID. La rotación requiere conservar claves históricas
+    en un gestor de secretos; este proveedor mínimo solo resuelve la clave activa.
+    """
+
+    KEY_ENV = "AXION_MFA_ENCRYPTION_KEY_B64"
+    ID_ENV = "AXION_MFA_ENCRYPTION_KEY_ID"
+
+    def active_key(self) -> tuple[str, bytes]:
+        key_id = os.environ.get(self.ID_ENV, "").strip()
+        encoded = os.environ.get(self.KEY_ENV, "").strip()
+        if not key_id or not encoded:
+            raise MfaError("Proveedor de claves MFA no configurado")
+        try:
+            key = base64.b64decode(encoded, validate=True)
+        except (ValueError, base64.binascii.Error) as exc:
+            raise MfaError("Clave MFA runtime no válida") from exc
+        _validate_key(key_id, key)
+        return key_id, key
+
+    def get_key(self, key_id: str) -> bytes:
+        active_id, key = self.active_key()
+        if not secrets.compare_digest(active_id, key_id):
+            raise MfaError("La clave histórica MFA no está disponible")
+        return key
+
+
 @dataclass(frozen=True)
 class EncryptedTotpSecret:
     ciphertext: bytes
