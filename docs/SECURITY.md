@@ -62,6 +62,17 @@ Se añadieron `api/mfa.py` y `tests/test_mfa.py` para establecer primitivas aisl
 Estas primitivas **no están conectadas a rutas, sesiones ni PostgreSQL**. El llamador todavía debe persistir el contador y consumir códigos de recuperación en transacciones atómicas, añadir rate limits/auditoría y garantizar que contraseña y OAuth no emitan sesión antes del desafío. La cobertura automatizada de estas primitivas está pendiente del CI del commit correspondiente.
 
 
+### Proveedor de clave MFA en runtime
+
+Se añadió `EnvironmentMfaKeyProvider` en `api/mfa.py`. Falla de forma cerrada si faltan variables, si Base64 no es válido, si la clave no tiene exactamente 32 bytes o si se solicita un ID histórico distinto del activo.
+
+Variables requeridas en el **entorno de ejecución del backend** (no basta con configurarlas como GitHub Actions secrets):
+
+- `AXION_MFA_ENCRYPTION_KEY_ID`: identificador no secreto, por ejemplo `runtime-v1`.
+- `AXION_MFA_ENCRYPTION_KEY_B64`: clave AES-256 de 32 bytes codificada en Base64.
+
+La clave debe generarse y cargarse directamente en el gestor de secretos del entorno de ejecución. No pegarla en chats, issues, commits ni archivos versionados. No activar MFA hasta que el proveedor de secretos y la persistencia de claves históricas/rotación estén resueltos. El proveedor actual solo acepta la clave activa; no implementa rotación multi-clave.
+
 ### Segunda capa MFA: esquema y persistencia transaccional
 
 Se añadió la migración `021_mfa_security.sql` con almacenamiento de secreto pendiente/activo cifrado (solo ciphertext/nonce/key ID), contador TOTP monotónico, hashes de códigos de recuperación, desafíos temporales almacenados por hash y auditoría append-only. La clave AES no se almacena en PostgreSQL.
