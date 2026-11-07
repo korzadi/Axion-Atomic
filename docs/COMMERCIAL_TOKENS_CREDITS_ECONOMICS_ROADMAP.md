@@ -374,3 +374,35 @@ La revisión encontró que la ruta intentaba guardar contadores antes de validar
 | Conciliación de medición | 0% |
 
 **No se activan reservas, cuotas, ledger, pagos ni cobros.** La Fase comercial 3 no se considera cerrada hasta aprobar CI, definir garantía de entrega y completar los criterios de aceptación de esta fase.
+
+
+
+## 19. Consultas autenticadas de consumo y CI (7 de noviembre de 2026)
+
+Se incorporó una lectura privada de consumo por proyecto:
+- `GET /workspace/usage?project_id=...` requiere sesión autenticada.
+- Comprueba la membresía y rol del usuario antes de consultar.
+- Filtra totales e historial por `user_id` y `project_id`; no permite lectura cruzada.
+- Devuelve contadores agregados y una lista limitada de observaciones recientes.
+- No incluye prompts, respuestas, secretos ni datos de contenido.
+- La ruta falla de forma cerrada si `AUTH_ENABLED` está desactivado.
+
+Pruebas añadidas en `tests/test_usage_routes.py`: autenticación deshabilitada, autorización del proyecto, aislamiento de usuario/proyecto y límite de resultados.
+
+**CI confirmado:** run [42362260824](https://github.com/korzadi/Axion-Atomic/actions/runs/42362260824), commit `c8e5522190fdee19b760f770a223de3e9e3b990a`, terminó SUCCESS. Los cuatro jobs pasaron: Python tests, PostgreSQL migrations, Qdrant Cloud integration y AXION STUDIO browser E2E. El job PostgreSQL aplicó migraciones, verificó idempotencia y esquema/transacciones. Este CI valida el código y la suite automatizada, no el despliegue ni el runtime de producción.
+
+### Desglose actualizado de Fase comercial 3 — Medición
+
+| Submódulo | Avance |
+|---|---:|
+| Contrato InferenceResult y contadores Ollama | 100% |
+| Integración con chat autenticado | 100% |
+| Persistencia PostgreSQL best-effort e idempotencia por request_id | 100% código |
+| Validación de modelo y finalización antes de persistir | 100% código y CI |
+| Pruebas de parsing y persistencia | 100% código; CI confirmado |
+| Consultas autenticadas de consumo por proyecto | 100% código y CI |
+| Outbox durable y entrega garantizada de eventos | 0% |
+| Pruebas integrales de concurrencia y recuperación | 0% |
+| Conciliación de medición | 0% |
+
+**Avance estimado de Fase comercial 3: 60%.** La lectura de consumo está disponible en código, pero la telemetría sigue siendo best-effort. No se activan reservas, cuotas, ledger, pagos ni cobros. La fase no está cerrada.
