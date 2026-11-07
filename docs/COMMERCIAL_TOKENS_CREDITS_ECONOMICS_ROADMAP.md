@@ -63,7 +63,7 @@ Son tarifas de referencia para simulación y configuración comercial, no costes
 - `api/database.py`, `rag/meta.py`: SQLAlchemy para PostgreSQL y MetaStore auxiliar.
 - `migrations/001_initial.sql`: esquema inicial existente.
 - `agent/run_store.py`, `agent/approval_store.py`: persistencia/idempotencia de ejecuciones y aprobación, no billetera comercial.
-- `frontend/index.html`: SPA y vistas de usuario; navegación de administración aún no constituye un backend administrativo.
+- `frontend/Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html`: SPA y vistas de usuario; navegación de administración aún no constituye un backend administrativo.
 
 ### Hallazgos verificables
 
