@@ -75,6 +75,16 @@ def test_atomic_code_sends_user_selected_generation_settings_to_real_api():
     assert 'temperature: 0.2, max_tokens: 2048' not in workspace
     assert '"/workspace/chat/completions"' in workspace
 
+def test_chat_discloses_shadow_billing_state_without_claiming_a_charge():
+    workspace = (FRONTEND.parent / "workspace.js").read_text(encoding="utf-8")
+    assert 'const billing = data.usage_billing;' in workspace
+    assert 'billing.mode === "shadow"' in workspace
+    assert 'billing.charged === false' in workspace
+    assert 'billing.credits_reserved === false' in workspace
+    assert "no se cobraron ni reservaron créditos" in workspace
+    assert "Estado de facturación no confirmado." in workspace
+
+
 def test_workspace_locks_project_switching_while_inference_is_running():
     source = (FRONTEND.parent / "workspace.js").read_text(encoding="utf-8")
     assert "function setBusy(value)" in source
