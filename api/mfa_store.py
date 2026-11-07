@@ -147,7 +147,7 @@ def issue_login_challenge(
 
 def verify_login_challenge(
     *, engine: Engine, cipher: AesGcmTotpCipher, challenge_token: str, code: str,
-    now: datetime | None = None,
+    expected_purpose: str | None = None, now: datetime | None = None,
 ) -> str | None:
     """Consume desafío y segundo factor atómicamente; devuelve user_id o None.
 
@@ -164,6 +164,7 @@ def verify_login_challenge(
             challenge is None or challenge["consumed_at"] is not None
             or challenge["expires_at"] <= instant
             or challenge["attempts"] >= MAX_CHALLENGE_ATTEMPTS
+            or (expected_purpose is not None and challenge["purpose"] != expected_purpose)
         ):
             return None
         user_id = challenge["user_id"]
@@ -233,3 +234,20 @@ def verify_login_challenge(
             VALUES(:id,:user_id,:action,:now)
         """), {"id": uuid.uuid4(), "user_id": user_id, "action": action, "now": instant})
         return user_id
+
+
+
+def is_mfa_enabled(*, engine: Engine, user_id: str) -> bool:
+    with engine.connect() as conn:
+        return bool(conn.execute(text("""
+            SELECT 1 FROM user_mfa_credentials
+            WHERE user_id=:user_id AND state='enabled'
+        """), {"user_id": user_id}).scalar_one_or_none())
+
+
+def get_mfa_status(*, engine: Engine, user_id: str) -> dict:
+    with engine.connect() as conn:
+        row = conn.execute(text("""
+            SELECT state FROM user_mfa_credentials WHERE user_id=:user_id
+        """), {"user_id": user_id}).scalar_one_or_none()
+    return {"enabled": row == "enabled", "pending": row == "pending"}
