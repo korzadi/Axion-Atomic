@@ -46,9 +46,9 @@ def send_verification_email(*, settings, recipient: str, token: str) -> None:
     send_transactional_email(
         settings=settings,
         recipient=recipient,
-        subject="Verifica tu correo · AXION ATOMIC",
+        subject="Verifica tu correo · AXYRON ATOMIC",
         body=(
-            "Para verificar tu correo y activar tu cuenta AXION ATOMIC, abre este enlace:\n\n"
+            "Para verificar tu correo y activar tu cuenta AXYRON ATOMIC, abre este enlace:\n\n"
             + link
             + "\n\nEl enlace caduca en 30 minutos y solo puede utilizarse una vez. "
             "Si no solicitaste esta cuenta, ignora este mensaje."
@@ -61,9 +61,9 @@ def send_password_reset_email(*, settings, recipient: str, token: str) -> None:
     send_transactional_email(
         settings=settings,
         recipient=recipient,
-        subject="Recuperación de contraseña · AXION ATOMIC",
+        subject="Recuperación de contraseña · AXYRON ATOMIC",
         body=(
-            "Para elegir una nueva contraseña de AXION ATOMIC, abre este enlace:\n\n"
+            "Para elegir una nueva contraseña de AXYRON ATOMIC, abre este enlace:\n\n"
             + link
             + "\n\nEl enlace caduca en 30 minutos y solo puede utilizarse una vez. "
             "Si no solicitaste este cambio, ignora este mensaje."
