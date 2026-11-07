@@ -436,3 +436,49 @@ La evidencia CI valida el código en los entornos de prueba definidos. No sustit
 ### Estado revisado de Fase comercial 3
 
 **Estimación: 62%.** El endpoint de consulta autenticada y su aislamiento por usuario/proyecto quedan incorporados y pasan CI. Siguen pendientes las pruebas reales de concurrencia/recuperación, reconciliación integral y decisión/implementación de un outbox independiente solo si se demuestra una necesidad de entrega asíncrona fiable.
+
+
+## 11. Verificación de OAuth HTTPS y pruebas PostgreSQL de recuperación — 2026-11-07
+
+### Seguridad de URL pública OAuth
+
+`OAUTH_PUBLIC_BASE_URL` ahora se valida al cargar la configuración:
+- exige HTTPS y un hostname público con dominio;
+- rechaza hosts locales/internos, IP literales, credenciales, query, fragmentos y rutas;
+- normaliza el origen y elimina la barra final;
+- las pruebas cubren HTTP, localhost, credenciales, rutas y parámetros.
+
+No se habilitó autenticación ni se modificó ningún secreto o entorno de ejecución.
+
+### CI del commit `02806eb0133267101457c0a106e525ab15cfc269`
+
+Ejecución [42362879467](https://github.com/korzadi/Axion-Atomic/actions/runs/42362879467): SUCCESS, cuatro jobs:
+- Python: **634 passed, 9 skipped, 3 warnings**.
+- PostgreSQL 16: **46 passed**; migraciones, idempotencia y pruebas de reservas, ejecución durable, recuperación, correo, pagos y MFA.
+- Qdrant Cloud: integración aprobada.
+- AXION STUDIO: browser E2E aprobado.
+- Sintaxis JavaScript y compilación Python aprobadas.
+
+### Corrección del inventario de pruebas de recuperación
+
+La inspección del archivo `tests/test_billing_execution_durable_postgres.py` confirma que ya existen pruebas PostgreSQL para recuperar resultados cifrados sin repetir inferencia, liquidación por worker, claims exclusivos entre workers y backoff tras fallos. `tests/test_billing_reservations_postgres.py` también prueba reservas concurrentes sin sobrepasar cuota e idempotencia.
+
+Por tanto, las pruebas de concurrencia y recuperación **no están en 0%** como indicaba un desglose histórico. La cobertura automatizada básica está implementada y pasó el job PostgreSQL. Sigue pendiente ampliar escenarios de fallo, validar comportamiento operativo bajo carga y completar reconciliación integral de eventos. La cola de recuperación existente no es un outbox independiente.
+
+### Desglose revisado de Fase comercial 3
+
+| Submódulo | Avance |
+|---|---:|
+| Contrato InferenceResult y contadores Ollama | 100% |
+| Integración con chat autenticado | 100% |
+| Persistencia PostgreSQL best-effort e idempotencia | 100% código |
+| Validación de modelo y finalización | 100% código y CI |
+| Pruebas de parsing y persistencia | 100% código y CI |
+| Consultas autenticadas de consumo | 100% código y CI |
+| Pruebas PostgreSQL básicas de concurrencia y recuperación | 100% código y CI |
+| Outbox independiente / garantía de entrega de telemetría | 0% |
+| Reconciliación integral y pruebas operativas de extremo a extremo | 0% |
+
+**Estimación revisada de Fase comercial 3: 66%.** Esta cifra reconoce las pruebas PostgreSQL ya existentes y aprobadas; no certifica entrega garantizada de Shadow Mode, reconciliación completa ni facturación en producción.
+
+No se activan saldos, créditos, cuotas, pagos ni cobros.
