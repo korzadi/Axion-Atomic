@@ -26,6 +26,17 @@ class SkillRegistryTests(unittest.TestCase):
         self.assertIn("test-driven-development", registry.list_text())
         self.assertIn("Write a failing test first", registry.read_text("test-driven-development"))
 
+    def test_discovers_nested_upstream_bundle_layout(self):
+        skill = self.skills / "agent-skills-pack" / "skills" / "security-and-hardening"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(
+            "---\\nname: security-and-hardening\\ndescription: Security review workflow.\\n---\\n# Security\\n",
+            encoding="utf-8",
+        )
+        registry = SkillRegistry(self.root)
+        self.assertIn("security-and-hardening", registry.list_text())
+        self.assertIn("# Security", registry.read_text("security-and-hardening"))
+
     def test_rejects_invalid_manifest_and_symlinked_skill(self):
         bad = self.skills / "bad"
         bad.mkdir(parents=True)
