@@ -57,3 +57,20 @@ def test_public_indicators_are_loaded_from_backend_not_fake_counters():
     assert 'id="apiState"' in source
     assert 'id="billingState"' in source
     assert 'data-n="100"' not in source
+
+def test_atomic_code_exposes_only_backend_supported_generation_controls():
+    source = FRONTEND.read_text(encoding="utf-8")
+    assert 'id="ws-temperature"' in source
+    assert 'id="ws-max-tokens"' in source
+    for value in ('value="0"', 'value="0.2"', 'value="0.5"', 'value="0.8"', 'value="1.2"'):
+        assert value in source
+    for value in ('value="1024"', 'value="2048"', 'value="4096"', 'value="8192"'):
+        assert value in source
+
+
+def test_atomic_code_sends_user_selected_generation_settings_to_real_api():
+    workspace = (FRONTEND.parent / "workspace.js").read_text(encoding="utf-8")
+    assert 'temperature: Number($("ws-temperature").value)' in workspace
+    assert 'max_tokens: Number.parseInt($("ws-max-tokens").value, 10)' in workspace
+    assert 'temperature: 0.2, max_tokens: 2048' not in workspace
+    assert '"/workspace/chat/completions"' in workspace
