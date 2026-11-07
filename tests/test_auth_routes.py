@@ -38,8 +38,8 @@ class AuthRouteGateTests(unittest.TestCase):
         from api.auth_routes import register
         request = Mock(spec=Request)
         request.client.host = "198.51.100.10"
-        with patch("api.auth_routes.settings.auth_enabled", True), \
-             patch("api.auth_routes._enforce_rate_limit") as limiter, \
+        with patch("api.auth_routes.settings.auth_enabled", True), patch("api.auth_routes._enforce_rate_limit"):
+            response = asyncio.run(oauth_callback(
              patch("api.auth_routes.email_delivery_configured", return_value=True), \
              patch("api.auth_routes.settings.oauth_public_base_url", "https://axion.example"), \
              patch("api.auth_routes.create_user", return_value=None):
