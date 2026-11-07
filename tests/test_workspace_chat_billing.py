@@ -5,7 +5,8 @@ from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 
 from api.schemas import ChatRequest, Message
-from api.workspace_routes import workspace_chat
+from api.workspace_routes import workspace_chat, _build_workspace_chat_system_prompt
+from api.billing_request_identity import request_payload_sha256, stable_request_id
 
 
 class WorkspaceChatBillingIntegrationTests(unittest.IsolatedAsyncioTestCase):
@@ -104,6 +105,36 @@ class WorkspaceChatBillingIntegrationTests(unittest.IsolatedAsyncioTestCase):
             kwargs["budget"].input_tokens_upper_bound + kwargs["budget"].output_tokens_upper_bound,
         )
         self.assertEqual(kwargs["expected_runtime_model"], "atomic-code:1.1")
+        self.assertEqual(
+            kwargs["request_id"],
+            stable_request_id(user_id="user-a", idempotency_key="stable-request-1"),
+        )
+        effective_messages = [
+            {"role": "system", "content": _build_workspace_chat_system_prompt("RAG real")},
+            {"role": "user", "content": "Haz el trabajo"},
+        ]
+        expected_fingerprint = request_payload_sha256(
+            project_id="project-a",
+            model="atomic-code:1.1",
+            messages=effective_messages,
+            temperature=self.request().temperature,
+            max_tokens=64,
+            policy_version=kwargs["budget"].policy_version,
+        )
+        self.assertEqual(kwargs["payload_sha256"], expected_fingerprint)
+        # El fingerprint incluye el RAG real; cambiarlo debe producir otra identidad de payload.
+        changed_context_fingerprint = request_payload_sha256(
+            project_id="project-a",
+            model="atomic-code:1.1",
+            messages=[
+                {"role": "system", "content": _build_workspace_chat_system_prompt("RAG diferente")},
+                {"role": "user", "content": "Haz el trabajo"},
+            ],
+            temperature=self.request().temperature,
+            max_tokens=64,
+            policy_version=kwargs["budget"].policy_version,
+        )
+        self.assertNotEqual(kwargs["payload_sha256"], changed_context_fingerprint)
         # Una ejecución liquidada en el ledger no debe generar además un evento shadow.
         shadow_event.assert_not_called()
 
