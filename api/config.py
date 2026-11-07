@@ -73,13 +73,13 @@ class Settings(BaseSettings):
     auth_enabled: bool = False
     auth_cookie_secure: bool = True
     oauth_public_base_url: str | None = None
-    google_oauth_client_id: str | None = None
-    google_oauth_client_secret: str | None = None
+    google_oauth_client_id: str | None = Field(default=None, validation_alias=AliasChoices("GOOGLE_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_ID"))
+    google_oauth_client_secret: str | None = Field(default=None, validation_alias=AliasChoices("GOOGLE_CLIENT_SECRET", "GOOGLE_OAUTH_CLIENT_SECRET"))
     github_oauth_client_id: str | None = Field(default=None, validation_alias=AliasChoices("AXYRON_GITHUB_CLIENT_ID", "AXION_GITHUB_CLIENT_ID"))
     github_oauth_client_secret: str | None = Field(default=None, validation_alias=AliasChoices("AXYRON_GITHUB_CLIENT_SECRET", "AXION_GITHUB_CLIENT_SECRET"))
     smtp_host: str | None = None
     smtp_port: int = 587
-    smtp_username: str | None = None
+    smtp_username: str | None = Field(default=None, validation_alias=AliasChoices("SMTP_USERNAME", "SMTP_USER"))
     smtp_password: str | None = None
     smtp_starttls: bool = True
     smtp_ssl: bool = False
