@@ -200,5 +200,45 @@ exit 0
             self.assertTrue((root / ".env").is_symlink())
             self.assertFalse(target.exists())
 
+
+    def test_prepare_preserves_existing_regular_env_and_sets_private_mode(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            (scripts / "install_vps.sh").write_text(self.script, encoding="utf-8")
+            (root / "compose.yaml").write_text("services: {}", encoding="utf-8")
+            (root / ".env.example").write_text("API_KEY=placeholder", encoding="utf-8")
+            for name in ("workspace", "knowledge", "backups"):
+                (root / name).mkdir()
+            env_file = root / ".env"
+            env_file.write_text("API_KEY=keep-this-value", encoding="utf-8")
+            env_file.chmod(0o644)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            docker = fake_bin / "docker"
+            docker.write_text(
+                """#!/usr/bin/env sh
+if [ "$1" = compose ] && [ "$2" = version ]; then exit 0; fi
+exit 0
+""",
+                encoding="utf-8",
+            )
+            docker.chmod(0o755)
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+            completed = subprocess.run(
+                ["bash", str(scripts / "install_vps.sh"), "--prepare"],
+                cwd=root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=10,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(env_file.read_text(encoding="utf-8"), "API_KEY=keep-this-value")
+            self.assertEqual(env_file.stat().st_mode & 0o777, 0o600)
+
 if __name__ == "__main__":
     unittest.main()
