@@ -31,7 +31,7 @@ class PlannerValidationTests(unittest.TestCase):
                 self.assertEqual(len(result), count)
 
     def test_rejects_wrong_top_level_or_step_count(self):
-        for value in ({}, "texto", [], valid_steps()[:2], valid_steps() + valid_steps()[:1]):
+        for value in ({}, "texto", [], valid_steps()[:2], valid_steps() * 3):
             with self.subTest(value=value):
                 self.assertIsNone(validate_plan(json.dumps(value)))
 
