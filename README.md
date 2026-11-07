@@ -5,7 +5,7 @@ Plataforma de ingeniería de software supervisada, modular y verificable.
 ## Identidad oficial
 
 - **Producto:** AXYRON ATOMIC
-- **Agente principal:** AXION
+- **Agente principal:** AXYRON
 - **Modelo principal:** ATOMIC CODE 1.1
 - **Interfaz web:** AXYRON STUDIO
 - **Modelo oficial:** https://huggingface.co/Korzadi/Atomic-Code-1.1
