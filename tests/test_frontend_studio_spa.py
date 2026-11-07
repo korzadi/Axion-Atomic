@@ -25,6 +25,7 @@ def test_spa_uses_only_existing_backend_routes_for_available_modules():
         "/workspace/knowledge/upload",
         "/workspace/knowledge/ingest",
         "/workspace/agent/runs",
+        "/workspace/agent/runs/",
         "/workspace/agent/approvals",
         "/workspace/usage",
         "/billing/orders",
@@ -47,6 +48,10 @@ def test_spa_has_no_fake_admin_or_commercial_mutations():
     assert "payment_intent" not in source
     assert 'const canDecide=["owner","admin"]' in source
     assert "Solo propietario o administrador" in source
+    assert "data-resume-run" in source
+    assert "/resume?project_id=" in source
+    assert "Continuar ejecución" in source
+    assert "acciones que ya hayan sido aprobadas" in source
 
 
 def test_admin_portal_is_separate_and_host_routed():
