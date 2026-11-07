@@ -1,7 +1,10 @@
+import os
 import unittest
+from unittest.mock import patch
 
 from api.mfa import (
     AesGcmTotpCipher,
+    EnvironmentMfaKeyProvider,
     MfaError,
     generate_recovery_codes,
     generate_totp_secret,
@@ -26,6 +29,28 @@ class StaticKeyProvider:
 
 class TotpPrimitiveTests(unittest.TestCase):
     SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+
+    def test_environment_key_provider_requires_valid_runtime_secret(self):
+        provider = EnvironmentMfaKeyProvider()
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(MfaError):
+                provider.active_key()
+        with patch.dict(os.environ, {
+            "AXION_MFA_ENCRYPTION_KEY_ID": "runtime-v1",
+            "AXION_MFA_ENCRYPTION_KEY_B64": "not-base64!",
+        }, clear=True):
+            with self.assertRaises(MfaError):
+                provider.active_key()
+        import base64
+        encoded = base64.b64encode(b"r" * 32).decode("ascii")
+        with patch.dict(os.environ, {
+            "AXION_MFA_ENCRYPTION_KEY_ID": "runtime-v1",
+            "AXION_MFA_ENCRYPTION_KEY_B64": encoded,
+        }, clear=True):
+            self.assertEqual(provider.active_key(), ("runtime-v1", b"r" * 32))
+            self.assertEqual(provider.get_key("runtime-v1"), b"r" * 32)
+            with self.assertRaises(MfaError):
+                provider.get_key("old-key")
 
     def test_rfc6238_sha1_vector(self):
         self.assertEqual(totp_at(self.SECRET, 59, digits=8), "94287082")
