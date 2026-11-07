@@ -55,11 +55,29 @@ class AuthRouteGateTests(unittest.TestCase):
         from api.auth_routes import oauth_callback
         with patch("api.auth_routes.settings.auth_enabled", True):
             response = asyncio.run(oauth_callback(
-                "google", code="authorization-code", state="provider-state",
+                "google", Mock(spec=Request), code="authorization-code", state="provider-state",
                 browser_state="different-browser-state",
             ))
         self.assertEqual(response.status_code, 303)
         self.assertIn("oauth_error=cancelled", response.headers["location"])
+
+    def test_oauth_callback_enforces_provider_ip_rate_limit(self):
+        import asyncio
+        from unittest.mock import Mock
+        from fastapi import Request
+        from api.auth_routes import oauth_callback
+        request = Mock(spec=Request)
+        request.client.host = "198.51.100.12"
+        with patch("api.auth_routes.settings.auth_enabled", True), \
+             patch("api.auth_routes._enforce_rate_limit") as limiter:
+            response = asyncio.run(oauth_callback(
+                "github", request, code="authorization-code", state="provider-state",
+                browser_state="different-browser-state",
+            ))
+        self.assertEqual(response.status_code, 303)
+        limiter.assert_called_once()
+        self.assertEqual(limiter.call_args.kwargs["namespace"], "auth:oauth:callback:github")
+        self.assertEqual(limiter.call_args.kwargs["limit"], 20)
 
     def test_login_enforces_ip_and_account_rate_limits(self):
         from unittest.mock import Mock
