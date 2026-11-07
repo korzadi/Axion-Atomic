@@ -216,3 +216,16 @@ Los cambios documentales recientes generaron ejecuciones CI `42402384870` y `424
 4. Probar inferencia real de Atomic Code 1.1 desde el servicio configurado, con límites de contexto/timeout y evaluación reproducible.
 5. Completar verificación de correo, recuperación, MFA/OAuth y pruebas negativas de sesiones antes de habilitar Auth.
 6. Cerrar integración de pagos solo con contrato técnico, firma, idempotencia y conciliación verificables; no habilitar cobros/créditos por inferencia.
+
+
+## Auditoría adicional del agente y CI — 7 de noviembre de 2026
+
+Se endureció `agent/coding_agent.py`: el parser ahora rechaza contenido adicional después de un objeto JSON de respuesta, incluidos objetos concatenados que pudieran ocultar una segunda acción. Se conservó la compatibilidad con el formato de bloque Markdown usado por el modelo y se añadieron pruebas de regresión en `tests/test_coding_agent.py`.
+
+La validación de GitHub Actions para el HEAD `e045d10158163be198128bba2708c598d00da410` terminó satisfactoriamente: **664 pruebas Python aprobadas, 9 omitidas y 4 warnings**; también pasaron E2E de Studio, build/smoke de imagen, migraciones PostgreSQL e integración remota autenticada de Qdrant Cloud ([run 42404444729](https://github.com/korzadi/Axion-Atomic/actions/runs/42404444729)).
+
+### Límites que siguen bloqueando la activación completa
+- El runtime HTTP todavía no inyecta un `DockerBackend`; por tanto, no se habilita terminal ni ejecución de comandos desde Studio.
+- No se ha ejecutado una prueba E2E con el modelo Atomic Code 1.1 real, un usuario autenticado y workspace aislado en un entorno operativo.
+- No se han completado las pruebas de autenticación real, SMTP/OAuth/MFA ni la activación de cobros.
+- No se ha desplegado este HEAD en el VPS. Los resultados CI no equivalen a una certificación de producción.
