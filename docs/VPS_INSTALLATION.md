@@ -26,7 +26,7 @@ Edita localmente `.env` con un editor seguro (por ejemplo `sudoedit .env`) y con
 
     sudo bash scripts/install_vps.sh --check
 
-El preflight valida Compose y variables críticas, y comprueba los puertos 8070/5433. `--check` es de solo lectura y exige que `--prepare` ya se haya ejecutado. Se detiene si encuentra contenedores de proyectos `axion-atomic`/`axyron-atomic`, cualquier contenedor conectado al volumen `axion_atomic_pgdata` o el propio volumen aunque esté actualmente sin contenedor. Es intencional: evita crear una segunda base de datos o reutilizar accidentalmente datos persistentes.
+El preflight valida Compose y variables críticas, y comprueba los puertos 8070/5433. `--check` es de solo lectura y exige que `--prepare` ya se haya ejecutado. Se detiene si encuentra contenedores de proyectos `axion-atomic`/`axyron-atomic`, cualquier contenedor conectado a los volúmenes PostgreSQL `axion_atomic_pgdata` (legado) o `axyron_atomic_pgdata` (actual), o cualquiera de esos volúmenes aunque esté desconectado. Es intencional: evita crear una segunda base de datos o reutilizar accidentalmente datos persistentes.
 
 ## 3. Desplegar con confirmación humana
 
@@ -76,7 +76,7 @@ Antes de intentar `--deploy`, recopila el estado actual sin detener ni modificar
 
     bash scripts/inspect_vps_state.sh
 
-El script muestra únicamente contenedores/redes etiquetados como `axion-atomic` o `axyron-atomic`, el volumen `axion_atomic_pgdata`, referencias a ese volumen, puertos 8070/5433 y metadatos básicos del repositorio. No lee ni imprime `.env`, no inspecciona variables de entorno y no ejecuta operaciones de escritura sobre Docker.
+El script muestra únicamente contenedores/redes etiquetados como `axion-atomic` o `axyron-atomic`, los volúmenes `axion_atomic_pgdata` y `axyron_atomic_pgdata`, sus referencias, puertos 8070/5433 y metadatos básicos del repositorio. No lee ni imprime `.env`, no inspecciona variables de entorno y no ejecuta operaciones de escritura sobre Docker.
 
 Comparte la salida para diseñar una transición que conserve el volumen y los servicios existentes. No ejecutes `--deploy` hasta completar esa reconciliación y autorizar el despliegue.
 
