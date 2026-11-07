@@ -1,22 +1,22 @@
-# AXION ATOMIC
+# AXYRON ATOMIC
 
 Plataforma de ingeniería de software supervisada, modular y verificable.
 
 ## Identidad oficial
 
-- **Producto:** AXION ATOMIC
+- **Producto:** AXYRON ATOMIC
 - **Agente principal:** AXION
 - **Modelo principal:** ATOMIC CODE 1.1
-- **Interfaz web:** AXION STUDIO
+- **Interfaz web:** AXYRON STUDIO
 - **Modelo oficial:** https://huggingface.co/Korzadi/Atomic-Code-1.1
 
-El código de este repositorio es la base técnica que se está adaptando a AXION ATOMIC. Los nombres históricos del proyecto de partida no forman parte de la identidad del producto.
+El código de este repositorio es la base técnica que se está adaptando a AXYRON ATOMIC. Los nombres históricos del proyecto de partida no forman parte de la identidad del producto.
 
 ## Arquitectura objetivo
 
-- AXION Core y Agent Runtime.
+- Axyron Core y Agent Runtime.
 - Model Manager y Model Router, con ATOMIC CODE 1.1 como modelo principal.
-- AXION STUDIO como interfaz web propia.
+- AXYRON STUDIO como interfaz web propia.
 - Analizador de repositorios y herramientas de ingeniería.
 - RAG y memoria aislados por proyecto.
 - Aprobaciones humanas, auditoría e idempotencia.
