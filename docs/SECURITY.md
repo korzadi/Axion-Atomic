@@ -60,3 +60,12 @@ La lectura estática de `api/auth_routes.py` y `api/auth.py` confirma que el log
 Se añadieron `api/mfa.py` y `tests/test_mfa.py` para establecer primitivas aisladas: generación TOTP RFC 6238, validación que devuelve un contador para consumo atómico, cifrado AES-256-GCM ligado al ID de usuario, y generación/hash de códigos de recuperación. La clave se inyecta mediante un proveedor externo; el módulo no genera ni persiste claves.
 
 Estas primitivas **no están conectadas a rutas, sesiones ni PostgreSQL**. El llamador todavía debe persistir el contador y consumir códigos de recuperación en transacciones atómicas, añadir rate limits/auditoría y garantizar que contraseña y OAuth no emitan sesión antes del desafío. La cobertura automatizada de estas primitivas está pendiente del CI del commit correspondiente.
+
+
+### Segunda capa MFA: esquema y persistencia transaccional
+
+Se añadió la migración `021_mfa_security.sql` con almacenamiento de secreto pendiente/activo cifrado (solo ciphertext/nonce/key ID), contador TOTP monotónico, hashes de códigos de recuperación, desafíos temporales almacenados por hash y auditoría append-only. La clave AES no se almacena en PostgreSQL.
+
+También se añadió `api/mfa_store.py`: inicio/confirmación de enrolamiento, emisión de desafío y consumo transaccional de TOTP o código de recuperación. Los desafíos caducan a los cinco minutos y limitan intentos. Los bloqueos `FOR UPDATE` coordinan consumo de contador, código y desafío.
+
+**Integración de autenticación todavía pendiente:** `api/auth.py` y `api/auth_routes.py` aún emiten sesiones directamente después del primer factor. Hasta modificar y probar esos flujos, estas funciones de persistencia no hacen que MFA esté activo en los inicios de sesión. La migración solo se aplica en CI/entornos donde se ejecute expresamente; no se ha tocado ninguna base de datos de producción.
