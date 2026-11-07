@@ -54,3 +54,10 @@ No comenzar hasta que la fase 1 esté cerrada y aceptada.
 - No almacenar secretos en Git ni en logs.
 - Qdrant es exclusivamente Cloud; nunca desplegar una instancia local para este proyecto.
 - No habilitar ejecución de comandos ni autonomía de agentes sin sandbox aislado y aprobación verificable.
+
+
+## Revisión adicional de MFA (7 de noviembre de 2026)
+
+La lectura estática de `api/auth.py` y `api/auth_routes.py` detectó que tanto el login por contraseña como el callback OAuth crean una sesión inmediatamente tras validar el primer factor/identidad. No hay desafío MFA ni enrolamiento TOTP implementado. El diseño MFA documentado debe cubrir ambos caminos antes de habilitar autenticación pública. No se cambió el código de autenticación ni se ejecutaron pruebas dinámicas en esta revisión.
+
+**Estado:** brecha de MFA confirmada en código; implementación pendiente. Mantener `AUTH_ENABLED=false`. El cierre de Fase 1 requiere implementar MFA completo, añadir pruebas de regresión para contraseña y OAuth y validar el flujo en staging.
