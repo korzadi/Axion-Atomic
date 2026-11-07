@@ -69,3 +69,6 @@ def test_admin_portal_preserves_logout_for_authenticated_non_admin():
     assert 'api("/auth/me").then(()=>loadAccess()).catch(()=>showLogin())' in admin_js
     assert 'id="logout"' in admin_html
     assert 'api("/auth/logout"' in admin_js
+    assert '$("login-form").classList.add("hidden")' in admin_js
+    assert '$("password").value=""' in admin_js
+    assert '$("mfa-code").focus()' in admin_js
