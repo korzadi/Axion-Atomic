@@ -29,6 +29,7 @@ def test_spa_uses_only_existing_backend_routes_for_available_modules():
         "/workspace/agent/approvals",
         "/workspace/usage",
         "/billing/orders",
+        "/billing/credits",
         "/auth/mfa/status",
         "/auth/mfa/enroll",
         "/auth/mfa/confirm",
@@ -39,6 +40,17 @@ def test_spa_uses_only_existing_backend_routes_for_available_modules():
     assert "/admin/access/me" not in source
     for section in ("privacidad", "integraciones", "herramientas"):
         assert '"' + section + '"' in source
+
+
+def test_billing_view_displays_only_real_credit_balance_and_ledger():
+    source = (FRONTEND / "studio.js").read_text(encoding="utf-8")
+    assert 'api("/billing/credits")' in source
+    assert 'credits.totals.available' in source
+    assert 'credits.totals.reserved' in source
+    assert 'credits.totals.consumed' in source
+    assert 'credits.recent_ledger' in source
+    assert "No hay cuotas ni lotes de créditos asignados" in source
+    assert "proceden de PostgreSQL" in source
 
 
 def test_studio_dashboard_uses_full_readiness_not_liveness_only():

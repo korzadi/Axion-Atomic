@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 from api.payment_routes import get_my_credit_balance
 
 
-class BillingCreditBalanceTests(unittest.TestCase):
-    def test_balance_uses_real_quota_lot_and_ledger_rows(self):
+class BillingCreditBalanceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_balance_uses_real_quota_lot_and_ledger_rows(self):
         quota = [
             {
                 "quota_kind": "daily_free",
@@ -53,7 +53,7 @@ class BillingCreditBalanceTests(unittest.TestCase):
             patch("api.payment_routes.engine", engine),
             patch("api.payment_routes._limit_reads"),
         ):
-            response = get_my_credit_balance({"id": "user-a"})
+            response = await get_my_credit_balance({"id": "user-a"})
 
         self.assertTrue(response["provisioned"])
         self.assertEqual(response["totals"], {
@@ -65,7 +65,7 @@ class BillingCreditBalanceTests(unittest.TestCase):
         self.assertEqual(response["purchased_lots"]["count"], 2)
         self.assertEqual(response["recent_ledger"], ledger)
 
-    def test_unprovisioned_user_is_not_given_synthetic_credits(self):
+    async def test_unprovisioned_user_is_not_given_synthetic_credits(self):
         empty_lots = {
             "lot_count": 0,
             "granted_credits": 0,
@@ -95,7 +95,7 @@ class BillingCreditBalanceTests(unittest.TestCase):
             patch("api.payment_routes.engine", engine),
             patch("api.payment_routes._limit_reads"),
         ):
-            response = get_my_credit_balance({"id": "user-new"})
+            response = await get_my_credit_balance({"id": "user-new"})
 
         self.assertFalse(response["provisioned"])
         self.assertEqual(response["totals"], {"available": 0, "reserved": 0, "consumed": 0})
