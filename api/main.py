@@ -24,6 +24,7 @@ from api.catalog_routes import router as catalog_router
 from api.usage_routes import router as usage_router
 from api.capacity import CapacityExceeded
 from api.rcache import close_cache, ping_cache
+from api.readiness import auth_readiness
 
 app = FastAPI(title="Axyron Atomic API", version="0.2.0")
 
@@ -61,6 +62,14 @@ app.include_router(payment_router)
 app.include_router(admin_router)
 app.include_router(catalog_router)
 app.include_router(usage_router)
+
+
+@app.get("/health/readiness")
+async def health_readiness():
+    """Readiness de configuración para el lanzamiento; no expone secretos."""
+    report = auth_readiness()
+    status_code = 200 if report["status"] == "ready" else 503
+    return JSONResponse(status_code=status_code, content=report)
 
 
 @app.get("/health/live")
