@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-AXYRON adopta el estándar abierto Agent Skills para reutilizar workflows especializados con formato \`SKILL.md\`. Esto permite compartir skills entre AXYRON y herramientas compatibles como Google Antigravity, sin convertir Antigravity en una dependencia del runtime ni ejecutar código de terceros.
+AXYRON adopta el estándar abierto Agent Skills para reutilizar workflows especializados con formato `SKILL.md`. Esto permite compartir skills entre AXYRON y herramientas compatibles como Google Antigravity, sin convertir Antigravity en una dependencia del runtime ni ejecutar código de terceros.
 
 Referencias oficiales:
 - Google Antigravity — Agent Skills: https://antigravity.google/docs/skills
@@ -21,38 +21,39 @@ Licencia upstream: MIT. AXYRON debe conservar el aviso de copyright y la licenci
 
 Para descargar el pack completo y conservar también sus referencias compartidas, desde la raíz del proyecto donde AXYRON trabaja:
 
-\`\`\`bash
-mkdir -p .agents/skills
-git clone --depth 1 https://github.com/addyosmani/agent-skills.git .agents/skills/agent-skills-pack
-\`\`\`
+```bash
+bash scripts/install_agent_skills.sh
+```
 
-El runtime AXYRON descubre tanto skills individuales en \`.agents/skills/<skill>/SKILL.md\` como bundles completos en \`.agents/skills/<pack>/skills/<skill>/SKILL.md\`. La carpeta \`.agents/skills\` es también la ubicación de workspace documentada por Antigravity.
+El instalador fija el upstream en el commit `301b02b12bff98e4688e6984af6556802322bbde`, verifica que existan las 25 skills y conserva el archivo `LICENSE`. Se detiene si el destino ya existe; nunca sobrescribe una instalación anterior.
+
+El runtime AXYRON descubre tanto skills individuales en `.agents/skills/<skill>/SKILL.md` como bundles completos en `.agents/skills/<pack>/skills/<skill>/SKILL.md`. La carpeta `.agents/skills` es también la ubicación de workspace documentada por Antigravity.
 
 Para Antigravity CLI/App, la instalación nativa opcional del plugin upstream es:
 
-\`\`\`bash
+```bash
 agy plugin install https://github.com/addyosmani/agent-skills.git
 agy plugin list
-\`\`\`
+```
 
 No ejecutar estos comandos automáticamente desde el backend de AXYRON. La instalación es una decisión del operador del workspace.
 
 Alternativa mediante el CLI comunitario de skills: revisar primero la lista y luego instalar con copia local, no enlaces simbólicos, para que el runtime de AXYRON pueda validar los archivos:
 
-\`\`\`bash
+```bash
 npx skills add addyosmani/agent-skills --list
 npx skills add addyosmani/agent-skills --skill '*' -a antigravity --copy
-\`\`\`
+```
 
-El pack upstream evoluciona; para producción, fijar un tag o commit revisado en vez de seguir \`main\` automáticamente. Revisar los cambios antes de actualizar.
+El pack upstream evoluciona; para producción, fijar un tag o commit revisado en vez de seguir `main` automáticamente. Revisar los cambios antes de actualizar.
 
 ## Integración en el runtime de AXYRON
 
 Implementado en esta rama:
-- Descubrimiento de \`.agents/skills\` y compatibilidad histórica con \`.agent/skills\`.
-- Soporte de skills sueltas y bundles con subdirectorio \`skills/\`.
-- Lectura de metadatos \`name\` y \`description\` del frontmatter YAML.
-- Herramientas de solo lectura \`list_skills\` y \`read_skill\` para que AXYRON seleccione y cargue una skill bajo demanda.
+- Descubrimiento de `.agents/skills` y compatibilidad histórica con `.agent/skills`.
+- Soporte de skills sueltas y bundles con subdirectorio `skills/`.
+- Lectura de metadatos `name` y `description` del frontmatter YAML.
+- Herramientas de solo lectura `list_skills` y `read_skill` para que AXYRON seleccione y cargue una skill bajo demanda.
 - Límites de 100 skills, 64 KB por manifiesto y 20.000 caracteres por skill cargada.
 - Rechazo de symlinks, nombres inválidos, manifiestos mal formados y contenido que excede límites.
 - No se ejecutan scripts, comandos, hooks ni binarios incluidos en una skill.
