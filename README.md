@@ -72,7 +72,7 @@ Este repositorio está en desarrollo por fases. La presencia de una carpeta, doc
 
 ## AXYRON STUDIO — primera versión SPA
 
-La interfaz web autenticada se organiza como una SPA ligera servida por FastAPI desde `frontend/`, sin framework ni proceso de compilación adicional. La página principal seleccionada se conserva y carga `studio.css` y `studio.js` como recursos estáticos propios.
+AXYRON STUDIO se distribuye como un servicio independiente: `Dockerfile.frontend` construye la imagen Nginx sin privilegios `axyron-atomic-frontend`, mientras `Dockerfile` construye exclusivamente la API Python `axyron-atomic-api`. El frontend sirve los archivos de `frontend/` y reenvía las rutas dinámicas al servicio interno `api:8000`; el puerto local `127.0.0.1:8070` es la entrada web unificada. La página principal seleccionada se conserva y carga `studio.css` y `studio.js`.
 
 ### Secciones de la primera versión
 
