@@ -67,7 +67,7 @@ summary{cursor:pointer;font-weight:600}details p{color:var(--mu);margin:10px 0 0
 footer{border-top:1px solid var(--bd);padding:40px 0 24px;color:var(--mu);font-size:.9rem}
 .fg{display:flex;flex-wrap:wrap;gap:30px;justify-content:space-between}.fg div a{display:block;padding:3px 0}.fg a:hover{color:var(--ac)}
 .copy{margin-top:26px;text-align:center}
-.rv{opacity:0;transform:translateY(30px);transition:opacity .8s,transform .8s}.rv.in{opacity:1;transform:none}
+html.reveal-enabled .rv{opacity:0;transform:translateY(30px);transition:opacity .8s,transform .8s}html.reveal-enabled .rv.in{opacity:1;transform:none}
 dialog{border:1px solid var(--bd);border-radius:22px;background:var(--bg2);color:var(--tx);padding:30px;width:min(420px,92vw)}
 dialog::backdrop{background:rgba(3,6,20,.7);backdrop-filter:blur(4px)}
 dialog h3{margin:0 0 4px;font-size:1.5rem}dialog p{margin:0 0 18px;color:var(--mu)}
@@ -330,8 +330,7 @@ var newsletterForm=document.getElementById('nlf');if(newsletterForm)newsletterFo
  function setU(u){cur=u;document.querySelectorAll('.acts [data-open],.mauth').forEach(function(x){x.style.display=u?'none':''});var el=document.getElementById('usr');el.hidden=!u;var workspaceNav=document.getElementById('workspace-nav');if(workspaceNav)workspaceNav.hidden=!u;if(u){var n=u.display_name||u.email||'Usuario';document.getElementById('av').textContent=n.charAt(0).toUpperCase();document.getElementById('un').textContent=n}window.dispatchEvent(new CustomEvent('axyron:user',{detail:{user:u}}))}
  var cur=null;loadUser();loadPublicData();
 /* reveal + counters */
-var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){x.target.classList.add('in');io.unobserve(x.target)}})},{threshold:.12});
-document.querySelectorAll('.rv').forEach(function(x){io.observe(x)});
+if('IntersectionObserver' in window){var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){x.target.classList.add('in');io.unobserve(x.target)}})},{threshold:.12});document.documentElement.classList.add('reveal-enabled');document.querySelectorAll('.rv').forEach(function(x){io.observe(x)});}else{document.querySelectorAll('.rv').forEach(function(x){x.classList.add('in')});}
 /* Sin contadores inventados: los indicadores se cargan desde la API. */
 /* particles */
 var c=document.getElementById('fx'),x=c.getContext('2d'),P=[],W,H;
