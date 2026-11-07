@@ -18,12 +18,12 @@ Este documento separa lo implementado en el repositorio de lo que todavía requi
 - [x] Migraciones PostgreSQL y pruebas de navegador.
 
 ### Evidencia CI más reciente
-- Run [42321266031](https://github.com/korzadi/Axion-Atomic/actions/runs/42321266031), commit `e3bd9dab`: los cuatro jobs terminaron correctamente.
-- Python: 611 aprobadas, 8 omitidas, 3 advertencias.
+- Run [42321524733](https://github.com/korzadi/Axion-Atomic/actions/runs/42321524733), commit `176dbf01`: los cuatro jobs terminaron correctamente.
+- Python: 613 aprobadas, 8 omitidas, 3 advertencias.
 - PostgreSQL migrations: correcto.
 - Qdrant Cloud integration: correcto.
 - AXION STUDIO browser E2E: correcto.
-- Esta ejecución incluye la corrección de fixtures de autenticación y las pruebas del rate limit del callback OAuth.
+- Esta ejecución incluye pruebas para confirmar que el acceso administrativo falla de forma cerrada con autenticación deshabilitada y que roles desconocidos no reciben permisos.
 
 ### Pendiente para cerrar la fase 1
 - [ ] Configurar SMTP real en un entorno de staging y probar entrega, enlaces, caducidad y reenvío.
