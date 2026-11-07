@@ -7,6 +7,8 @@ reserva y ejecución para impedir mover ciphertext entre registros.
 from __future__ import annotations
 
 import os
+import base64
+import json
 import uuid
 from dataclasses import dataclass
 from typing import Protocol
@@ -17,6 +19,45 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 class ResultEncryptionError(RuntimeError):
     """Error seguro de cifrado, clave o autenticación."""
+
+
+class EnvironmentResultKeyProvider:
+    """Proveedor separado para resultados de facturación; nunca genera ni registra claves.
+
+    Requiere AXYRON_BILLING_RESULT_KEY_ID y AXYRON_BILLING_RESULT_KEY_B64.
+    Las claves antiguas opcionales se inyectan en AXYRON_BILLING_RESULT_KEYRING_B64
+    como JSON {key_id: base64_32_bytes}; no se reutiliza la clave MFA.
+    """
+
+    def active_key(self) -> tuple[str, bytes]:
+        key_id = (os.environ.get("AXYRON_BILLING_RESULT_KEY_ID") or "").strip()
+        encoded = (os.environ.get("AXYRON_BILLING_RESULT_KEY_B64") or "").strip()
+        if not key_id or not encoded:
+            raise ResultEncryptionError("Clave de cifrado de resultados de facturación no configurada")
+        try:
+            key = base64.b64decode(encoded, validate=True)
+        except (ValueError, base64.binascii.Error) as exc:
+            raise ResultEncryptionError("Clave de resultados de facturación no válida") from exc
+        _validate_key(key_id, key)
+        return key_id, key
+
+    def get_key(self, key_id: str) -> bytes:
+        active_id, active_key = self.active_key()
+        if key_id == active_id:
+            return active_key
+        encoded_ring = (os.environ.get("AXYRON_BILLING_RESULT_KEYRING_B64") or "").strip()
+        if not encoded_ring:
+            raise ResultEncryptionError("Clave histórica de resultados no disponible")
+        try:
+            ring = json.loads(encoded_ring)
+            encoded = ring.get(key_id) if isinstance(ring, dict) else None
+            if not isinstance(encoded, str):
+                raise ValueError("missing key")
+            key = base64.b64decode(encoded, validate=True)
+        except (TypeError, ValueError, base64.binascii.Error) as exc:
+            raise ResultEncryptionError("Clave histórica de resultados no válida") from exc
+        _validate_key(key_id, key)
+        return key
 
 
 class ResultKeyProvider(Protocol):
