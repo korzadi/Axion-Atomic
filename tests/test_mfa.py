@@ -84,6 +84,7 @@ class TotpPrimitiveTests(unittest.TestCase):
         codes = generate_recovery_codes()
         self.assertEqual(len(codes), 10)
         self.assertEqual(len(set(codes)), 10)
+        self.assertTrue(all(len(code) == 32 for code in codes))
         self.assertNotEqual(hash_recovery_code(codes[0]), codes[0])
         self.assertEqual(hash_recovery_code(codes[0]), hash_recovery_code(codes[0].lower()))
 
