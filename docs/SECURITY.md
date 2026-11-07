@@ -25,6 +25,7 @@ AXION ATOMIC dispone de controles implementados en el repositorio, pero **no est
 - Completar revisión del rol administrativo global y MFA para operaciones sensibles.
 
 ### Diseño obligatorio antes de implementar MFA
+
 - No almacenar secretos TOTP en texto plano. Cifrarlos en reposo con una clave de aplicación independiente de la base de datos, suministrada por el entorno de ejecución y rotatable.
 - Separar el secreto de enrolamiento pendiente del secreto MFA activo; no activar MFA hasta confirmar un código TOTP válido.
 - Guardar el último contador TOTP aceptado y rechazar códigos repetidos para impedir replay.
@@ -48,11 +49,14 @@ AXION ATOMIC dispone de controles implementados en el repositorio, pero **no est
 - Tratar salidas del modelo y contenido recuperado por RAG como datos no confiables.
 - Los cambios de despliegue, VPS, Docker y datos de producción requieren autorización explícita.
 
+## Hallazgo: MFA aún no protege los inicios de sesión
 
-## Hallazgo adicional: MFA aún no protege los inicios de sesión OAuth
+La lectura estática de `api/auth_routes.py` y `api/auth.py` confirma que el login con contraseña y el callback OAuth crean una sesión inmediatamente después de validar el primer factor/identidad. No existe todavía un desafío MFA intermedio ni almacenamiento/enrolamiento TOTP en esos flujos.
 
-La revisión estática de `api/auth_routes.py` y `api/auth.py` confirma que el login con contraseña llama a `authenticate()`, que emite una sesión inmediatamente después de validar la contraseña. El callback OAuth también llama a `_create_oauth_session()` inmediatamente después de resolver la identidad del proveedor. No existe un desafío MFA intermedio ni almacenamiento/enrolamiento TOTP en estos flujos.
+**MFA no está implementado de extremo a extremo.** Mantener `AUTH_ENABLED=false` hasta cubrir ambos caminos y validar staging.
 
-Por tanto, **MFA no está implementado** y no debe describirse como parcialmente activo. Cuando se implemente, deberá cubrir de forma uniforme contraseña y OAuth: si la cuenta requiere MFA, ambos flujos deben emitir únicamente un desafío temporal y no una cookie de sesión hasta completar el segundo factor. También deben cubrirse recuperación, revocación de desafíos, límites de intentos y concurrencia.
+### Avance técnico inicial de MFA
 
-Esta conclusión procede de lectura estática del código en la rama `main`; no se ejecutó una prueba dinámica ni se modificó el comportamiento de autenticación. Mantener `AUTH_ENABLED=false` hasta completar la implementación y la validación de staging.
+Se añadieron `api/mfa.py` y `tests/test_mfa.py` para establecer primitivas aisladas: generación TOTP RFC 6238, validación que devuelve un contador para consumo atómico, cifrado AES-256-GCM ligado al ID de usuario, y generación/hash de códigos de recuperación. La clave se inyecta mediante un proveedor externo; el módulo no genera ni persiste claves.
+
+Estas primitivas **no están conectadas a rutas, sesiones ni PostgreSQL**. El llamador todavía debe persistir el contador y consumir códigos de recuperación en transacciones atómicas, añadir rate limits/auditoría y garantizar que contraseña y OAuth no emitan sesión antes del desafío. La cobertura automatizada de estas primitivas está pendiente del CI del commit correspondiente.
