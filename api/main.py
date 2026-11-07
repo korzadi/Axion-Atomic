@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, FileResponse
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.exc import TimeoutError as SQLAlchemyPoolTimeout
@@ -163,9 +163,15 @@ async def approve(approval_id: int, req: ApprovalRequest, project_id: str = Quer
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 LANDING_PAGE = FRONTEND_DIR / "Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html"
+ADMIN_PAGE = FRONTEND_DIR / "admin.html"
 
 @app.get("/", include_in_schema=False)
-async def landing_page():
+async def landing_page(request: Request):
+    host = (request.headers.get("host") or "").split(":", 1)[0].lower().rstrip(".")
+    if host == "admin.axyronatomic.com":
+        if not ADMIN_PAGE.is_file():
+            raise HTTPException(status_code=503, detail="El portal administrativo no está disponible.")
+        return FileResponse(ADMIN_PAGE, media_type="text/html")
     if not LANDING_PAGE.is_file():
         raise HTTPException(status_code=503, detail="La página principal no está disponible.")
     return FileResponse(LANDING_PAGE, media_type="text/html")
