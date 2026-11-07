@@ -7,13 +7,21 @@ from api import main
 
 
 class FakeResponse:
-    def __init__(self, ok=True):
+    def __init__(self, ok=True, payload=None):
         self.is_success = ok
+        self._payload = payload or {}
+
+    def json(self):
+        return self._payload
 
 
 class FakeHttpClient:
-    def __init__(self, timeout=3.0, qdrant_ok=True, ollama_ok=True):
+    def __init__(self, timeout=3.0, qdrant_ok=True, ollama_ok=True, models=None):
         self.qdrant_ok, self.ollama_ok = qdrant_ok, ollama_ok
+        self.models = models if models is not None else [
+            {"name": "atomic-code:1.1"},
+            {"name": "nomic-embed-text:latest"},
+        ]
 
     async def __aenter__(self):
         return self
@@ -23,7 +31,7 @@ class FakeHttpClient:
 
     async def get(self, url, headers=None):
         if "/api/tags" in url:
-            return FakeResponse(self.ollama_ok)
+            return FakeResponse(self.ollama_ok, {"models": self.models})
         return FakeResponse(self.qdrant_ok)
 
 
@@ -44,15 +52,31 @@ class FakeEngine:
 
 
 class ApiHealthTests(unittest.IsolatedAsyncioTestCase):
-    async def test_health_reports_all_real_dependencies(self):
+    async def test_health_reports_all_real_dependencies_and_configured_models(self):
         with patch.object(main, "engine", FakeEngine()), patch.object(
             main.httpx, "AsyncClient", FakeHttpClient
-        ), patch.object(main.settings, "redis_cache_enabled", False):
+        ), patch.object(main.settings, "redis_cache_enabled", False), patch.object(
+            main.settings, "chat_model", "atomic-code:1.1"
+        ), patch.object(main.settings, "embed_model", "nomic-embed-text"):
             result = await main.health()
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["checks"], {
-            "database": "ok", "ollama": "ok", "qdrant": "ok"
+            "database": "ok", "ollama": "ok", "chat_model": "ok",
+            "embedding_model": "ok", "qdrant": "ok"
         })
+
+    async def test_health_fails_readiness_when_chat_model_is_missing(self):
+        with patch.object(main, "engine", FakeEngine()), patch.object(
+            main.httpx, "AsyncClient",
+            lambda timeout=3.0: FakeHttpClient(timeout, models=[{"name": "nomic-embed-text:latest"}])
+        ), patch.object(main.settings, "redis_cache_enabled", False), patch.object(
+            main.settings, "chat_model", "atomic-code:1.1"
+        ), patch.object(main.settings, "embed_model", "nomic-embed-text"):
+            with self.assertRaises(HTTPException) as raised:
+                await main.health()
+        self.assertEqual(raised.exception.status_code, 503)
+        self.assertEqual(raised.exception.detail["checks"]["ollama"], "ok")
+        self.assertEqual(raised.exception.detail["checks"]["chat_model"], "unavailable")
 
     async def test_health_returns_503_when_dependency_is_down(self):
         with patch.object(main, "engine", FakeEngine()), patch.object(
