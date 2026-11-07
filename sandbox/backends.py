@@ -40,7 +40,7 @@ NODE_EXES = {"node", "npm", "npx", "yarn", "pnpm", "deno", "bun", "tsc"}
 def docker_argv(image: str, argv: list[str], snapshot: str, limits: ResourceLimits, network: str, name: str,
                 uid: int, gid: int, docker_bin: str = "docker") -> list[str]:
     """Construye docker run sin privilegios, con rootfs de solo lectura y red none por defecto."""
-    if not SAFE_PATH.match(snapshot) or not IMAGE_RE.match(image) or not re.match(r"^[a-zA-Z0-9_.-]+$", name) \
+    if not SAFE_PATH.match(snapshot) or not IMAGE_RE.match(image) or not IMAGE_DIGEST_RE.fullmatch(image) or not re.match(r"^[a-zA-Z0-9_.-]+$", name) \
             or not re.match(r"^[a-zA-Z0-9_.-]+$", network):
         raise ValueError("Parámetro de contenedor inválido")
     if uid == 0:
