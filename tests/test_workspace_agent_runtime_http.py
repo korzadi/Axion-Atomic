@@ -23,7 +23,7 @@ class WorkspaceAgentRuntimeHttpTests(unittest.IsolatedAsyncioTestCase):
     async def test_start_calls_persistent_runtime_and_returns_safe_action_summary(self):
         run = self._run("awaiting_approval")
         runtime = SimpleNamespace(start=AsyncMock(return_value=run))
-        with patch("api.workspace_routes._enforce_workspace_limit"), patch("api.workspace_routes._agent_runtime", return_value=runtime):
+        with patch("api.workspace_routes._project_role"), patch("api.workspace_routes._enforce_workspace_limit"), patch("api.workspace_routes._agent_runtime", return_value=runtime):
             result = await workspace_agent_start(
                 TaskRequest(project_id="project-a", goal="Revisar proyecto"),
                 user={"id": "user-a"},
@@ -74,6 +74,39 @@ class WorkspaceAgentRuntimeHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.status_code, 503)
         self.assertNotIn("private path", raised.exception.detail)
 
+
+    async def test_start_rejects_non_member_before_consuming_rate_limit(self):
+        runtime = SimpleNamespace(start=AsyncMock())
+        with patch(
+            "api.workspace_routes._project_role",
+            side_effect=HTTPException(status_code=403, detail="forbidden"),
+        ), patch("api.workspace_routes._enforce_workspace_limit") as limit, patch(
+            "api.workspace_routes._agent_runtime", return_value=runtime
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_agent_start(
+                    TaskRequest(project_id="foreign-project", goal="Revisar proyecto"),
+                    user={"id": "outsider"},
+                )
+        self.assertEqual(raised.exception.status_code, 403)
+        limit.assert_not_called()
+        runtime.start.assert_not_awaited()
+
+    async def test_resume_rejects_non_member_before_consuming_rate_limit(self):
+        runtime = SimpleNamespace(resume=AsyncMock())
+        with patch(
+            "api.workspace_routes._project_role",
+            side_effect=HTTPException(status_code=403, detail="forbidden"),
+        ), patch("api.workspace_routes._enforce_workspace_limit") as limit, patch(
+            "api.workspace_routes._agent_runtime", return_value=runtime
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_agent_resume(
+                    "foreign-run", project_id="foreign-project", user={"id": "outsider"}
+                )
+        self.assertEqual(raised.exception.status_code, 403)
+        limit.assert_not_called()
+        runtime.resume.assert_not_awaited()
 
     async def test_start_and_resume_routes_require_csrf_dependency(self):
         import inspect
