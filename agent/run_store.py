@@ -1,4 +1,4 @@
-"""Persistencia de ejecuciones y acciones idempotentes del agente AXION."""
+"""Persistencia de ejecuciones y acciones idempotentes del agente AXYRON."""
 import json
 import uuid
 from datetime import datetime, timezone
