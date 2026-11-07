@@ -36,6 +36,8 @@ def test_spa_uses_only_existing_backend_routes_for_available_modules():
     assert "Próxima actualización" in source
     assert "checkout_enabled" in source
     assert "Mutaciones deshabilitadas" in source
+    for section in ("privacidad", "integraciones", "herramientas"):
+        assert '"' + section + '"' in source
 
 
 def test_spa_has_no_fake_admin_or_commercial_mutations():
