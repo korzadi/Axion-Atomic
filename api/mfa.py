@@ -171,11 +171,11 @@ def generate_recovery_codes(count: int = 10) -> list[str]:
     """Genera códigos de recuperación de alta entropía; mostrarlos una sola vez."""
     if count < 1 or count > 20:
         raise ValueError("Cantidad de códigos de recuperación no válida")
-    return [secrets.token_hex(8).upper() for _ in range(count)]
+    return [secrets.token_hex(16).upper() for _ in range(count)]
 
 
 def hash_recovery_code(code: str) -> str:
-    """Hash SHA-256 de código aleatorio de 64 bits; nunca guardar el código original."""
-    if not isinstance(code, str) or not re.fullmatch(r"[A-Fa-f0-9]{16}", code):
+    """Hash SHA-256 de código aleatorio de 128 bits; nunca guardar el código original."""
+    if not isinstance(code, str) or not re.fullmatch(r"[A-Fa-f0-9]{32}", code):
         raise ValueError("Código de recuperación no válido")
     return hashlib.sha256(code.upper().encode("ascii")).hexdigest()
