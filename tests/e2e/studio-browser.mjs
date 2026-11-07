@@ -3,8 +3,15 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { chromium } from "playwright";
 
-const html = await readFile(new URL("../../frontend/Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html", import.meta.url));
+const frontend = new URL("../../frontend/", import.meta.url);
+const html = await readFile(new URL("Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html", frontend));
+const workspaceJs = await readFile(new URL("workspace.js", frontend));
 const server = createServer((request, response) => {
+  if (request.url === "/workspace.js") {
+    response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+    response.end(workspaceJs);
+    return;
+  }
   response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
   response.end(html);
 });
@@ -14,6 +21,9 @@ const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage();
   await page.goto(baseUrl);
+  await page.waitForLoadState("networkidle");
+  assert.equal(await page.locator("#workspace-app").isHidden(), true);
+  assert.equal(await page.locator("#ws-chat-form").count(), 1);
   await page.getByRole("heading", { name: /Tu asistente de IA/ }).waitFor();
   await page.locator('[data-open="reg"]').first().click();
   await page.locator("#e").waitFor();
@@ -22,6 +32,8 @@ try {
   assert.equal(await page.locator("#mfaRow").isVisible(), false);
   const hasFakeSession = await page.evaluate(() => localStorage.getItem("axyron-user"));
   assert.equal(hasFakeSession, null);
+  assert.equal(await page.locator("#workspace-app").isHidden(), true);
+  assert.equal(await page.locator("#workspace-app").textContent().then(text => text.includes("Atomic Code")), true);
   await page.locator("#cl").click();
   await page.locator('[data-open="login"]').first().click();
   await page.locator("#e").waitFor();
