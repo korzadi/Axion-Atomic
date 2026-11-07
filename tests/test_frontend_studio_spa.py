@@ -30,7 +30,6 @@ def test_spa_uses_only_existing_backend_routes_for_available_modules():
         "/auth/mfa/status",
         "/auth/mfa/enroll",
         "/auth/mfa/confirm",
-        "/admin/access/me",
     ):
         assert endpoint in source
     assert "Próxima actualización" in source
@@ -45,3 +44,15 @@ def test_spa_has_no_fake_admin_or_commercial_mutations():
     assert "/admin/users" not in source
     assert "/billing/checkout" not in source
     assert "payment_intent" not in source
+
+
+def test_admin_portal_is_separate_and_host_routed():
+    main = (ROOT / "api" / "main.py").read_text(encoding="utf-8")
+    portal = (FRONTEND / "admin.html").read_text(encoding="utf-8")
+    admin_js = (FRONTEND / "admin.js").read_text(encoding="utf-8")
+    studio = (FRONTEND / "studio.js").read_text(encoding="utf-8")
+    assert 'host == "admin.axyronatomic.com"' in main
+    assert "ADMIN_PAGE" in main
+    assert 'src="/admin.js"' in portal
+    assert '/admin/access/me' in admin_js
+    assert '["admin"' not in studio
