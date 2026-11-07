@@ -1,4 +1,4 @@
-# Estado de AXION STUDIO — frontend web
+# Estado de AXYRON STUDIO — frontend web
 
 **Rama:** `main`  
 **Estado:** interfaz web integrada con FastAPI y conectada a varios endpoints reales autenticados. Esta situación no equivale a un SaaS listo para producción ni a un despliegue validado.
@@ -39,7 +39,7 @@
 - Conocimiento: interfaz conectada para indexar texto y cargar PDF/DOCX/TXT/Markdown (máximo 5 MB y 100000 caracteres extraídos), listar fuentes por proyecto, reindexar fuentes administrables y eliminarlas. La carga usa CSRF, valida rol y limita solicitudes; la recuperación RAG del chat queda filtrada por proyecto. No hay OCR: los PDF escaneados sin texto extraíble se rechazan. Hay pruebas de navegador para los flujos de interfaz (login, carga, refresco y permisos), pero sus endpoints se simulan en el navegador. También hay una prueba de integración que ejecuta la ruta de carga, la extracción TXT real y el ciclo de indexación/listado/recuperación sobre un doble de prueba del protocolo Qdrant; embeddings se sustituyen por un vector determinista. Las pruebas no arrancan un servidor ni almacenan datos localmente. La configuración de ejecución usa Qdrant Cloud mediante URL HTTPS y API key; la conexión real debe verificarse con credenciales del clúster del operador.
 - Atomic Code como módulo independiente: el modelo se utiliza desde Chat IA; faltan controles y experiencia especializada de programación dentro del workspace.
 - Administración: la API disponible es de solo lectura; faltan operaciones administrativas seguras, auditadas y probadas.
-- Agente ejecutor: faltan inicio/reanudación persistente, recuperación de tareas interrumpidas, eventos y aprobación ligada al hash de la acción.
+- Agente ejecutor: inicio y reanudación HTTP persistentes están implementados; la recuperación de acciones interrumpidas requiere reconciliación humana y no se repite automáticamente. El sandbox Docker y la ejecución de comandos siguen pendientes.
 
 ## Límites de producción
 
