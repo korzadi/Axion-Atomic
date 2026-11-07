@@ -90,6 +90,8 @@ preflight(){
   [[ -d "$ROOT/workspace" ]] || die "No existe workspace/; ejecuta --prepare."
   WORKSPACE_META="$(stat -c %u:%a "$ROOT/workspace")"
   [[ "$WORKSPACE_META" == "10001:700" ]] || die "workspace/ debe pertenecer a UID 10001 y tener permisos 700. No se cambia automáticamente para proteger datos existentes."
+  KNOWLEDGE_META="$(stat -c %u:%a "$ROOT/knowledge")"
+  [[ "$KNOWLEDGE_META" == "10001:500" ]] || die "knowledge/ debe pertenecer a UID 10001 y tener permisos 500 para que la API pueda leerlo sin escribir. No se cambia automáticamente."
   port_busy 8070 && die "Puerto 8070 ocupado; no se detendrá el servicio existente."
   port_busy 5433 && die "Puerto 5433 ocupado; no se detendrá PostgreSQL existente."
   OLD="$(docker ps -aq --filter label=com.docker.compose.project=axion-atomic || true)"

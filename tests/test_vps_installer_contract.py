@@ -21,6 +21,11 @@ class VpsInstallerContractTests(unittest.TestCase):
         for token in ("volume=axion_atomic_pgdata", "project=axion-atomic", "8070", "5433"):
             self.assertIn(token, self.script)
 
+    def test_knowledge_directory_is_readable_but_not_writable_by_api(self):
+        self.assertIn('install -d -o 10001 -g 10001 -m 500 "$ROOT/knowledge"', self.script)
+        self.assertIn('KNOWLEDGE_META="$(stat -c %u:%a "$ROOT/knowledge")"', self.script)
+        self.assertIn('"10001:500"', self.script)
+
     def test_check_is_read_only_and_requires_explicit_prepare(self):
         check = self.script.split('case "$MODE" in', 1)[1]
         self.assertIn('--check) [[ -f "$ENV_FILE" ]] || die', check)

@@ -18,7 +18,7 @@ Desde la raíz del repositorio:
 
     sudo bash scripts/install_vps.sh --prepare
 
-Si no existe `.env`, se crea desde `.env.example`, con secretos aleatorios para PostgreSQL y `API_KEY`. Si ya existe, no se sobrescribe. Se preparan los directorios privados. Los nuevos directorios de workspace/knowledge se crean con el UID 10001 que utiliza la API; los directorios ya existentes no se cambian de propietario ni permisos.
+Si no existe `.env`, se crea desde `.env.example`, con secretos aleatorios para PostgreSQL y `API_KEY`. Si ya existe, no se sobrescribe. Se preparan los directorios privados. Los nuevos directorios `workspace/` y `knowledge/` se crean con UID/GID 10001, que utiliza la API. `workspace/` queda en modo 700 y `knowledge/` en modo 500 (solo lectura). El preflight verifica ambos contratos; los directorios ya existentes no se cambian de propietario ni permisos.
 
 Edita localmente `.env` con un editor seguro (por ejemplo `sudoedit .env`) y configura `QDRANT_URL`, `QDRANT_API_KEY` y `OLLAMA_BASE_URL` accesible desde el contenedor (normalmente `http://host.docker.internal:11434`). Nunca compartas los valores de ese archivo.
 
