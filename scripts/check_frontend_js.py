@@ -29,7 +29,8 @@ class ScriptExtractor(HTMLParser):
 
 
 def main():
-    html = Path(__file__).resolve().parents[1] / "frontend" / "Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html"
+    frontend = Path(__file__).resolve().parents[1] / "frontend"
+    html = frontend / "Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html"
     parser = ScriptExtractor()
     parser.feed(html.read_text(encoding="utf-8"))
     if not parser.scripts:
@@ -46,6 +47,9 @@ def main():
                 check=True,
             )
         print(f"Script inline {index}: sintaxis válida")
+    workspace_script = frontend / "workspace.js"
+    subprocess.run(["node", "--check", str(workspace_script)], text=True, check=True)
+    print("Workspace JS: sintaxis válida")
 
 
 if __name__ == "__main__":
