@@ -500,6 +500,9 @@ async def workspace_task(req: TaskRequest, user=Depends(_csrf_user)):
 @router.post("/agent/runs")
 async def workspace_agent_start(req: TaskRequest, user=Depends(_csrf_user)):
     """Inicia una ejecución real y persistente; cada cambio sigue sujeto a aprobación."""
+    # Autorizar antes de consumir cuotas evita que miembros ajenos agoten el
+    # bucket de un proyecto indicando su identificador.
+    await run_in_threadpool(_project_role, user, req.project_id, ("owner", "admin", "editor"))
     await run_in_threadpool(
         _enforce_workspace_limit, user["id"], req.project_id, "agent",
         user_limit=10, project_limit=30, window=timedelta(minutes=1),
@@ -520,6 +523,9 @@ async def workspace_agent_resume(
     user=Depends(_csrf_user),
 ):
     """Reanuda una ejecución solo tras comprobar membresía y estado persistido."""
+    # La comprobación precede al rate limit para no permitir agotamiento de
+    # cuotas de proyectos por usuarios que no pertenecen a ellos.
+    await run_in_threadpool(_project_role, user, project_id, ("owner", "admin", "editor"))
     await run_in_threadpool(
         _enforce_workspace_limit, user["id"], project_id, "agent",
         user_limit=10, project_limit=30, window=timedelta(minutes=1),
