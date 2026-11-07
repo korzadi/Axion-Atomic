@@ -40,17 +40,18 @@ class EnvironmentMfaKeyProvider:
     """Proveedor runtime desde variables de entorno; nunca registra ni genera claves.
 
     Requiere AXYRON_MFA_ENCRYPTION_KEY_B64 (32 bytes en Base64) y
-    AXYRON_MFA_ENCRYPTION_KEY_ID. Para descifrar registros antiguos admite
+    AXYRON_MFA_ENCRYPTION_KEY_ID. Conserva compatibilidad de lectura con
+    los nombres AXION_MFA_* anteriores. Para descifrar registros antiguos admite
     AXYRON_MFA_ENCRYPTION_KEYRING_B64 con un objeto JSON de claves históricas;
     todas las claves deben proceder del gestor de secretos del runtime.
     """
 
     KEY_ENV = "AXYRON_MFA_ENCRYPTION_KEY_B64"
-    LEGACY_KEY_ENV = "AXYRON_MFA_ENCRYPTION_KEY_B64"
+    LEGACY_KEY_ENV = "AXION_MFA_ENCRYPTION_KEY_B64"
     ID_ENV = "AXYRON_MFA_ENCRYPTION_KEY_ID"
-    LEGACY_ID_ENV = "AXYRON_MFA_ENCRYPTION_KEY_ID"
+    LEGACY_ID_ENV = "AXION_MFA_ENCRYPTION_KEY_ID"
     KEYRING_ENV = "AXYRON_MFA_ENCRYPTION_KEYRING_B64"
-    LEGACY_KEYRING_ENV = "AXYRON_MFA_ENCRYPTION_KEYRING_B64"
+    LEGACY_KEYRING_ENV = "AXION_MFA_ENCRYPTION_KEYRING_B64"
 
     def active_key(self) -> tuple[str, bytes]:
         key_id = (os.environ.get(self.ID_ENV) or os.environ.get(self.LEGACY_ID_ENV) or "").strip()
