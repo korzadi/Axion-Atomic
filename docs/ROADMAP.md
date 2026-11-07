@@ -83,8 +83,8 @@ Se integró MFA en login por contraseña y callback OAuth. Las cuentas con MFA a
 
 ### CI confirmado
 
-El run 42360939407 terminó **success** en el commit `0101daeff0c9f82fa615e19917a879a408df945c`:
-- Python: 625 passed, 9 skipped, 3 warnings.
+El run 42361059971 terminó **success** en el commit `951139792d657bbbb6bb6699acbfe83a5ef5a4c9` (documentación actualizada; el run 42360939407 ya había validado el código):
+- Python: 626 passed, 9 skipped, 3 warnings.
 - PostgreSQL migrations: success, incluidas migraciones e idempotencia y las pruebas PostgreSQL de MFA ya incorporadas.
 - Qdrant Cloud integration: success.
 - AXION STUDIO browser E2E: success.
