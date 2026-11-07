@@ -55,6 +55,69 @@ def _order_view(row) -> dict:
     }
 
 
+@router.get("/credits")
+async def get_my_credit_balance(user=Depends(_billing_user)):
+    """Consulta saldos reales de cuotas/lotes y últimos movimientos del ledger."""
+    _limit_reads(user)
+    with engine.connect() as conn:
+        quota_rows = conn.execute(text("""
+            SELECT quota_kind,
+                   COALESCE(SUM(limit_credits), 0) AS granted_credits,
+                   COALESCE(SUM(reserved_credits), 0) AS reserved_credits,
+                   COALESCE(SUM(consumed_credits), 0) AS consumed_credits,
+                   COALESCE(SUM(GREATEST(limit_credits - reserved_credits - consumed_credits, 0)), 0)
+                       AS available_credits
+            FROM billing_quota_periods
+            WHERE user_id=:user_id AND period_start <= now() AND period_end > now()
+            GROUP BY quota_kind
+            ORDER BY quota_kind
+        """), {"user_id": user["id"]}).mappings().all()
+        lots = conn.execute(text("""
+            SELECT COUNT(*) AS lot_count,
+                   COALESCE(SUM(granted_credits), 0) AS granted_credits,
+                   COALESCE(SUM(available_credits) FILTER (
+                       WHERE expires_at IS NULL OR expires_at > now()
+                   ), 0) AS available_credits,
+                   COALESCE(SUM(reserved_credits), 0) AS reserved_credits,
+                   COALESCE(SUM(consumed_credits), 0) AS consumed_credits
+            FROM billing_credit_lots
+            WHERE user_id=:user_id
+        """), {"user_id": user["id"]}).mappings().one()
+        ledger = conn.execute(text("""
+            SELECT event_type, available_delta, reserved_delta, consumed_delta,
+                   reason, created_at
+            FROM billing_credit_ledger
+            WHERE user_id=:user_id
+            ORDER BY created_at DESC, id DESC
+            LIMIT 50
+        """), {"user_id": user["id"]}).mappings().all()
+
+    quota_available = sum(int(row["available_credits"]) for row in quota_rows)
+    quota_reserved = sum(int(row["reserved_credits"]) for row in quota_rows)
+    quota_consumed = sum(int(row["consumed_credits"]) for row in quota_rows)
+    purchased_available = int(lots["available_credits"])
+    purchased_reserved = int(lots["reserved_credits"])
+    purchased_consumed = int(lots["consumed_credits"])
+    return {
+        "provisioned": bool(quota_rows) or int(lots["lot_count"]) > 0,
+        "currency": "credits",
+        "totals": {
+            "available": quota_available + purchased_available,
+            "reserved": quota_reserved + purchased_reserved,
+            "consumed": quota_consumed + purchased_consumed,
+        },
+        "quotas": [dict(row) for row in quota_rows],
+        "purchased_lots": {
+            "count": int(lots["lot_count"]),
+            "granted": int(lots["granted_credits"]),
+            "available": purchased_available,
+            "reserved": purchased_reserved,
+            "consumed": purchased_consumed,
+        },
+        "recent_ledger": [dict(row) for row in ledger],
+    }
+
+
 @router.get("/orders")
 async def list_my_payment_orders(
     limit: int = Query(default=20, ge=1, le=100),
