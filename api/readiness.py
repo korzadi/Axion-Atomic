@@ -22,11 +22,12 @@ def auth_readiness() -> dict:
         except (MfaError, ValueError):
             checks["mfa_encryption_key"] = False
 
+    billing_enabled = bool(getattr(settings, "billing_enforcement_enabled", False))
     billing = {
-        "mode": "ledger" if settings.billing_enforcement_enabled else "shadow",
+        "mode": "ledger" if billing_enabled else "shadow",
         "result_encryption_key": "not_required",
     }
-    if settings.billing_enforcement_enabled:
+    if billing_enabled:
         try:
             EnvironmentResultKeyProvider().active_key()
             billing["result_encryption_key"] = "configured"
@@ -35,7 +36,7 @@ def auth_readiness() -> dict:
 
     auth_ready = all(checks.values())
     billing_ready = (
-        not settings.billing_enforcement_enabled
+        not billing_enabled
         or billing["result_encryption_key"] == "configured"
     )
     ready = auth_ready and billing_ready

@@ -131,7 +131,10 @@
       const billing = data.usage_billing;
       const billingStatus = billing && billing.mode === "shadow" && billing.charged === false && billing.credits_reserved === false
         ? " Facturación: modo de medición; no se cobraron ni reservaron créditos."
-        : " Estado de facturación no confirmado.";
+        : billing && billing.mode === "ledger" && billing.charged === true
+          && Number.isSafeInteger(billing.credits_charged) && billing.credits_charged >= 0
+          ? " Facturación: se descontaron " + billing.credits_charged + " créditos según el consumo medido de Ollama."
+          : " Estado de facturación no confirmado.";
       setStatus(historyStatus + billingStatus);
     } catch (error) {
       prompt.value = content;

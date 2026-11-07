@@ -36,6 +36,26 @@ class AuthReadinessTests(unittest.TestCase):
         self.assertEqual(report["status"], "ready")
         self.assertTrue(all(report["checks"].values()))
 
+    def test_readiness_blocks_ledger_mode_without_dedicated_result_key(self):
+        from api.billing_result_crypto import ResultEncryptionError
+
+        settings = SimpleNamespace(
+            auth_enabled=True,
+            auth_cookie_secure=True,
+            oauth_public_base_url="https://axyronatomic.com",
+            billing_enforcement_enabled=True,
+        )
+        with (
+            patch("api.readiness.settings", settings),
+            patch("api.readiness.email_delivery_configured", return_value=True),
+            patch("api.readiness.EnvironmentMfaKeyProvider.active_key", return_value=("mfa-v1", b"x" * 32)),
+            patch("api.readiness.EnvironmentResultKeyProvider.active_key", side_effect=ResultEncryptionError("missing")),
+        ):
+            report = auth_readiness()
+        self.assertEqual(report["status"], "blocked")
+        self.assertEqual(report["billing"]["mode"], "ledger")
+        self.assertEqual(report["billing"]["result_encryption_key"], "missing")
+
     def test_readiness_never_exposes_mfa_key_material(self):
         settings = SimpleNamespace(
             auth_enabled=True,

@@ -85,6 +85,14 @@ def test_chat_discloses_shadow_billing_state_without_claiming_a_charge():
     assert "Estado de facturación no confirmado." in workspace
 
 
+def test_chat_discloses_measured_ledger_charge_when_billing_is_enabled():
+    workspace = (FRONTEND.parent / "workspace.js").read_text(encoding="utf-8")
+    assert 'billing.mode === "ledger"' in workspace
+    assert 'billing.charged === true' in workspace
+    assert 'Number.isSafeInteger(billing.credits_charged)' in workspace
+    assert "créditos según el consumo medido de Ollama" in workspace
+
+
 def test_workspace_locks_project_switching_while_inference_is_running():
     source = (FRONTEND.parent / "workspace.js").read_text(encoding="utf-8")
     assert "function setBusy(value)" in source
