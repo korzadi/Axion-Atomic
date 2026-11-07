@@ -151,12 +151,17 @@ async def oauth_start(provider: str, request: Request, terms_accepted: bool = Fa
 
 
 @router.get("/oauth/{provider}/callback")
-async def oauth_callback(provider: str, code: str | None = None,
+async def oauth_callback(provider: str, request: Request, code: str | None = None,
                          state: str | None = None, error: str | None = None,
                          browser_state: str | None = Cookie(default=None, alias="axion_oauth_state")):
     _require_auth_feature()
     if provider not in ("google", "github"):
         raise HTTPException(status_code=404, detail="Proveedor no admitido")
+    await run_in_threadpool(
+        _enforce_rate_limit, request,
+        namespace="auth:oauth:callback:" + provider,
+        limit=20, window=timedelta(minutes=10),
+    )
     if error or not code or not state or not browser_state or not secrets.compare_digest(state, browser_state):
         result = RedirectResponse("/?oauth_error=cancelled", status_code=303)
         result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
