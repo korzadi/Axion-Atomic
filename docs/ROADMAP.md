@@ -76,7 +76,8 @@ Se integró MFA en login por contraseña y callback OAuth. Las cuentas con MFA a
 | Pantalla de Seguridad AXION STUDIO | 100% código |
 | Rate limiting y auditoría MFA | 95% |
 | Clave runtime configurada en backend | Pendiente |
-| Rotación y claves históricas | 0% |
+| Soporte de descifrado con claves históricas | 100% código |
+| Procedimiento y validación de rotación en staging | 0% |
 | Pruebas en staging | 0% |
 | Revisión independiente y aceptación | Pendiente |
 
@@ -92,7 +93,7 @@ El run 42324560749 terminó **success** en el commit `54451588a88fcfc5c801f3b1aa
 ### Condiciones para cerrar Fase 1
 
 - [ ] Inyectar las dos variables MFA en el gestor de secretos del backend runtime. Las variables de GitHub Actions no se transfieren automáticamente al servidor.
-- [ ] Implementar y probar rotación de claves históricas y recuperación ante pérdida.
+- [ ] Validar en staging la rotación multi-clave, la custodia y la recuperación ante pérdida.
 - [ ] Configurar SMTP y Google/GitHub OAuth reales en staging.
 - [ ] Validar cookies HTTPS Secure, CSRF, proxy de confianza, recuperación y suspensión.
 - [ ] Completar revisión independiente de seguridad y aceptación funcional.
