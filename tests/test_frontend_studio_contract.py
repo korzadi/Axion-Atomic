@@ -6,7 +6,7 @@ ni pruebas de integración HTTP contra una instancia desplegada.
 from pathlib import Path
 
 
-FRONTEND = Path(__file__).resolve().parents[1] / "frontend" / "index.html"
+FRONTEND = Path(__file__).resolve().parents[1] / "frontend" / "Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html"
 
 
 def test_authenticated_home_uses_real_account_and_catalog_endpoints():
