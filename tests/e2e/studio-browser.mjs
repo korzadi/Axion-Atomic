@@ -44,8 +44,14 @@ const baseUrl = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage();
+  const landingPageErrors = [];
+  page.on("pageerror", error => landingPageErrors.push(error.message));
   await page.goto(baseUrl);
   await page.waitForLoadState("networkidle");
+  await page.locator("#inicio h1:visible").waitFor();
+  await page.locator("#inicio .robot img:visible").waitFor();
+  await page.locator("#modelos:visible").waitFor();
+  assert.deepEqual(landingPageErrors, [], "La landing no debe lanzar errores JavaScript");
   assert.equal(await page.locator("#workspace-app").isHidden(), true);
   assert.equal(await page.locator("#studio-shell").isHidden(), true);
   assert.equal(await page.locator("#studio-nav").isHidden(), true);
