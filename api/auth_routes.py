@@ -30,7 +30,7 @@ from api.projects import list_user_projects
 from api.database import engine
 from api.rate_limit import consume_rate_limit, rate_limit_key
 from api.oauth import begin, consume_state, configured, provider_profile, resolve_user
-from api.email_delivery import email_delivery_configured, send_verification_email
+from api.email_delivery import email_delivery_configured, send_verification_email, send_password_reset_email
 from api.email_verification import issue_email_verification_token
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
