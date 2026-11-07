@@ -6,7 +6,7 @@ from api.config import settings
 from api.database import engine
 
 ROLE_PERMISSIONS = {
- "platform_admin": ("admin.access.read", "billing.read", "billing.manage", "users.manage", "audit.read"),
+ "platform_admin": ("admin.access.read", "billing.read", "billing.manage", "users.read", "users.manage", "audit.read"),
  "billing_admin": ("admin.access.read", "billing.read", "billing.manage", "audit.read"),
  "billing_support": ("admin.access.read", "billing.read", "audit.read"),
  "billing_readonly": ("admin.access.read", "billing.read"),
