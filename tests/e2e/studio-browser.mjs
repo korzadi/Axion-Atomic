@@ -90,13 +90,13 @@ try {
   await adminPage.getByText("Acceso administrativo no autorizado").waitFor();
   assert.equal(await adminPage.locator("#logout").isVisible(), true);
   await adminPage.locator("#logout").click();
-  assert.equal(await adminPage.locator("#login-form").isVisible(), true);
-  assert.equal(await adminPage.locator("#mfa-view").isHidden(), true);
+  await adminPage.locator("#login-form").waitFor({ state: "visible" });
+  await adminPage.locator("#mfa-view").waitFor({ state: "hidden" });
   await adminPage.locator("#email").fill("user@example.test");
   await adminPage.locator("#password").fill("TestPassword123!");
   await adminPage.locator("#login-submit").click();
-  assert.equal(await adminPage.locator("#login-form").isHidden(), true);
-  assert.equal(await adminPage.locator("#mfa-view").isVisible(), true);
+  await adminPage.locator("#login-form").waitFor({ state: "hidden" });
+  await adminPage.locator("#mfa-view").waitFor({ state: "visible" });
   assert.equal(await adminPage.locator("#password").inputValue(), "");
   await adminPage.locator("#mfa-code").fill("123456");
   await adminPage.locator("#mfa-form button[type=submit]").click();
