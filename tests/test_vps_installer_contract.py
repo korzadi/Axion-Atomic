@@ -118,5 +118,46 @@ esac
         self.assertIn("axion_atomic_pgdata", self.doc)
         self.assertIn("No borres ni detengas", self.doc)
 
+
+    def test_prepare_rejects_env_symlink_without_changing_target_permissions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            (scripts / "install_vps.sh").write_text(self.script, encoding="utf-8")
+            (root / "compose.yaml").write_text("services: {}\\n", encoding="utf-8")
+            (root / ".env.example").write_text("API_KEY=placeholder\\n", encoding="utf-8")
+            for name in ("workspace", "knowledge", "backups"):
+                (root / name).mkdir()
+            target = root / "sensitive-target"
+            target.write_text("do-not-change\\n", encoding="utf-8")
+            target.chmod(0o644)
+            (root / ".env").symlink_to(target)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            docker = fake_bin / "docker"
+            docker.write_text(
+                "#!/usr/bin/env sh\\n"
+                "if [ \\"$1\\" = compose ] && [ \\"$2\\" = version ]; then exit 0; fi\\n"
+                "exit 0\\n",
+                encoding="utf-8",
+            )
+            docker.chmod(0o755)
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+            completed = subprocess.run(
+                ["bash", str(scripts / "install_vps.sh"), "--prepare"],
+                cwd=root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=10,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("archivo regular y no un enlace simbólico", completed.stderr)
+            self.assertEqual(target.stat().st_mode & 0o777, 0o644)
+            self.assertEqual(target.read_text(encoding="utf-8"), "do-not-change\\n")
+
 if __name__ == "__main__":
     unittest.main()
