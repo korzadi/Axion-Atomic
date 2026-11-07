@@ -168,3 +168,15 @@ Las skills son guías de trabajo, no plugins ejecutables. El agente debe consult
 El runtime carga automáticamente `programming-workflow` al iniciar cada ejecución del agente y selecciona skills adicionales según el tema de la solicitud. La selección normaliza acentos y reconoce términos técnicos en español e inglés (por ejemplo Python/FastAPI, frontend, APIs, PostgreSQL, pruebas, depuración, seguridad o Git). La selección es una ayuda contextual: AXYRON debe comprobar que la skill existe, leer su contenido mediante `read_skill` y contrastarlo con el repositorio. Si una skill no está instalada, continúa sin inventarla. Las skills no otorgan permisos ni sustituyen aprobaciones.
 
 **Herramientas de ingeniería actualmente expuestas:** lectura y búsqueda de archivos, listado de directorios, resumen estructural del repositorio, estado/diff/log Git, propuestas de creación/edición/eliminación y propuestas de commit/rama. Las herramientas de terminal y ejecución de pruebas solo se exponen cuando el runtime recibe un backend Docker aislado y configurado con imágenes fijadas por digest. La API HTTP actual no inyecta ese backend; por tanto, no debe anunciarse terminal ni ejecución automática de pruebas como disponible en Studio hasta completar y validar esa integración.
+
+
+## Instalación en VPS
+
+El repositorio incluye un instalador por etapas y conservador para levantar los servicios definidos en Docker Compose:
+
+- Guía: [docs/VPS_INSTALLATION.md](docs/VPS_INSTALLATION.md).
+- Preparación privada, sin desplegar: `sudo bash scripts/install_vps.sh --prepare`.
+- Validación previa: `sudo bash scripts/install_vps.sh --check`.
+- Despliegue explícito, con confirmación y respaldo PostgreSQL antes de migraciones: `sudo bash scripts/install_vps.sh --deploy`.
+
+El instalador no modifica servicios existentes, Nginx, UFW, Ollama ni KorzadiVPN; si detecta el proyecto/volumen anterior o puertos ocupados, se detiene para evitar una segunda base de datos. No realiza despliegues automáticamente desde GitHub Actions.
