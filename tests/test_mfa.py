@@ -52,6 +52,36 @@ class TotpPrimitiveTests(unittest.TestCase):
             with self.assertRaises(MfaError):
                 provider.get_key("old-key")
 
+        historical = base64.b64encode(b"h" * 32).decode("ascii")
+        with patch.dict(os.environ, {
+            "AXION_MFA_ENCRYPTION_KEY_ID": "runtime-v2",
+            "AXION_MFA_ENCRYPTION_KEY_B64": encoded,
+            "AXION_MFA_ENCRYPTION_KEYRING_B64": (
+                '{"runtime-v1":"' + historical + '"}'
+            ),
+        }, clear=True):
+            self.assertEqual(provider.get_key("runtime-v1"), b"h" * 32)
+            with self.assertRaises(MfaError):
+                provider.get_key("unknown-key")
+
+    def test_cipher_decrypts_with_historical_keyring_after_rotation(self):
+        import base64
+        old_provider = StaticKeyProvider()
+        cipher_before_rotation = AesGcmTotpCipher(old_provider)
+        encrypted = cipher_before_rotation.encrypt(self.SECRET, user_id="user-rotation")
+        old_key = base64.b64encode(old_provider.key).decode("ascii")
+        active_key = base64.b64encode(b"n" * 32).decode("ascii")
+        with patch.dict(os.environ, {
+            "AXION_MFA_ENCRYPTION_KEY_ID": "new-key-v2",
+            "AXION_MFA_ENCRYPTION_KEY_B64": active_key,
+            "AXION_MFA_ENCRYPTION_KEYRING_B64": '{"test-key-v1":"' + old_key + '"}',
+        }, clear=True):
+            rotated_cipher = AesGcmTotpCipher(EnvironmentMfaKeyProvider())
+            self.assertEqual(
+                rotated_cipher.decrypt(encrypted, user_id="user-rotation"),
+                self.SECRET,
+            )
+
     def test_rfc6238_sha1_vector(self):
         self.assertEqual(totp_at(self.SECRET, 59, digits=8), "94287082")
 
