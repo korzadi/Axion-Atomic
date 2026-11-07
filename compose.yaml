@@ -1,4 +1,4 @@
-name: axion-atomic
+name: axyron-atomic
 services:
   api:
     build: .
