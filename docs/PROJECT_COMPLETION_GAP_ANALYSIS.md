@@ -290,3 +290,25 @@ Resultado Python: **698 passed, 9 skipped, 4 warnings**. También se aprobaron b
 La prueba usa un ejecutable Docker simulado; no representa una inspección del VPS real. El inventario sigue pendiente de ejecución por el propietario en el VPS. No se han iniciado ni modificado contenedores, redes, volúmenes, PostgreSQL, Nginx, UFW ni servicios del VPS.
 
 **Próxima acción operativa:** ejecutar `bash scripts/inspect_vps_state.sh` en el VPS y revisar su salida antes de diseñar una reconciliación. El instalador `--deploy` permanece bloqueado intencionalmente ante recursos/volúmenes existentes.
+
+
+## Seguimiento de endurecimiento del instalador — 7 de noviembre de 2026
+
+La revisión del instalador encontró una regresión adicional en la rama principal: los caminos de `--prepare` con un `.env` existente y `--check` llamaban a una función de validación de archivo regular que no estaba definida. Además, un enlace simbólico roto podía confundirse con un archivo inexistente durante la preparación.
+
+Correcciones publicadas:
+- Se definió `ensure_env_file_safe` y se valida el archivo antes de que `--prepare` cree directorios o cambie permisos.
+- Se rechazan tanto enlaces simbólicos válidos como rotos.
+- Se mantiene el comportamiento de conservar el contenido de un `.env` regular existente, aplicando modo privado 600.
+- Se añadió cobertura de regresión para enlace simbólico válido, enlace roto y preservación de un archivo regular.
+- Se corrigió el formato del mensaje de error del instalador.
+- `docs/VPS_INSTALLATION.md` ahora documenta la condición de archivo regular.
+
+Commits:
+- `3456c03` — definición de validaciones seguras de `.env`.
+- `f11ca4d` — prueba para enlace simbólico roto.
+- `ac8bbd5` — prueba de conservación de `.env` regular.
+- `2fa1683` — formato del mensaje de error.
+- `528982b` — documentación de la condición.
+
+Estado de verificación: GitHub Actions para el commit `528982b7dcf91838d6771999680e5d7cc620504c` se encontraba en ejecución durante esta actualización. Los cambios no se consideran probados hasta que finalicen los jobs. No se ejecutó el instalador en el VPS, no se leyó el contenido de `.env` y no se modificó infraestructura.
