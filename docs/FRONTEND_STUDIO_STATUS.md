@@ -96,7 +96,7 @@ Se incorporó una primera estructura SPA ligera dentro de la aplicación FastAPI
 
 ### Interfaz añadida
 
-- Navegación integrada: Resumen, Proyectos, Atomic Code, Conocimiento, Agente Axyron, Modelos Atomic, Consumo, Facturación, Cuenta y seguridad y Administración.
+- Navegación integrada: Resumen, Proyectos, Atomic Code, Conocimiento, Agente Axyron, Modelos Atomic, Consumo, Facturación, Cuenta y seguridad ; la administración se mantiene fuera de la SPA, en `https://admin.axyronatomic.com`.
 - Sistema visual futurista responsive con base oscura azul profundo, cian, azul y violeta; el tema claro se conserva como opción.
 - Atomic Code reutiliza el módulo de chat existente y sus endpoints autenticados.
 - Proyectos usa la API real de listado y creación.
@@ -125,3 +125,10 @@ Se incorporó una primera estructura SPA ligera dentro de la aplicación FastAPI
 ### Ampliación de navegación SPA
 
 Se añadieron además las secciones **Privacidad y legal**, **API e integraciones** y **Herramientas**. Presentan los controles técnicos que sí existen y marcan como próximas actualizaciones los portales de derechos/gestión de claves, conectores y sandbox visual que todavía no tienen un flujo completo en el backend. No se inventan endpoints ni operaciones.
+
+
+## Separación del portal administrativo — 7 de noviembre de 2026
+
+Por decisión de producto, Axyron Studio mantiene todas las páginas de usuario en una sola SPA, pero excluye Administración de su navegación. El host exacto `admin.axyronatomic.com` sirve un portal independiente desde `frontend/admin.html`, con JavaScript propio, inicio de sesión en ese subdominio y lectura de `/admin/access/me`. La cookie de sesión es host-only: el administrador inicia sesión directamente en el subdominio administrativo, sin ampliar cookies al dominio padre.
+
+El portal muestra únicamente autorización, roles y permisos reales. La API actual declara `mutations_enabled=false`; no se simulan operaciones de escritura. Para publicar el subdominio aún se requiere DNS correcto, un virtual host Nginx que proxyee a la API y certificado TLS válido. Este cambio no altera Nginx ni despliega el VPS.
