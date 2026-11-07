@@ -68,7 +68,7 @@ jobs:
           done
           test "$ready" -eq 1
           curl --fail --silent --show-error --output /tmp/axyron-homepage http://127.0.0.1:18080/
-          grep -q "AXYRON STUDIO" /tmp/axyron-homepage
+          grep -q "Axyron Atomic" /tmp/axyron-homepage
           curl --fail --silent --show-error --output /tmp/axion-live http://127.0.0.1:18080/health/live
           grep -q '"status":"alive"' /tmp/axion-live
           api_status="$(curl --silent --output /tmp/axion-auth-response --write-out '%{http_code}' http://127.0.0.1:18080/auth/me)"
