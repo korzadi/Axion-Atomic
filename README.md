@@ -83,7 +83,7 @@ La interfaz web autenticada se organiza como una SPA ligera servida por FastAPI 
 - **Consumo:** telemetría por proyecto cuando existen mediciones.
 - **Facturación:** catálogo y órdenes propias en modo informativo; no se inicia checkout ni se acreditan créditos desde la interfaz.
 - **Cuenta y seguridad:** datos de sesión y estado/enrolamiento MFA; las operaciones no expuestas por el backend no se simulan.
-- **Administración:** permisos y roles de solo lectura. No se presentan controles de mutación porque la API administrativa actual no los ofrece.
+- **Administración:** portal independiente en `https://admin.axyronatomic.com`; no forma parte de la navegación de Axyron Studio. La API actual permite consultar permisos y roles, sin mutaciones administrativas.
 - **Privacidad y legal:** controles técnicos existentes y elementos legales pendientes, sin simular solicitudes de datos que aún no tienen endpoint.
 - **API e integraciones:** estado informativo de la API y conectores pendientes de un flujo seguro de credenciales.
 - **Herramientas:** capacidades del runtime supervisado y sandbox/automatización identificados como próximas actualizaciones cuando el ciclo no esté validado.
