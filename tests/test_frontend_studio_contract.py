@@ -95,3 +95,10 @@ def test_chat_workspace_sends_csrf_and_does_not_send_while_history_is_unavailabl
     assert "'X-CSRF-Token':decodeURIComponent(cookie('axion_csrf'))" in source
     assert "if(!value||!projectId||!historyReady||chatInFlight||send.disabled)return" in source
     assert "select.addEventListener('change',()=>loadHistory(select.value))" in source
+
+def test_unreleased_modules_are_marked_for_next_update_and_code_uses_real_chat():
+    source = FRONTEND.read_text(encoding="utf-8")
+    assert "if(v==='chat'||v==='code')return renderChat()" in source
+    assert "renderComingSoon('ATOMIC VIDEO'" in source
+    assert source.count("Próxima actualización") >= 3
+    assert "billing/catalog" in source
