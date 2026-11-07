@@ -55,7 +55,7 @@ def validate_args(tool: Tool, args) -> dict:
     return args
 
 
-def build_tools(ws: Workspace, git: GitManager, sandbox=None) -> dict[str, Tool]:
+def build_tools(ws: Workspace, git: GitManager, sandbox=None, skill_roots=()) -> dict[str, Tool]:
     def fs(kind):
         def propose(a):
             if kind == "write":
@@ -75,7 +75,7 @@ def build_tools(ws: Workspace, git: GitManager, sandbox=None) -> dict[str, Tool]
         prop = git.propose_create_branch(a["name"], a["reason"])
         return prop, (lambda ap: git.apply_create_branch(a["name"], prop, ap))
 
-    skills = SkillRegistry(ws.root)
+    skills = SkillRegistry(ws.root, trusted_roots=skill_roots)
     S, I = "str", "int"
     tools = [
         Tool("list_dir", "Lista un directorio del proyecto", {"path": (S, False)},
