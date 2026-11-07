@@ -65,7 +65,7 @@ jobs:
             docker network rm axyron-ci >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
-          docker run --detach --network axyron-ci --name axyron-api-stub-ci python:3.12-slim python -u -c '
+          docker run --detach --network axyron-ci --network-alias api --name axyron-api-stub-ci python:3.12-slim python -u -c '
           from http.server import BaseHTTPRequestHandler, HTTPServer
           class Handler(BaseHTTPRequestHandler):
               def do_GET(self):
