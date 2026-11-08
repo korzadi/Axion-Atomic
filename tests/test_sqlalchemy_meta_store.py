@@ -76,7 +76,180 @@ class EngineWithFailingCursorClose(Engine):
         return conn
 
 
+
+class AdvisoryLockCursor(Cursor):
+    def fetchone(self):
+        statement = self.connection.statements[-1][0]
+        if "pg_try_advisory_lock" in statement:
+            return (self.connection.lock_result,)
+        if "pg_advisory_unlock" in statement:
+            return (self.connection.unlock_result,)
+        raise AssertionError("Consulta advisory lock inesperada")
+
+
+class AdvisoryLockConnection(Connection):
+    def __init__(self, lock_result=True, unlock_result=True):
+        super().__init__()
+        self.lock_result = lock_result
+        self.unlock_result = unlock_result
+        self.invalidated = False
+
+    def cursor(self):
+        cur = AdvisoryLockCursor(self)
+        self.cursors.append(cur)
+        return cur
+
+    def invalidate(self):
+        self.invalidated = True
+
+
+class AdvisoryLockEngine(Engine):
+    def __init__(self, lock_result=True, unlock_result=True):
+        super().__init__()
+        self.lock_result = lock_result
+        self.unlock_result = unlock_result
+
+    def raw_connection(self):
+        conn = AdvisoryLockConnection(self.lock_result, self.unlock_result)
+        self.connections.append(conn)
+        return conn
+
+
+
+import threading
+
+
+class SharedAdvisoryLockManager:
+    def __init__(self):
+        self.guard = threading.Lock()
+        self.held = set()
+
+    def acquire(self, key):
+        with self.guard:
+            if key in self.held:
+                return False
+            self.held.add(key)
+            return True
+
+    def release(self, key):
+        with self.guard:
+            if key not in self.held:
+                return False
+            self.held.remove(key)
+            return True
+
+
+class SharedAdvisoryCursor(Cursor):
+    def fetchone(self):
+        sql, params = self.connection.statements[-1]
+        key = params[0]
+        if "pg_try_advisory_lock" in sql:
+            return (self.connection.manager.acquire(key),)
+        if "pg_advisory_unlock" in sql:
+            return (self.connection.manager.release(key),)
+        raise AssertionError("Consulta advisory lock inesperada")
+
+
+class SharedAdvisoryConnection(Connection):
+    def __init__(self, manager):
+        super().__init__()
+        self.manager = manager
+
+    def cursor(self):
+        cur = SharedAdvisoryCursor(self)
+        self.cursors.append(cur)
+        return cur
+
+
+class SharedAdvisoryEngine(Engine):
+    def __init__(self):
+        super().__init__()
+        self.manager = SharedAdvisoryLockManager()
+
+    def raw_connection(self):
+        conn = SharedAdvisoryConnection(self.manager)
+        self.connections.append(conn)
+        return conn
+
+
 class SqlAlchemyMetaStoreTests(unittest.TestCase):
+    def test_project_lock_uses_session_advisory_lock_and_releases_connection(self):
+        import asyncio
+
+        async def exercise():
+            engine = AdvisoryLockEngine()
+            store = SqlAlchemyMetaStore(engine)
+            async with store.project_lock("project-a"):
+                self.assertEqual(len(engine.connections), 1)
+                self.assertFalse(engine.connections[0].closed)
+            connection = engine.connections[0]
+            self.assertTrue(connection.closed)
+            self.assertFalse(connection.invalidated)
+            self.assertEqual(
+                [statement for statement, _ in connection.statements],
+                ["SELECT pg_try_advisory_lock(%s)", "SELECT pg_advisory_unlock(%s)"],
+            )
+            self.assertEqual(
+                connection.statements[0][1], connection.statements[1][1]
+            )
+            self.assertEqual(connection.commits, 2)
+
+        asyncio.run(exercise())
+
+    def test_independent_meta_stores_serialize_the_same_project(self):
+        import asyncio
+
+        async def exercise():
+            engine = SharedAdvisoryEngine()
+            first = SqlAlchemyMetaStore(engine)
+            second = SqlAlchemyMetaStore(engine)
+            entered = asyncio.Event()
+
+            async def second_worker():
+                async with second.project_lock("shared-project", timeout_seconds=2):
+                    entered.set()
+
+            async with first.project_lock("shared-project"):
+                task = asyncio.create_task(second_worker())
+                await asyncio.sleep(0.12)
+                self.assertFalse(entered.is_set())
+
+            await asyncio.wait_for(task, timeout=2)
+            self.assertTrue(entered.is_set())
+            self.assertEqual(len(engine.connections), 2)
+            self.assertTrue(all(connection.closed for connection in engine.connections))
+            self.assertEqual(engine.manager.held, set())
+
+        asyncio.run(exercise())
+
+    def test_project_lock_invalidates_connection_if_unlock_fails(self):
+        import asyncio
+
+        async def exercise():
+            engine = AdvisoryLockEngine(unlock_result=False)
+            store = SqlAlchemyMetaStore(engine)
+            async with store.project_lock("project-a"):
+                pass
+            connection = engine.connections[0]
+            self.assertTrue(connection.invalidated)
+            self.assertTrue(connection.closed)
+
+        asyncio.run(exercise())
+
+    def test_project_lock_rejects_invalid_project_and_timeout(self):
+        import asyncio
+
+        async def exercise():
+            store = SqlAlchemyMetaStore(AdvisoryLockEngine(lock_result=False))
+            with self.assertRaises(ValueError):
+                async with store.project_lock(" "):
+                    pass
+            with self.assertRaises(ValueError):
+                async with store.project_lock("p1", timeout_seconds=0):
+                    pass
+
+        asyncio.run(exercise())
+
     def test_connection_is_released_after_each_operation(self):
         engine = Engine()
         store = SqlAlchemyMetaStore(engine)
