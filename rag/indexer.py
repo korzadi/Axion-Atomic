@@ -85,11 +85,16 @@ class RepoIndexer:
                     continue
                 vectors = await self.embedder.embed([embed_text(rel, c.symbol, c.text) for c in chunks])   # primero embeber: si falla, no se toca nada
                 ids = [str(uuid.uuid5(NS, f"{pid}|{rel}|{sha}|{c.idx}")) for c in chunks]
-                await self.store.delete_path(pid, rel)
+                # Conservar la versión anterior hasta que la nueva esté publicada
+                # y sus metadatos hayan quedado confirmados en la transacción SQL.
+                old_ids = await asyncio.to_thread(self.meta.list_file_chunk_ids, pid, rel)
                 await self.store.upsert([Point(i, v, {"project_id": pid, "path": rel, "chunk_id": i, "sha256": sha})
                                          for i, v in zip(ids, vectors)])
                 await asyncio.to_thread(self.meta.replace_file, pid, rel, sha, revision, size, list(zip(ids, chunks)),
                                         datetime.now(timezone.utc).isoformat())
+                # Si la limpieza falla, los vectores anteriores quedan huérfanos
+                # pero el Retriever los descarta porque ya no existen en MetaStore.
+                await self.store.delete_ids(old_ids)
                 rep.indexed.append(rel); rep.chunks += len(chunks)
             except (AxionError, OSError, ValueError) as exc:
                 rep.errors.append(f"{rel}: {exc}")
