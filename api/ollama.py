@@ -110,3 +110,19 @@ async def embed(value: str):
         raise ValueError("Ollama devolvió una dimensión de embedding inesperada")
     await set_embedding(settings.embed_model, settings.embed_dimension, value, vector)
     return vector
+
+
+async def configured_chat_model_available() -> bool:
+    """Comprueba en Ollama que el modelo configurado existe realmente en el runtime."""
+    async with httpx.AsyncClient(timeout=min(settings.ollama_request_timeout_seconds, 10.0)) as client:
+        response = await client.get(settings.ollama_base_url.rstrip("/") + "/api/tags")
+        response.raise_for_status()
+        payload = response.json()
+    models = payload.get("models") if isinstance(payload, dict) else None
+    if not isinstance(models, list):
+        raise ValueError("Ollama devolvió un catálogo de modelos inválido")
+    names = {
+        item.get("name") for item in models
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    return settings.chat_model in names
