@@ -296,3 +296,11 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Verificación posterior real: `/health` 6/6 ok; `/health/readiness` 503 (AUTH off, MFA key ausente) como contrato diseñado; landing/assets 200; `admin.js` servido incluye la conciliación QvaPay; `POST /admin/billing/qvapay/reconcile` 503 fail-closed.
 - `OPS-03`: actualización y verificación de salud ensayadas en el host real; el rollback completo de DB sigue sin ensayarse (no fue necesario). `OPS-01`: preflight fail-closed re-verificado. `DOC-01`: alineado con el despliegue documentado.
 - `REL-01` permanece **bloqueada**: la V1.0 no se declara liberada. AUTH/MFA en vivo, AGT-04, catálogo/precios QvaPay y sandbox oficial siguen pendientes; no se habilitó AUTH, BILLING ni QVAPAY.
+
+## Producción actualizada y autenticación activa — 8 de noviembre de 2026 (autorización del propietario)
+
+- Base de datos de producción migrada 021 → **023** (022 agent_run cancellation, 023 payment_invoices) con rehearsal previo íntegro en contenedor desechable y backup válido; sin pérdida de datos.
+- `AUTH_ENABLED=true` en producción; SMTP (gmail, STARTTLS) autenticado sin enviar correo; `/health/readiness` = **`ready`** (auth/email/cookie/origin/MFA key true). Requests sin sesión → 401; payload inválido → 422. Sin cuentas creadas ni correos enviados.
+- `main = e383621` (merge de la candidata; push EXITOSO; CI `42499947946` **5/5 verde**). Producción reconstruida y recreada desde `main`; frontend idéntico (no recreado); `/health` 6/6; dominio público 200; `admin.js` con conciliación QvaPay presente.
+- Rollback disponible: imágenes etiquetadas `pre-main-20261108` y `rollback-20261108`; `.env` previo en `/tmp/.env.rollback-20261108`.
+- Siguen desactivados por diseño: `BILLING_ENFORCEMENT_ENABLED`, `QVAPAY_ENABLED`, `SANDBOX_DOCKER_ENABLED` (faltan catálogo/precios, token QvaPay, daemon sandbox). `REL-01` no se declara liberada: falta ensayo de registro/verificación/MFA con buzón real y checkout real.
