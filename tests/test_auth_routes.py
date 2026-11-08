@@ -266,5 +266,42 @@ class AuthRouteGateTests(unittest.TestCase):
         self.assertNotIn("client_secret", result)
 
 
+class RecoveryRateLimitFailureTests(unittest.TestCase):
+    def test_recovery_rate_limit_fails_closed_when_storage_is_unavailable(self):
+        from datetime import timedelta
+        from api.auth_recovery_routes import _limit
+        request = Mock(spec=Request)
+        request.client.host = "198.51.100.40"
+        with patch("api.auth_recovery_routes.consume_rate_limit", side_effect=RuntimeError("database unavailable")):
+            with self.assertRaises(HTTPException) as raised:
+                _limit(request, "auth:verify-resend:ip", 10, timedelta(minutes=10))
+        self.assertEqual(raised.exception.status_code, 503)
+        self.assertEqual(raised.exception.detail, "Protección temporalmente no disponible")
+
+    def test_recovery_rate_limit_returns_retry_after_header(self):
+        from datetime import timedelta
+        from api.auth_recovery_routes import _limit
+        from api.rate_limit import RateLimitDecision
+        request = Mock(spec=Request)
+        request.client.host = "198.51.100.41"
+        decision = RateLimitDecision(allowed=False, remaining=0, retry_after_seconds=137)
+        with patch("api.auth_recovery_routes.consume_rate_limit", return_value=decision):
+            with self.assertRaises(HTTPException) as raised:
+                _limit(request, "auth:password-forgot:ip", 10, timedelta(minutes=10))
+        self.assertEqual(raised.exception.status_code, 429)
+        self.assertEqual(raised.exception.headers["Retry-After"], "137")
+
+    def test_recovery_rate_limit_rejects_missing_client_origin(self):
+        from datetime import timedelta
+        from api.auth_recovery_routes import _limit
+        request = Mock(spec=Request)
+        request.client = None
+        with patch("api.auth_recovery_routes.consume_rate_limit") as consume:
+            with self.assertRaises(HTTPException) as raised:
+                _limit(request, "auth:verify-resend:ip", 10, timedelta(minutes=10))
+        self.assertEqual(raised.exception.status_code, 503)
+        consume.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
