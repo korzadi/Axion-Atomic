@@ -218,3 +218,13 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Alcance de seguridad: reconciliación limitada a `project_id`; nunca elimina IDs de otro proyecto ni elimina IDs que sigan presentes en SQL.
 
 - Extensión de seguridad en borrado de archivos eliminados/ahora sensibles: el indexador captura primero los IDs antiguos, elimina los metadatos SQL canónicos y después solicita el borrado vectorial selectivo. Si la limpieza falla, la reconciliación del final de la indexación vuelve a intentarlo. Se añade `test_removed_file_cleanup_failure_is_reconciled` para verificar que no se conserva un vector sin archivo SQL. Commits `4150eea`, `0b28b25` y `2eb4bf5`.
+
+
+## Verificación CI y eliminación segura de proyectos RAG (8 de noviembre de 2026)
+
+- CI completa del HEAD `14fad519a0a381f8fee199741dab6dc3c6324242`, run `42487560721`: los cinco jobs terminaron `success` (Python tests, Qdrant Cloud integration, Studio browser E2E, PostgreSQL migrations y container image build). Esta evidencia corresponde exclusivamente a ese SHA.
+- Nueva revisión ARC-01: `RepoIndexer.remove_project` eliminaba primero los vectores y después los metadatos SQL. Si la operación SQL fallaba, el Retriever podía conservar fragmentos canónicos sin sus vectores correspondientes.
+- Corrección: serializar la eliminación del proyecto con el mismo lock por proyecto usado en indexación; eliminar primero el índice canónico SQL y luego los vectores. Si Qdrant falla, quedan vectores huérfanos invisibles para la recuperación y eliminables por `reconcile_project`.
+- Regresión `test_remove_project_metadata_first_and_reconcile_vector_failure`: simula fallo de borrado vectorial, verifica SQL vacío, ausencia de fragmentos recuperados y reparación posterior de los vectores huérfanos.
+- Commits: `1372289` (corrección), `7bc05e3` (prueba). CI del nuevo HEAD pendiente.
+- La Fase 1 continúa abierta; ARC-01 sigue parcial hasta revisar todos los criterios y la CI del HEAD vigente.
