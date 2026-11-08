@@ -77,10 +77,13 @@ def persist_encrypted_result(
 ) -> EncryptedExecutionResult:
     """Guarda ciphertext autenticable; nunca acepta texto plano ni payload vacío."""
     eid = str(uuid.UUID(execution_id))
-    if not isinstance(ciphertext, bytes) or not ciphertext:
-        raise ValueError("ciphertext debe ser bytes no vacíos")
-    if not isinstance(nonce, bytes) or not nonce:
-        raise ValueError("nonce debe ser bytes no vacíos")
+    # AES-GCM usa nonce de 96 bits y añade una etiqueta de autenticación
+    # de 128 bits. Rechazar blobs malformados antes de persistir evita que
+    # ejecuciones "completed" queden irrecuperables para el worker de billing.
+    if not isinstance(ciphertext, bytes) or len(ciphertext) < 16:
+        raise ValueError("ciphertext AES-GCM debe incluir al menos la etiqueta de autenticación")
+    if not isinstance(nonce, bytes) or len(nonce) != 12:
+        raise ValueError("nonce AES-GCM debe tener exactamente 12 bytes")
     if not isinstance(key_id, str) or not key_id.strip() or len(key_id) > 128:
         raise ValueError("key_id inválido")
     digest = hashlib.sha256(ciphertext).hexdigest()
