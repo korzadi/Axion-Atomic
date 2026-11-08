@@ -14,8 +14,8 @@ from api.billing_policy import UsageUnavailable, credits_for_usage
 class ModelRatePolicy:
     model_name: str
     version: str
-    input_weight: int = 1
-    output_weight: int = 1
+    input_weight: float = 1.0
+    output_weight: float = 1.0
     enabled: bool = False
 
 
@@ -25,8 +25,8 @@ class InferenceCharge:
     policy_version: str
     prompt_tokens: int
     output_tokens: int
-    input_weight: int
-    output_weight: int
+    input_weight: float
+    output_weight: float
     credits: int
 
 

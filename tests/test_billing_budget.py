@@ -86,3 +86,23 @@ def test_rejects_invalid_limits_and_weights(bad):
 def test_rejects_invalid_message_shape():
     with pytest.raises(ValueError):
         _budget(messages=[{"role": "tool", "content": "result"}])
+
+
+def test_fractional_weights_reserve_ceiling_credits_exactly():
+    from decimal import Decimal, ROUND_CEILING
+
+    budget = _budget(input_weight=0.01, output_weight=0.01)
+    expected = int(
+        (
+            Decimal(budget.input_tokens_upper_bound) * Decimal("0.01")
+            + Decimal(budget.output_tokens_upper_bound) * Decimal("0.01")
+        ).to_integral_value(rounding=ROUND_CEILING)
+    )
+    assert budget.reserved_credits == expected
+
+
+def test_hundred_tokens_cost_exactly_one_credit_with_approved_weights():
+    budget = _budget(input_weight=0.01, output_weight=0.01)
+    assert budget.reserved_credits == (
+        (budget.input_tokens_upper_bound + budget.output_tokens_upper_bound + 99) // 100
+    )

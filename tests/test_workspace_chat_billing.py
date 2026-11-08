@@ -128,6 +128,8 @@ class WorkspaceChatBillingIntegrationTests(unittest.IsolatedAsyncioTestCase):
             patch("api.workspace_routes.retrieve", new=AsyncMock(return_value="RAG real")),
             patch("api.workspace_routes.settings.billing_enforcement_enabled", True),
             patch("api.workspace_routes.settings.chat_model", "atomic-code:1.1"),
+            patch("api.workspace_routes.settings.billing_input_credit_weight", 1),
+            patch("api.workspace_routes.settings.billing_output_credit_weight", 1),
             patch("api.workspace_routes.attest_runtime", new=AsyncMock(return_value=IDENTITY)),
             patch("api.workspace_routes.EnvironmentResultKeyProvider.active_key", return_value=("billing-v1", b"x" * 32)),
             patch("api.workspace_routes.execute_durable_reserved_inference", new=AsyncMock(return_value=durable)) as execute,

@@ -71,3 +71,19 @@ class BillingPolicyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FractionalWeightCreditTests(unittest.TestCase):
+    def test_hundred_tokens_cost_exactly_one_credit(self):
+        self.assertEqual(credits_for_usage(100, 0, input_weight=0.01, output_weight=0.01), 1)
+        self.assertEqual(credits_for_usage(0, 100, input_weight=0.01, output_weight=0.01), 1)
+        self.assertEqual(credits_for_usage(100, 100, input_weight=0.01, output_weight=0.01), 2)
+
+    def test_partial_credits_round_up(self):
+        self.assertEqual(credits_for_usage(150, 0, input_weight=0.01, output_weight=0.01), 2)
+        self.assertEqual(credits_for_usage(0, 0, input_weight=0.01, output_weight=0.01), 0)
+
+    def test_rejects_invalid_weights(self):
+        for bad in (True, "0.01", -0.01, float("inf"), float("nan")):
+            with self.assertRaises(ValueError):
+                credits_for_usage(1, 1, input_weight=bad)

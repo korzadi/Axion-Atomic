@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from api.billing_policy import UsageUnavailable, credits_for_usage
@@ -24,8 +25,8 @@ class VerifiedExecutionEnvelope:
     model: str
     prompt_tokens: int
     output_tokens: int
-    input_weight: int
-    output_weight: int
+    input_weight: float
+    output_weight: float
     credits: int
     policy_version: str
 
@@ -36,13 +37,25 @@ def _counter(value: Any, name: str) -> int:
     return value
 
 
+def _weight(value: Any, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        raise ExecutionEnvelopeError(f"{name} debe ser un ponderador numérico no negativo")
+    try:
+        weight = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ExecutionEnvelopeError(f"{name} debe ser un ponderador numérico no negativo") from None
+    if not weight.is_finite() or weight < 0:
+        raise ExecutionEnvelopeError(f"{name} debe ser un ponderador numérico no negativo")
+    return float(weight)
+
+
 def build_execution_envelope(
     result: Any,
     *,
     expected_model: str,
     policy_version: str,
-    input_weight: int,
-    output_weight: int,
+    input_weight: int | float,
+    output_weight: int | float,
 ) -> bytes:
     """Serializa resultado y prueba de medición en un único payload cifrable."""
     if not isinstance(expected_model, str) or not expected_model.strip():
@@ -62,8 +75,8 @@ def build_execution_envelope(
         raise ExecutionEnvelopeError("Contenido de respuesta inválido")
     prompt = _counter(getattr(result, "prompt_eval_count", None), "prompt_eval_count")
     output = _counter(getattr(result, "eval_count", None), "eval_count")
-    input_weight = _counter(input_weight, "input_weight")
-    output_weight = _counter(output_weight, "output_weight")
+    input_weight = _weight(input_weight, "input_weight")
+    output_weight = _weight(output_weight, "output_weight")
     credits = credits_for_usage(
         prompt, output, input_weight=input_weight, output_weight=output_weight
     )
@@ -109,8 +122,8 @@ def parse_execution_envelope(data: bytes) -> VerifiedExecutionEnvelope:
         raise ExecutionEnvelopeError("Versión de política inválida")
     prompt = _counter(value["prompt_tokens"], "prompt_tokens")
     output = _counter(value["output_tokens"], "output_tokens")
-    input_weight = _counter(value["input_weight"], "input_weight")
-    output_weight = _counter(value["output_weight"], "output_weight")
+    input_weight = _weight(value["input_weight"], "input_weight")
+    output_weight = _weight(value["output_weight"], "output_weight")
     credits = _counter(value["credits"], "credits")
     expected = credits_for_usage(
         prompt, output, input_weight=input_weight, output_weight=output_weight
@@ -130,8 +143,8 @@ def serialize_billing_execution_result(
     *,
     expected_model: str,
     policy_version: str,
-    input_weight: int,
-    output_weight: int,
+    input_weight: int | float,
+    output_weight: int | float,
 ) -> bytes:
     """Adaptador listo para execute_durable_reserved_inference.serialize_result."""
     return build_execution_envelope(

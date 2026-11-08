@@ -101,8 +101,9 @@ class Settings(BaseSettings):
     auth_enabled: bool = False
     # Facturación transaccional: permanece desactivada hasta configurar clave y cuotas/lotes reales.
     billing_enforcement_enabled: bool = False
-    billing_input_credit_weight: int = 1
-    billing_output_credit_weight: int = 1
+    # 1 crédito = 100 tokens (catálogo comercial V1.0 aprobado por el propietario el 2026-11-08).
+    billing_input_credit_weight: float = 0.01
+    billing_output_credit_weight: float = 0.01
     billing_purchased_fallback_allowed: bool = True
     # Manifiesto del artefacto exacto; sin esto no se permite una inferencia facturable.
     billing_runtime_model_digest: str | None = None
