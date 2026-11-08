@@ -52,7 +52,7 @@ class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(HTTPException) as raised:
                 await workspace_chat(request, user={"id": "viewer-1"})
         self.assertEqual(raised.exception.status_code, 403)
-        authorize.assert_awaited_once_with(
+        authorize.assert_called_once_with(
             {"id": "viewer-1"}, "project-1", ("owner", "admin", "editor")
         )
         retrieve.assert_not_awaited()
