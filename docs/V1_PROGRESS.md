@@ -22,7 +22,7 @@
 | 8 | Administración | 80% | EN PROGRESO |
 | 9 | Créditos y facturación | 80% | EN PROGRESO |
 | 10 | Integración QvaPay | 50% | EN PROGRESO |
-| 11 | Instalación y documentación | 75% | EN PROGRESO |
+| 11 | Instalación y documentación | 80% | EN PROGRESO |
 | 12 | QA y liberación V1.0 | 70% | EN PROGRESO |
 
 **Lectura de los porcentajes:** reflejan implementación y pruebas locales del código inspeccionado, no aceptación en staging. Las cifras heredadas del orden antiguo de fases se conservan solo como histórico en las secciones siguientes.
@@ -718,3 +718,6 @@ El propietario autorizó el alcance de la Fase 11. Se ejecutaron las verificacio
 - Integridad de dumps (lectura, `pg_restore --list`, sin restauración): los tres `pre-frontend-upgrade-*.dump` (2026-11-07/08) son válidos con 274 objetos cada uno y contentura idéntica. `pre-migration-20261107T204351Z.dump` (834 B, 0 objetos, formato CUSTOM, PostgreSQL 16.15) corresponde a un snapshot previo a la primera migración sobre base vacía: coherente, no un dump corrupto.
 - `docker compose --project-name axyron-atomic -f compose.yaml --env-file .env config --quiet` → exit 0 (la configuración valida; no se imprimieron valores de `.env`).
 - No se ejecutó restauración, `--deploy` ni `--upgrade-frontend`; el stack en vivo permanece sin cambios.
+
+### Ajuste de tabla
+Fase 11 pasa de 75 % a **80 %**: el inventario de solo lectura se ejecutó en el host con autorización (OPS-02), la validación de configuración (`compose config --quiet`) quedó verificada y la integridad de los dumps (274 objetos ×3) confirmada. No sube más porque `--deploy/--upgrade-frontend` en stack real y el ensayo de rollback siguen pendientes de autorización interactiva del operador.
