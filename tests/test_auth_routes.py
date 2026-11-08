@@ -182,6 +182,44 @@ class AuthRouteGateTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 503)
         self.assertNotIn(secret_token, str(raised.exception.detail))
 
+    def test_recovery_endpoints_return_generic_responses_even_when_delivery_fails(self):
+        from api.auth_recovery_routes import resend_verification, forgot_password
+        from api.schemas import EmailAddressRequest
+        request = Mock(spec=Request)
+        request.client.host = "198.51.100.31"
+        req = EmailAddressRequest(email="unknown@example.com")
+        with patch("api.auth_recovery_routes.settings.auth_enabled", True), \
+             patch("api.auth_recovery_routes._limit"), \
+             patch("api.auth_recovery_routes.email_delivery_configured", return_value=True), \
+             patch("api.auth_recovery_routes.settings.oauth_public_base_url", "https://axion.example"), \
+             patch("api.auth_recovery_routes._resend_verification_if_pending", side_effect=RuntimeError("mail unavailable")), \
+             patch("api.auth_recovery_routes._send_password_reset_if_active", side_effect=RuntimeError("mail unavailable")):
+            resend = asyncio.run(resend_verification(req, request))
+            forgot = asyncio.run(forgot_password(req, request))
+        self.assertEqual(resend.status_code, 202)
+        self.assertEqual(forgot.status_code, 202)
+        self.assertEqual(resend.body, b'{"status":"accepted","message":"Si existe una cuenta pendiente para ese correo, recibir\xc3\xa1s instrucciones."}')
+        self.assertEqual(forgot.body, b'{"status":"accepted","message":"Si existe una cuenta activa para ese correo, recibir\xc3\xa1s instrucciones."}')
+
+    def test_recovery_endpoints_do_not_reveal_whether_email_delivery_is_configured(self):
+        from api.auth_recovery_routes import resend_verification, forgot_password
+        from api.schemas import EmailAddressRequest
+        request = Mock(spec=Request)
+        request.client.host = "198.51.100.32"
+        req = EmailAddressRequest(email="account@example.com")
+        with patch("api.auth_recovery_routes.settings.auth_enabled", True), \
+             patch("api.auth_recovery_routes._limit"), \
+             patch("api.auth_recovery_routes.email_delivery_configured", return_value=False), \
+             patch("api.auth_recovery_routes.settings.oauth_public_base_url", None):
+            resend = asyncio.run(resend_verification(req, request))
+            forgot = asyncio.run(forgot_password(req, request))
+        self.assertEqual(resend.status_code, 202)
+        self.assertEqual(forgot.status_code, 202)
+        self.assertIn(b'"status":"accepted"', resend.body)
+        self.assertIn(b'"status":"accepted"', forgot.body)
+        self.assertNotIn(b"not configured", resend.body.lower())
+        self.assertNotIn(b"not configured", forgot.body.lower())
+
     def test_oauth_provider_discovery_exposes_only_availability_flags(self):
         from api.auth_routes import oauth_providers
         with patch("api.auth_routes.configured", side_effect=lambda settings, provider: provider == "google"):
