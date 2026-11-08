@@ -145,6 +145,34 @@ class IndexerTests(PipelineBase):
         self.assertFalse(any("obsoletas" in warning for warning in result.warnings))
         self.assertTrue(all(chunk.id not in old_tax_ids for chunk in result.chunks))
 
+    async def test_removed_file_cleanup_failure_is_reconciled(self):
+        await self.idx.index_project(self.ws)
+        old_page_ids = {
+            point.id for point in self.store.points.values()
+            if point.payload["project_id"] == "p1" and point.payload["path"] == "src/page.py"
+        }
+        (self.root / "src/page.py").unlink()
+
+        class FailOnceCleanupStore(InMemoryVectorStore):
+            def __init__(self):
+                super().__init__()
+                self.cleanup_calls = 0
+
+            async def delete_ids(self, ids):
+                self.cleanup_calls += 1
+                if self.cleanup_calls == 1:
+                    raise TransportError("temporary cleanup failure", retryable=True)
+                await super().delete_ids(ids)
+
+        store = FailOnceCleanupStore()
+        store.points = self.store.points
+        report = await RepoIndexer(self.emb, store, self.meta).index_project(self.ws)
+
+        self.assertIn("src/page.py", report.removed)
+        self.assertNotIn("src/page.py", self.meta.list_files("p1"))
+        self.assertTrue(old_page_ids.isdisjoint(store.points))
+        self.assertGreater(report.orphaned_removed, 0)
+
     async def test_truncated_walk_deletes_nothing(self):
         await self.idx.index_project(self.ws)
         small = RepoIndexer(self.emb, self.store, self.meta, max_files=1)
