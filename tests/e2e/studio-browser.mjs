@@ -131,7 +131,7 @@ try {
     } else if (url.pathname === "/admin/users") {
       body = { users: [], pagination: { total: 0, limit: 50, offset: 0, has_more: false } };
     } else if (url.pathname === "/admin/billing/overview") {
-      body = { reservations: [], ledger: [], executions: [], usage: [] };
+      body = { reservations: [], ledger: [], executions: [], usage: [], invoices: [{ status: "created", count: 1, sats: 21000, overdue_open: 0 }] };
     } else if (url.pathname === "/admin/billing/executions") {
       body = { executions: [], pagination: { total: 0, limit: 25, offset: 0, has_more: false } };
     } else if (url.pathname === "/admin/billing/executions/recover") {
@@ -150,6 +150,8 @@ try {
   await managePage.goto(baseUrl + "/admin-test");
   await managePage.getByRole("heading", { name: "Gestión de usuarios y roles" }).waitFor();
   await managePage.getByRole("heading", { name: "Reversión de consumo liquidado" }).waitFor();
+  await managePage.getByRole("heading", { name: "Invoices QvaPay" }).waitFor();
+  await managePage.getByText("21000").waitFor();
   await managePage.locator("#um-user").fill("user-1");
   await managePage.locator("#um-reason").fill("Motivo administrativo verificado");
   await managePage.locator("#um-grant").click();
