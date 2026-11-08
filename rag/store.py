@@ -31,6 +31,8 @@ class VectorStore(Protocol):
     async def ensure(self) -> None: ...
     async def upsert(self, points: list[Point]) -> None: ...
     async def delete_path(self, project_id: str, path: str) -> None: ...
+    async def delete_ids(self, ids: list[str]) -> None: ...
+    async def list_project_ids(self, project_id: str) -> set[str]: ...
     async def delete_project(self, project_id: str) -> None: ...
     async def search(self, project_id: str, vector: list[float], limit: int) -> list[Hit]: ...
 
@@ -38,6 +40,18 @@ class VectorStore(Protocol):
 def _require(project_id: str) -> None:
     if not project_id or not isinstance(project_id, str):
         raise ValueError("project_id es obligatorio")
+
+
+def _validate_point_payload(payload: dict) -> None:
+    """Exige el mismo contrato de aislamiento y trazabilidad en todos los stores."""
+    if not isinstance(payload, dict):
+        raise ValueError("payload debe ser un objeto")
+    project_id = payload.get("project_id")
+    path = payload.get("path")
+    if not isinstance(project_id, str) or not project_id.strip():
+        raise ValueError("payload.project_id debe ser una cadena no vacía")
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError("payload.path debe ser una cadena no vacía")
 
 
 class InMemoryVectorStore:
@@ -49,14 +63,26 @@ class InMemoryVectorStore:
     async def ensure(self) -> None: ...
 
     async def upsert(self, points):
-        for p in points:
-            if not p.payload.get("project_id") or "path" not in p.payload:
-                raise ValueError("payload sin project_id/path")
-            self.points[p.id] = p
+        # Validar el lote completo antes de mutar el almacén: un punto inválido
+        # no debe dejar una ingesta parcial en memoria.
+        for point in points:
+            _validate_point_payload(point.payload)
+        for point in points:
+            self.points[point.id] = point
 
     async def delete_path(self, project_id, path):
         _require(project_id)
         self.points = {k: p for k, p in self.points.items() if not (p.payload["project_id"] == project_id and p.payload["path"] == path)}
+
+    async def delete_ids(self, ids):
+        wanted = set(ids)
+        if not wanted:
+            return
+        self.points = {key: point for key, point in self.points.items() if key not in wanted}
+
+    async def list_project_ids(self, project_id):
+        _require(project_id)
+        return {key for key, point in self.points.items() if point.payload.get("project_id") == project_id}
 
     async def delete_project(self, project_id):
         _require(project_id)
@@ -98,11 +124,12 @@ class QdrantStore:
             await self._req("PUT", "/index", {"field_name": field, "field_schema": "keyword"})
 
     async def upsert(self, points):
+        # La validación precede a cualquier petición para impedir que un lote
+        # parcialmente inválido publique sus primeros fragmentos.
+        for point in points:
+            _validate_point_payload(point.payload)
         for i in range(0, len(points), 64):
             batch = points[i:i + 64]
-            for p in batch:
-                if not p.payload.get("project_id"):
-                    raise ValueError("payload sin project_id")
             await self._req("PUT", "/points?wait=true", {"points": [{"id": p.id, "vector": p.vector, "payload": p.payload} for p in batch]})
 
     @staticmethod
@@ -115,6 +142,28 @@ class QdrantStore:
 
     async def delete_path(self, project_id, path):
         await self._req("POST", "/points/delete?wait=true", {"filter": self._filter(project_id, path)})
+
+    async def delete_ids(self, ids):
+        if not ids:
+            return
+        await self._req("POST", "/points/delete?wait=true", {"points": list(ids)})
+
+    async def list_project_ids(self, project_id):
+        flt = self._filter(project_id)
+        ids = set()
+        offset = None
+        while True:
+            body = {"filter": flt, "limit": 256, "with_payload": False, "with_vectors": False}
+            if offset is not None:
+                body["offset"] = offset
+            data = await self._req("POST", "/points/scroll", body)
+            result = data.get("result") or {}
+            ids.update(str(point["id"]) for point in result.get("points", []))
+            next_offset = result.get("next_page_offset")
+            if next_offset is None or next_offset == offset:
+                break
+            offset = next_offset
+        return ids
 
     async def delete_project(self, project_id):
         await self._req("POST", "/points/delete?wait=true", {"filter": self._filter(project_id)})

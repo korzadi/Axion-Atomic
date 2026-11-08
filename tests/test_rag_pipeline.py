@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from agent.workspace import Workspace
+from core.errors import TransportError
 from rag.chunker import Chunk
 from rag.indexer import RepoIndexer
 from rag.memory import MemoryManager
@@ -84,6 +85,141 @@ class IndexerTests(PipelineBase):
         self.assertEqual(len(rep.errors), 1); self.assertEqual(rep.removed, [])
         self.assertEqual((set(self.store.points), self.meta.stats("p1")), before)
 
+    async def test_vector_upsert_failure_keeps_previous_file_index(self):
+        await self.idx.index_project(self.ws)
+        old_ids = set(self.store.points)
+        old_sha = self.meta.list_files("p1")["src/tax.py"]
+        (self.root / "src/tax.py").write_text(TAX + "\n# cambio de versión\n")
+
+        class FailingStore(InMemoryVectorStore):
+            async def upsert(self, points):
+                raise TransportError("vector store unavailable", retryable=True)
+
+        failing_store = FailingStore()
+        failing_store.points = self.store.points
+        bad = RepoIndexer(self.emb, failing_store, self.meta)
+        report = await bad.index_project(self.ws)
+
+        self.assertTrue(any("src/tax.py" in error for error in report.errors))
+        self.assertEqual(self.meta.list_files("p1")["src/tax.py"], old_sha)
+        self.assertEqual(set(failing_store.points), old_ids)
+        self.assertIn("src/tax.py", {point.payload["path"] for point in failing_store.points.values()})
+
+    async def test_cleanup_failure_keeps_new_metadata_and_retriever_ignores_old_vectors(self):
+        await self.idx.index_project(self.ws)
+        old_tax_ids = {
+            point.id for point in self.store.points.values()
+            if point.payload["project_id"] == "p1" and point.payload["path"] == "src/tax.py"
+        }
+        old_sha = self.meta.list_files("p1")["src/tax.py"]
+        (self.root / "src/tax.py").write_text(TAX + "\n# versión nueva\n")
+
+        class FailOnceCleanupStore(InMemoryVectorStore):
+            def __init__(self):
+                super().__init__()
+                self.cleanup_calls = 0
+
+            async def delete_ids(self, ids):
+                self.cleanup_calls += 1
+                if self.cleanup_calls == 1:
+                    raise TransportError("vector cleanup unavailable", retryable=True)
+                await super().delete_ids(ids)
+
+        failing_store = FailOnceCleanupStore()
+        failing_store.points = self.store.points
+        indexer = RepoIndexer(self.emb, failing_store, self.meta)
+        report = await indexer.index_project(self.ws)
+
+        new_sha = self.meta.list_files("p1")["src/tax.py"]
+        self.assertNotEqual(new_sha, old_sha)
+        self.assertTrue(any("src/tax.py" in error for error in report.errors))
+        self.assertGreaterEqual(failing_store.cleanup_calls, 2)  # reconciliación reintenta la limpieza
+        self.assertGreater(report.orphaned_removed, 0)
+        self.assertTrue(old_tax_ids.isdisjoint(failing_store.points))
+        self.assertTrue(any(
+            point.payload["path"] == "src/tax.py" and point.id not in old_tax_ids
+            for point in failing_store.points.values()
+        ))
+
+        result = await Retriever(self.emb, failing_store, self.meta).retrieve("p1", "calculate_tax rate", limit=10)
+        self.assertFalse(any("obsoletas" in warning for warning in result.warnings))
+        self.assertTrue(all(chunk.id not in old_tax_ids for chunk in result.chunks))
+
+    async def test_removed_file_cleanup_failure_is_reconciled(self):
+        await self.idx.index_project(self.ws)
+        old_page_ids = {
+            point.id for point in self.store.points.values()
+            if point.payload["project_id"] == "p1" and point.payload["path"] == "src/page.py"
+        }
+        (self.root / "src/page.py").unlink()
+
+        class FailOnceCleanupStore(InMemoryVectorStore):
+            def __init__(self):
+                super().__init__()
+                self.cleanup_calls = 0
+
+            async def delete_ids(self, ids):
+                self.cleanup_calls += 1
+                if self.cleanup_calls == 1:
+                    raise TransportError("temporary cleanup failure", retryable=True)
+                await super().delete_ids(ids)
+
+        store = FailOnceCleanupStore()
+        store.points = self.store.points
+        report = await RepoIndexer(self.emb, store, self.meta).index_project(self.ws)
+
+        self.assertIn("src/page.py", report.removed)
+        self.assertNotIn("src/page.py", self.meta.list_files("p1"))
+        self.assertTrue(old_page_ids.isdisjoint(store.points))
+        self.assertGreater(report.orphaned_removed, 0)
+
+    async def test_remove_project_sql_failure_preserves_vector_data(self):
+        await self.idx.index_project(self.ws)
+
+        class FailingMeta:
+            def __init__(self, delegate):
+                self.delegate = delegate
+
+            def delete_project_index(self, project_id):
+                raise RuntimeError("database unavailable")
+
+        indexer = RepoIndexer(self.emb, self.store, FailingMeta(self.meta))
+        before = set(self.store.points)
+        with self.assertRaisesRegex(RuntimeError, "database unavailable"):
+            await indexer.remove_project("p1")
+        self.assertEqual(set(self.store.points), before)
+        self.assertGreater(self.meta.stats("p1")["chunks"], 0)
+
+    async def test_remove_project_metadata_first_and_reconcile_vector_failure(self):
+        await self.idx.index_project(self.ws)
+
+        class FailOnceProjectDeleteStore(InMemoryVectorStore):
+            def __init__(self):
+                super().__init__()
+                self.delete_calls = 0
+
+            async def delete_project(self, project_id):
+                self.delete_calls += 1
+                if self.delete_calls == 1:
+                    raise TransportError("temporary project cleanup failure", retryable=True)
+                await super().delete_project(project_id)
+
+        store = FailOnceProjectDeleteStore()
+        store.points = self.store.points
+        indexer = RepoIndexer(self.emb, store, self.meta)
+
+        with self.assertRaises(TransportError):
+            await indexer.remove_project("p1")
+
+        self.assertEqual(self.meta.stats("p1"), {"files": 0, "chunks": 0})
+        self.assertTrue(await store.list_project_ids("p1"))  # huérfanos, pero ya invisibles en SQL
+        result = await Retriever(self.emb, store, self.meta).retrieve("p1", "calculate_tax")
+        self.assertEqual(result.chunks, [])
+
+        removed = await indexer.reconcile_project("p1")
+        self.assertGreater(removed, 0)
+        self.assertEqual(await store.list_project_ids("p1"), set())
+
     async def test_truncated_walk_deletes_nothing(self):
         await self.idx.index_project(self.ws)
         small = RepoIndexer(self.emb, self.store, self.meta, max_files=1)
@@ -128,6 +264,15 @@ class MetaTests(unittest.TestCase):
         self.assertEqual(m.get_chunks("p2", ["id1"]), {})
         self.assertEqual(m.lexical_candidates("p2", ["hola"]), []); self.assertEqual(len(m.lexical_candidates("p1", ["hola"])), 1)
         self.assertEqual(m.lexical_candidates("p1", ["x'; DROP TABLE rag_chunks;--"]), [])        # términos no alfanuméricos descartados
+
+    def test_list_project_chunk_ids_is_scoped(self):
+        m = make_meta()
+        chunk = Chunk(0, 1, 1, None, "text", "contenido")
+        m.replace_file("p1", "a.py", "s1", None, 1, [("p1-id", chunk)], "2026-01-01")
+        m.replace_file("p2", "a.py", "s2", None, 1, [("p2-id", chunk)], "2026-01-01")
+        self.assertEqual(m.list_project_chunk_ids("p1"), {"p1-id"})
+        self.assertEqual(m.list_project_chunk_ids("p2"), {"p2-id"})
+        self.assertEqual(m.list_project_chunk_ids("missing"), set())
 
 
 class RetrieverTests(PipelineBase):
