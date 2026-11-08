@@ -12,7 +12,7 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 
 | ID | Área | Criterio | Evidencia inspeccionada | Estado |
 |---|---|---|---|---|
-| ARC-01 | Arquitectura | Contratos API, frontend, DB y RAG coherentes | `api/main.py`, routers, Compose | Parcial |
+| ARC-01 | Arquitectura | Contratos API, frontend, DB y RAG coherentes | `api/main.py`, routers, Compose; contrato homogéneo `project_id`/`path` en stores RAG y validación de lote previa a escritura (commit `31d44e3`) | Parcial |
 | API-01 | API | Health DB/Ollama/modelos/Qdrant/Redis | VPS devolvió 6/6 OK el 07-11-2026 | Verificada en VPS en ese momento |
 | API-02 | API | Errores de capacidad/pool controlados | Handlers en `api/main.py` | Implementada; prueba HEAD pendiente |
 | STU-01 | Studio | Proyectos autenticados | `/auth/projects` y SPA | Parcial; AUTH desactivada operativamente |
@@ -197,6 +197,54 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Herramientas: `/node_modules/` añadido a `.gitignore`; `npm install --no-save` local como en CI.
 - CI `42488531176` (`68ffa13`) y `42488645522` (`1db1d32`): los cinco jobs en verde.
 - Expiración automática de órdenes QvaPay pendientes vencidas y de sus invoices abiertas (evento `expired`, idempotente) verificada en instancia PostgreSQL desechable y en CI (`postgres-migrations`: 74 passed).
+
+## Revisión incremental RAG — contrato de payload y atomicidad de lote (8 de noviembre de 2026)
+
+- Hallazgo ARC-01: `InMemoryVectorStore.upsert` exigía `project_id` y `path`, mientras `QdrantStore.upsert` solo exigía `project_id`. Los dos backends aceptaban contratos distintos para la misma interfaz `VectorStore`.
+- Corrección en `rag/store.py`: validación común de `project_id` y `path` como cadenas no vacías, aplicada por ambos stores.
+- La validación ahora recorre el lote completo antes de mutar memoria o enviar cualquier batch HTTP a Qdrant. Un elemento inválido al final de un lote grande ya no deja publicados los primeros 64 puntos.
+- Regresiones en `tests/test_rag_store_http.py`: payload ausente/inválido, elemento inválido en el último segmento de un lote mayor de 64, ausencia de escrituras parciales y consistencia del backend en memoria.
+- Commits: `1aa749608e59402e0f7ccee7bd634b93b1b91fb9` (implementación) y `31d44e31238095c2af69d96063270f77d9685aa1` (regresiones).
+- Verificación: cambios publicados en `agent/chatgpt`; pytest y CI de estos commits todavía no se han ejecutado/confirmado. No se declara ARC-01 cerrado.
+- Alcance: no se cambió esquema SQL, migraciones, frontend, configuración externa ni datos de Qdrant; no se ejecutó ninguna operación contra servicios reales.
+
+
+## Protección de la versión RAG durante reindexación (8 de noviembre de 2026)
+
+- Hallazgo ARC-01: `RepoIndexer` borraba todos los vectores del archivo antes de publicar la versión nueva. Un error de Qdrant durante `upsert` podía dejar sin vectores el archivo aunque los metadatos SQL conservaran la versión anterior.
+- Corrección: la indexación obtiene los IDs anteriores por `project_id` y `path`, publica los nuevos vectores, confirma `MetaStore.replace_file` (transacción SQL) y solo entonces elimina los IDs sustituidos.
+- `VectorStore` incorpora `delete_ids`, implementado en memoria y Qdrant con selector explícito de IDs; el filtro de proyecto se mantiene en la creación/consulta y los IDs de limpieza provienen de una consulta SQL acotada al proyecto y ruta.
+- Regresiones: fallo de publicación conserva vectores y SHA anteriores; borrado selectivo de IDs probado en los dos backends; las pruebas de pipeline existentes siguen verificando reemplazo normal sin huérfanos.
+- Commits: `e8b14e9` (protocolo y backends), `a69947e` (consulta SQL de IDs), `73d7a98` (orden seguro de reemplazo), `7405270` y `5674b74` (regresiones).
+- CI del cambio: pendiente. La ejecución anterior del PR #6 (`42486774940`) aprobó todos los trabajos, pero no incluye estos commits posteriores.
+- Riesgo residual controlado: si falla la limpieza después de confirmar los metadatos nuevos, los vectores antiguos pueden quedar huérfanos; el Retriever los ignora al no existir sus IDs en `MetaStore`. No se borran datos vigentes ni se amplía el alcance fuera del proyecto/ruta.
+
+- Primera CI del reemplazo seguro (HEAD `073bca6`): 909 passed, 10 skipped y 1 fallida. El único fallo era una aserción del test simulado que comparaba la ruta HTTP sin contemplar `?wait=true`; la operación de borrado selectivo sí eliminó los IDs esperados. Ajuste de la aserción publicado en `b36fd8d`; nueva CI pendiente.
+
+- Regresión adicional `test_cleanup_failure_keeps_new_metadata_and_retriever_ignores_old_vectors` (`36a3b70`): simula fallo de limpieza posterior al commit SQL; verifica que los metadatos nuevos permanecen, que la recuperación señala las referencias obsoletas y que ningún fragmento antiguo llega al resultado. La CI de este commit queda pendiente.
+
+
+## Reconciliación de vectores huérfanos RAG (8 de noviembre de 2026)
+
+- Hallazgo ARC-01: la eliminación posterior a una reindexación podía fallar transitoriamente y dejar vectores huérfanos. El Retriever ya los ignoraba por falta de metadatos, pero no existía un mecanismo de reparación automática.
+- Implementación: `MetaStore.list_project_chunk_ids` obtiene los IDs SQL canónicos por proyecto; `VectorStore.list_project_ids` enumera los IDs vectoriales del mismo proyecto. Qdrant usa `POST /points/scroll` con filtro obligatorio `project_id`, paginación de 256 puntos y sin recuperar payloads ni vectores; memoria usa filtro equivalente.
+- `RepoIndexer.reconcile_project` calcula `vector_ids - canonical_ids` y elimina únicamente esos IDs. La reconciliación se ejecuta al final de cada indexación, incluso después de un fallo de limpieza por archivo, para reintentar huérfanos en la misma ejecución. Un fallo de enumeración/limpieza queda registrado en `IndexReport.errors`, sin borrar metadatos ni vectores canónicos.
+- Regresiones: paginación Qdrant en más de 256 puntos; filtro de proyecto; consulta SQL aislada; fallo de limpieza de una vez y reparación automática; Retriever sin advertencias de referencias obsoletas tras reparación.
+- Commits: `79de8af` (listado vectorial por proyecto), `592184a` (IDs canónicos SQL), `98ece52` (reconciliador), `6454335` (paginación Qdrant) y `87db339` (regresiones).
+- CI: la ejecución del HEAD previo `d5c6544` terminó correctamente; estos commits requieren una nueva CI. No se ejecutó Qdrant real.
+- Alcance de seguridad: reconciliación limitada a `project_id`; nunca elimina IDs de otro proyecto ni elimina IDs que sigan presentes en SQL.
+
+- Extensión de seguridad en borrado de archivos eliminados/ahora sensibles: el indexador captura primero los IDs antiguos, elimina los metadatos SQL canónicos y después solicita el borrado vectorial selectivo. Si la limpieza falla, la reconciliación del final de la indexación vuelve a intentarlo. Se añade `test_removed_file_cleanup_failure_is_reconciled` para verificar que no se conserva un vector sin archivo SQL. Commits `4150eea`, `0b28b25` y `2eb4bf5`.
+
+
+## Verificación CI y eliminación segura de proyectos RAG (8 de noviembre de 2026)
+
+- CI completa del HEAD `14fad519a0a381f8fee199741dab6dc3c6324242`, run `42487560721`: los cinco jobs terminaron `success` (Python tests, Qdrant Cloud integration, Studio browser E2E, PostgreSQL migrations y container image build). Esta evidencia corresponde exclusivamente a ese SHA.
+- Nueva revisión ARC-01: `RepoIndexer.remove_project` eliminaba primero los vectores y después los metadatos SQL. Si la operación SQL fallaba, el Retriever podía conservar fragmentos canónicos sin sus vectores correspondientes.
+- Corrección: serializar la eliminación del proyecto con el mismo lock por proyecto usado en indexación; eliminar primero el índice canónico SQL y luego los vectores. Si Qdrant falla, quedan vectores huérfanos invisibles para la recuperación y eliminables por `reconcile_project`.
+- Regresión `test_remove_project_metadata_first_and_reconcile_vector_failure`: simula fallo de borrado vectorial, verifica SQL vacío, ausencia de fragmentos recuperados y reparación posterior de los vectores huérfanos.
+- Commits: `1372289` (corrección), `7bc05e3` (prueba). CI del nuevo HEAD pendiente.
+- La Fase 1 continúa abierta; ARC-01 sigue parcial hasta revisar todos los criterios y la CI del HEAD vigente.
 
 ## Auditoría automática de accesibilidad inicial — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
 
