@@ -626,3 +626,22 @@ Confirmar CI del SHA publicado; después continuar Fase 11 (preflight/staging) y
 - `tests/e2e/a11y-scan.mjs` amplía el escaneo axe WCAG 2 A/AA a las vistas autenticadas del Studio (`#app/inicio`, `#app/facturacion`) con backend simulado: **0 violaciones** también en ambas.
 - STU-04 queda auditada a nivel automático inicial (landing, Studio, admin login y administración); siguen sin verificar navegación completa por teclado y lectores de pantalla reales, así como el backend en staging.
 - CI de la integración actualizada a `f98ead9`: 5/5 en verde. PR #7 pendiente de revisión del propietario.
+
+## Checkpoint Fase 9/10 — validación comercial V1 con mediciones reales (2026-11-08, `agent/opencode-vps`)
+
+### Alcance autorizado por el propietario
+
+El propietario autorizó el trabajo en `agent/opencode-vps` (no en `agent/chatgpt`). Se respetó: sin cambios en catálogo/precios/configuración, cobros desactivados, sin merge.
+
+### Implementado
+- `docs/COMMERCIAL_VALIDATION_V1.md`: **entregables A–H** de la especificación comercial aprobada:
+  - Auditoría del sistema (§A) con el estado real de payment_orders, reservas, ledger, reversos, expiración, conciliación QvaPay, medición sombra de tokens.
+  - Matriz de costes con datos **medidos** en el host (atomic-code:1.1: 26 tok/s prompt eval, ~10.3 tok/s eval output; prompt medio 26/96 tokens; embedding respondió) + tarifas del roadmap marcadas como provisional (no medida).
+  - Simulación por plan/paquete y sensibilidad de comisión (0,5 %/1 %/2,5 %): coste variable máximo por crédito para conservar margen ≥35 % (STARTER 0,0108, PLUS 0,0086, PRO 0,0076, STUDIO 0,0072 @0,5 %).
+  - Hallazgo crítico: pesos actuales 1 crédito = 1 token hacen inservible el catálogo (FREE ≈ 0,4 turnos); propuesta documentada de 1 crédito = 100 tokens **pendiente de decisión del propietario**.
+  - Ningún plan incumple el 35 % con hipótesis actuales; margen no certificable sin coste atribuible medido durante 30 días de sombra y comisión Lightning confirmada por escrito.
+- `scripts/measure_model_tokens.py`: runner reproducible de medición de tokens (solo lectura, sin secretos).
+- cobros, checkout y `BILLING_ENFORCEMENT_ENABLED` siguen desactivados; catálogo `preview_only`; VPS, `.env` y secretos intactos.
+
+### Pendiente
+- Decisiones del propietario (pesos de créditos, tarifa por modelo versionada en BD, confirmación por escrito de comisión QvaPay, atribución de costes, términos legales) antes de habilitar comercialización.
