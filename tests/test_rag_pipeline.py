@@ -114,11 +114,18 @@ class IndexerTests(PipelineBase):
         old_sha = self.meta.list_files("p1")["src/tax.py"]
         (self.root / "src/tax.py").write_text(TAX + "\n# versión nueva\n")
 
-        class FailingCleanupStore(InMemoryVectorStore):
-            async def delete_ids(self, ids):
-                raise TransportError("vector cleanup unavailable", retryable=True)
+        class FailOnceCleanupStore(InMemoryVectorStore):
+            def __init__(self):
+                super().__init__()
+                self.cleanup_calls = 0
 
-        failing_store = FailingCleanupStore()
+            async def delete_ids(self, ids):
+                self.cleanup_calls += 1
+                if self.cleanup_calls == 1:
+                    raise TransportError("vector cleanup unavailable", retryable=True)
+                await super().delete_ids(ids)
+
+        failing_store = FailOnceCleanupStore()
         failing_store.points = self.store.points
         indexer = RepoIndexer(self.emb, failing_store, self.meta)
         report = await indexer.index_project(self.ws)
@@ -126,14 +133,16 @@ class IndexerTests(PipelineBase):
         new_sha = self.meta.list_files("p1")["src/tax.py"]
         self.assertNotEqual(new_sha, old_sha)
         self.assertTrue(any("src/tax.py" in error for error in report.errors))
-        self.assertTrue(old_tax_ids.issubset(failing_store.points))
+        self.assertGreaterEqual(failing_store.cleanup_calls, 2)  # reconciliación reintenta la limpieza
+        self.assertGreater(report.orphaned_removed, 0)
+        self.assertTrue(old_tax_ids.isdisjoint(failing_store.points))
         self.assertTrue(any(
             point.payload["path"] == "src/tax.py" and point.id not in old_tax_ids
             for point in failing_store.points.values()
         ))
 
         result = await Retriever(self.emb, failing_store, self.meta).retrieve("p1", "calculate_tax rate", limit=10)
-        self.assertTrue(any("obsoletas" in warning for warning in result.warnings))
+        self.assertFalse(any("obsoletas" in warning for warning in result.warnings))
         self.assertTrue(all(chunk.id not in old_tax_ids for chunk in result.chunks))
 
     async def test_truncated_walk_deletes_nothing(self):
@@ -180,6 +189,15 @@ class MetaTests(unittest.TestCase):
         self.assertEqual(m.get_chunks("p2", ["id1"]), {})
         self.assertEqual(m.lexical_candidates("p2", ["hola"]), []); self.assertEqual(len(m.lexical_candidates("p1", ["hola"])), 1)
         self.assertEqual(m.lexical_candidates("p1", ["x'; DROP TABLE rag_chunks;--"]), [])        # términos no alfanuméricos descartados
+
+    def test_list_project_chunk_ids_is_scoped(self):
+        m = make_meta()
+        chunk = Chunk(0, 1, 1, None, "text", "contenido")
+        m.replace_file("p1", "a.py", "s1", None, 1, [("p1-id", chunk)], "2026-01-01")
+        m.replace_file("p2", "a.py", "s2", None, 1, [("p2-id", chunk)], "2026-01-01")
+        self.assertEqual(m.list_project_chunk_ids("p1"), {"p1-id"})
+        self.assertEqual(m.list_project_chunk_ids("p2"), {"p2-id"})
+        self.assertEqual(m.list_project_chunk_ids("missing"), set())
 
 
 class RetrieverTests(PipelineBase):
