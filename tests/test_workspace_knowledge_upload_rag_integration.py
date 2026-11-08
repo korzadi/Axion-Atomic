@@ -106,6 +106,33 @@ class WorkspaceKnowledgeUploadRagIntegrationTests(unittest.IsolatedAsyncioTestCa
         with self.assertRaises(service.EmbeddingIdentityMigrationRequired):
             await service.retrieve("consulta", "project-legacy")
 
+    async def test_malformed_embedding_identity_blocks_retrieval(self):
+        from qdrant_client import models
+        malformed_payloads = [
+            {"embedding_model": "   ", "embedding_dimension": service.settings.embed_dimension},
+            {"embedding_model": "nomic-embed-text:latest", "embedding_dimension": True},
+            {"embedding_model": "nomic-embed-text:latest", "embedding_dimension": 0},
+            {"embedding_model": "nomic-embed-text:latest", "embedding_dimension": "768"},
+        ]
+        for index, identity in enumerate(malformed_payloads):
+            project_id = f"project-malformed-{index}"
+            self.client.upsert(
+                collection_name=self.collection,
+                points=[models.PointStruct(
+                    id=f"malformed-point-{index}",
+                    vector=[1.0] + [0.0] * (service.settings.embed_dimension - 1),
+                    payload={
+                        "project_id": project_id,
+                        "path": "malformed.txt",
+                        "text": "must not be retrieved",
+                        **identity,
+                    },
+                )],
+            )
+            with self.subTest(identity=identity):
+                with self.assertRaises(service.EmbeddingIdentityMigrationRequired):
+                    await service.retrieve("consulta", project_id)
+
 
 if __name__ == "__main__":
     unittest.main()
