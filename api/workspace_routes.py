@@ -466,7 +466,7 @@ async def workspace_chat(
     user=Depends(_csrf_user),
     idempotency_key_header: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    await run_in_threadpool(_project_role, user, req.project_id, ("owner", "admin", "editor", "viewer"))
+    await run_in_threadpool(_project_role, user, req.project_id, ("owner", "admin", "editor"))
     if req.stream:
         raise HTTPException(status_code=400, detail="Streaming no está implementado")
     total_chars = sum(len(message.content) for message in req.messages)
