@@ -1,5 +1,8 @@
 import unittest
+from unittest.mock import patch
 
+from core.errors import TransportError
+from core.ollama_transport import OllamaTransport
 from rag.embedding_identity import (
     EmbeddingIdentity,
     canonical_model_name,
@@ -34,6 +37,36 @@ class EmbeddingIdentityTests(unittest.TestCase):
             require_compatible_embeddings(expected, EmbeddingIdentity("nomic-embed-text:v2", 768))
         with self.assertRaisesRegex(ValueError, "incompatible"):
             require_compatible_embeddings(expected, EmbeddingIdentity("nomic-embed-text", 1024))
+
+
+class OllamaTransportIdentityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rejects_runtime_model_mismatch(self):
+        transport = OllamaTransport("http://ollama:11434")
+        with patch.object(transport, "_post_json", return_value={
+            "model": "other-model:latest", "embeddings": [[0.1, 0.2]],
+        }):
+            with self.assertRaisesRegex(TransportError, "modelo de embeddings distinto"):
+                await transport.embed("nomic-embed-text", ["texto"])
+
+    async def test_accepts_implicit_latest_alias_from_runtime(self):
+        transport = OllamaTransport("http://ollama:11434")
+        with patch.object(transport, "_post_json", return_value={
+            "model": "nomic-embed-text:latest", "embeddings": [[0.1, 0.2]],
+        }):
+            self.assertEqual(await transport.embed("nomic-embed-text", ["texto"]), [[0.1, 0.2]])
+
+
+    def test_api_and_repository_embedder_share_settings_identity(self):
+        from rag.embedder import OllamaEmbedder
+
+        class Settings:
+            embed_model = "nomic-embed-text"
+            embed_dimension = 768
+
+        api_identity = EmbeddingIdentity.from_settings(Settings())
+        repository_embedder = OllamaEmbedder.from_settings(object(), Settings())
+        self.assertEqual(repository_embedder.identity, api_identity)
+        self.assertEqual(repository_embedder.dimension, api_identity.dimension)
 
 
 if __name__ == "__main__":

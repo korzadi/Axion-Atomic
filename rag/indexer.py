@@ -13,6 +13,7 @@ from agent.workspace import Workspace
 from core.errors import AxionError
 from rag.chunker import chunk_file
 from rag.embedder import Embedder
+from rag.embedding_identity import require_embedder_store_compatibility
 from rag.meta import MetaStore
 from rag.store import Point, VectorStore
 
@@ -42,6 +43,7 @@ def embed_text(rel: str, symbol: str | None, text: str) -> str:
 
 class RepoIndexer:
     def __init__(self, embedder: Embedder, store: VectorStore, meta: MetaStore, max_files: int = 5000):
+        require_embedder_store_compatibility(embedder, store)
         self.embedder, self.store, self.meta, self.max_files = embedder, store, meta, max_files
         self._locks: dict[str, asyncio.Lock] = {}
 

@@ -12,6 +12,7 @@ from qdrant_client import QdrantClient, models
 from api.config import settings
 from api.ollama import embed
 from rag.chunking import chunk_text
+from rag.embedding_identity import EmbeddingIdentity
 
 client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
 logger = logging.getLogger(__name__)
@@ -22,6 +23,64 @@ _COLLECTION_CHECK_INTERVAL_SECONDS = 60.0
 
 MAX_MANUAL_INGEST_CHARS = 100_000
 MAX_MANUAL_SOURCE_CHARS = 500
+MAX_IDENTITY_PREFLIGHT_POINTS = 10_000
+
+
+def _embedding_identity_payload() -> dict:
+    identity = EmbeddingIdentity.from_settings(settings)
+    return {"embedding_model": identity.model, "embedding_dimension": identity.dimension}
+
+
+def _project_embedding_filter(project_id: str):
+    identity = _embedding_identity_payload()
+    return models.Filter(must=_project_filter(project_id).must + [
+        models.FieldCondition(key="embedding_model", match=models.MatchValue(value=identity["embedding_model"])),
+        models.FieldCondition(key="embedding_dimension", match=models.MatchValue(value=identity["embedding_dimension"])),
+    ])
+
+
+async def _assert_project_has_no_unidentified_embeddings(project_id: str) -> None:
+    """Fail closed rather than silently hiding historical vectors without identity."""
+    offset = None
+    scanned = 0
+    while True:
+        points, next_offset = await asyncio.to_thread(
+            client.scroll,
+            collection_name=settings.qdrant_collection,
+            scroll_filter=_project_filter(project_id),
+            limit=256,
+            offset=offset,
+            with_payload=["project_id", "embedding_model", "embedding_dimension"],
+            with_vectors=False,
+        )
+        for point in points:
+            payload = point.payload or {}
+            model_name = payload.get("embedding_model")
+            dimension = payload.get("embedding_dimension")
+            if payload.get("project_id") == project_id and (
+                not isinstance(model_name, str)
+                or not model_name.strip()
+                or not isinstance(dimension, int)
+                or isinstance(dimension, bool)
+                or dimension <= 0
+            ):
+                raise EmbeddingIdentityMigrationRequired(
+                    "El proyecto contiene vectores históricos sin identidad de embeddings; "
+                    "se requiere una migración explícita antes de recuperar contexto."
+                )
+        scanned += len(points)
+        if scanned > MAX_IDENTITY_PREFLIGHT_POINTS:
+            raise EmbeddingIdentityMigrationRequired(
+                "No se pudo verificar la identidad de todos los vectores del proyecto; "
+                "la recuperación se bloqueó de forma segura."
+            )
+        if next_offset is None or not points:
+            return
+        offset = next_offset
+
+
+class EmbeddingIdentityMigrationRequired(RuntimeError):
+    """Hay vectores legacy cuya identidad no puede inferirse sin migración explícita."""
 
 
 class SensitiveContentError(ValueError):
@@ -135,11 +194,16 @@ def ensure_collection():
             )
         # Qdrant Cloud puede exigir índices keyword para filtrar payloads.
         # Se crean idempotentemente también en colecciones preexistentes.
-        for field_name in ("project_id", "source_id"):
+        for field_name, field_schema in (
+            ("project_id", models.PayloadSchemaType.KEYWORD),
+            ("source_id", models.PayloadSchemaType.KEYWORD),
+            ("embedding_model", models.PayloadSchemaType.KEYWORD),
+            ("embedding_dimension", models.PayloadSchemaType.INTEGER),
+        ):
             client.create_payload_index(
                 collection_name=settings.qdrant_collection,
                 field_name=field_name,
-                field_schema=models.PayloadSchemaType.KEYWORD,
+                field_schema=field_schema,
             )
         _collection_checked_at = time.monotonic()
 
@@ -183,7 +247,7 @@ async def ingest_text(text, source, project_id: str, source_id: str | None = Non
             models.PointStruct(
                 id=str(uuid.uuid4()),
                 vector=vector,
-                payload={"text": chunk, "source": source, "source_id": source_id, "project_id": project_id, "path": _manual_source_path(source_id), "chunk": index},
+                payload={"text": chunk, "source": source, "source_id": source_id, "project_id": project_id, "path": _manual_source_path(source_id), "chunk": index, **_embedding_identity_payload()},
             )
         )
     if points:
@@ -203,7 +267,7 @@ async def replace_source(source_id: str, text: str, source: str, project_id: str
     except (ValueError, TypeError, AttributeError):
         raise ValueError("source_id debe ser un UUID válido") from None
     project_filter = models.Filter(
-        must=_project_filter(project_id).must + [
+        must=_project_embedding_filter(project_id).must + [
             models.FieldCondition(key="source_id", match=models.MatchValue(value=normalized_source_id))
         ]
     )
@@ -247,7 +311,7 @@ async def replace_source(source_id: str, text: str, source: str, project_id: str
         new_points.append(models.PointStruct(
             id=str(uuid.uuid4()),
             vector=vector,
-            payload={"text": chunk, "source": source, "source_id": normalized_source_id, "project_id": project_id, "path": _manual_source_path(normalized_source_id), "chunk": index},
+            payload={"text": chunk, "source": source, "source_id": normalized_source_id, "project_id": project_id, "path": _manual_source_path(normalized_source_id), "chunk": index, **_embedding_identity_payload()},
         ))
     try:
         await asyncio.to_thread(
@@ -289,7 +353,7 @@ async def delete_source(source_id: str, project_id: str) -> None:
     project_filter = _project_filter(project_id)
     normalized_source_id = str(uuid.UUID(source_id))
     source_filter = models.Filter(
-        must=project_filter.must + [
+        must=_project_embedding_filter(project_id).must + [
             models.FieldCondition(key="source_id", match=models.MatchValue(value=normalized_source_id))
         ]
     )
@@ -372,12 +436,13 @@ async def retrieve(query: str, project_id: str, limit: int = 5):
         return ""
     try:
         await asyncio.to_thread(ensure_collection)
+        await _assert_project_has_no_unidentified_embeddings(project_id)
         vector = await embed(query)
         result = await asyncio.to_thread(
             client.query_points,
             collection_name=settings.qdrant_collection,
             query=vector,
-            query_filter=project_filter,
+            query_filter=_project_embedding_filter(project_id),
             limit=limit,
             with_payload=True,
         )
@@ -387,6 +452,9 @@ async def retrieve(query: str, project_id: str, limit: int = 5):
             for h in result.points
             if h.payload and h.payload.get("project_id") == project_id
         )
+    except EmbeddingIdentityMigrationRequired:
+        # No ocultar al consumidor que el proyecto requiere una migración legacy explícita.
+        raise
     except Exception:
         # No convertir una caída del almacén en una respuesta aparentemente válida sin contexto.
         logger.error("RAG retrieval failed; knowledge store is unavailable")

@@ -7,6 +7,7 @@ from typing import Protocol
 
 from core.errors import AxionError, TransportError
 from core.http import request_json
+from rag.embedding_identity import EmbeddingIdentity
 
 
 class StoreConfigError(AxionError):
@@ -57,7 +58,10 @@ def _validate_point_payload(payload: dict) -> None:
 class InMemoryVectorStore:
     """Implementación real (fuerza bruta, coseno) para desarrollo y pruebas; no persiste."""
 
-    def __init__(self):
+    def __init__(self, embedding_identity: EmbeddingIdentity | None = None):
+        if embedding_identity is not None and not isinstance(embedding_identity, EmbeddingIdentity):
+            raise TypeError("embedding_identity debe ser EmbeddingIdentity")
+        self.embedding_identity = embedding_identity
         self.points: dict[str, Point] = {}
 
     async def ensure(self) -> None: ...
@@ -101,8 +105,13 @@ class InMemoryVectorStore:
 
 
 class QdrantStore:
-    def __init__(self, base_url: str, collection: str, dimension: int, api_key: str | None = None, timeout: float = 60.0):
+    def __init__(self, base_url: str, collection: str, dimension: int, api_key: str | None = None, timeout: float = 60.0, embedding_identity: EmbeddingIdentity | None = None):
+        if embedding_identity is not None and not isinstance(embedding_identity, EmbeddingIdentity):
+            raise TypeError("embedding_identity debe ser EmbeddingIdentity")
+        if embedding_identity is not None and embedding_identity.dimension != dimension:
+            raise ValueError("La identidad de embeddings no coincide con la dimensión del almacén")
         self.base, self.collection, self.dim, self.timeout = base_url.rstrip("/"), collection, dimension, timeout
+        self.embedding_identity = embedding_identity
         self.headers = {"api-key": api_key} if api_key else {}
 
     async def _req(self, method: str, path: str, payload=None) -> dict:

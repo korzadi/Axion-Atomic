@@ -18,6 +18,12 @@ class OllamaEmbedder:
         if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size <= 0:
             raise ValueError("El tamaño del lote de embeddings debe ser un entero positivo")
 
+    @classmethod
+    def from_settings(cls, transport, settings, batch_size: int = 16):
+        """Construye el embedder usando la misma identidad que Studio/API."""
+        identity = EmbeddingIdentity.from_settings(settings)
+        return cls(transport, identity.model, identity.dimension, batch_size=batch_size)
+
     async def embed(self, texts: list[str]) -> list[list[float]]:
         out: list[list[float]] = []
         for i in range(0, len(texts), self.batch_size):
