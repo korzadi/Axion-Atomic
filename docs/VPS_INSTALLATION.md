@@ -84,3 +84,36 @@ Comparte la salida para diseñar una transición que conserve el volumen y los s
 ### Validación automatizada del inventario
 
 CI ejecuta una prueba de comportamiento de `scripts/inspect_vps_state.sh` con un comando Docker simulado y estado vacío. Esto comprueba que el script completa el recorrido y emite sus secciones sin operaciones de escritura. No sustituye la inspección real del VPS ni prueba sus recursos actuales.
+
+## Restauración de backup en un entorno aislado
+
+El instalador crea `pg_dump` con formato custom antes de migrar y antes de actualizar API/frontend. Para comprobar que un backup es restaurable sin tocar producción existe `scripts/restore_postgres.sh`, que solo opera sobre un contenedor PostgreSQL **desechable**:
+
+    bash scripts/restore_postgres.sh \
+      --container pg-restore-test \
+      --database restore_probe \
+      --user restore_user \
+      --backup backups/pre-migration-YYYYMMDDTHHMMSSZ.dump \
+      --confirm "RESTORE restore_probe"
+
+Garantías del script:
+
+- Rechaza bases de datos con nombres del stack real (`axion_atomic`, `axyron_atomic`, `postgres`, `template*`).
+- Rechaza contenedores etiquetados por los proyectos Compose `axyron-atomic`/`axion-atomic`.
+- Exige que la base destino exista y esté vacía; no borra ni mezcla datos.
+- Verifica el archivo con `pg_restore --list` antes de restaurar.
+- Usa `--no-owner --no-privileges --exit-on-error`, no elimina contenedores ni volúmenes y no imprime secretos.
+- Requiere la confirmación exacta `RESTORE <base>`.
+
+La prueba de restauración real debe ejecutarse en un contenedor/base efímeros y con autorización explícita. Crear el contenedor de prueba, restaurar y destruirlo es una operación de infraestructura separada del despliegue; este repositorio solo aporta y prueba el contrato del script con un Docker simulado.
+
+## Actualización segura de API y frontend
+
+`bash scripts/install_vps.sh --upgrade-frontend` exige confirmación exacta (`ACTUALIZAR AXYRON FRONTEND`), verifica que PostgreSQL, Redis, API y frontend pertenezcan al proyecto y estén en ejecución, crea un backup previo y un backup privado de PostgreSQL, y solo reconstruye/levanta API y frontend. No recrea PostgreSQL, Redis, volúmenes ni `.env`. Si la API no responde o falla la carga de la página principal o de sus assets, se detiene conservando el backup.
+
+## Recuperación
+
+- Si falla el preflight: no se modificó nada; corrige la causa y repite.
+- Si falla el backup: no se migra ni se actualizan contenedores.
+- Si la API no arranca tras una actualización: conserva el backup, revisa logs, no borres volúmenes y no hagas `compose down`.
+- Para volver a una versión anterior, usa el backup en un entorno aislado y valida primero con `restore_postgres.sh`; un rollback destructivo automático no está implementado.

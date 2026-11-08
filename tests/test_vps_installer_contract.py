@@ -303,3 +303,106 @@ exit 0
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PostgresRestoreContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.script = ROOT / "scripts/restore_postgres.sh"
+
+    def _fake_docker(self, root, project="disposable"):
+        fake_bin = root / "bin"
+        fake_bin.mkdir(exist_ok=True)
+        docker = fake_bin / "docker"
+        docker.write_text(
+            """#!/usr/bin/env bash
+if [[ "$1" == "inspect" ]]; then
+  if [[ "$*" == *"State.Running"* ]]; then echo true; exit 0; fi
+  if [[ "$*" == *"com.docker.compose.project"* ]]; then echo "${FAKE_PROJECT:-disposable}"; exit 0; fi
+  exit 1
+fi
+if [[ "$1" == "exec" ]]; then
+  if [[ "$*" == *"pg_restore --list"* ]]; then cat >/dev/null; exit 0; fi
+  if [[ "$*" == *"pg_restore --no-owner"* ]]; then cat >/dev/null; exit 0; fi
+  if [[ "$*" == *"psql"* ]]; then
+    count=0
+    [[ -f "${FAKE_STATE}" ]] && count="$(cat "${FAKE_STATE}")"
+    count=$((count + 1))
+    printf '%s' "$count" > "${FAKE_STATE}"
+    if [[ "$count" -eq 1 ]]; then echo 0; else echo 3; fi
+    exit 0
+  fi
+fi
+exit 1
+""",
+            encoding="utf-8",
+        )
+        docker.chmod(0o755)
+        env = os.environ.copy()
+        env["PATH"] = f"{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+        env["FAKE_STATE"] = str(root / "state")
+        env["FAKE_PROJECT"] = project
+        return env
+
+    def _run(self, root, env, database="restore_probe", confirm="RESTORE restore_probe", backup=None):
+        backup = backup or (root / "backup.dump")
+        if not backup.exists():
+            backup.write_bytes(b"not-a-real-dump")
+        completed = subprocess.run(
+            ["bash", str(self.script), "--container", "pg-disposable",
+             "--database", database, "--user", "restore_user",
+             "--backup", str(backup), "--confirm", confirm],
+            cwd=root, env=env, text=True, capture_output=True, check=False, timeout=10,
+        )
+        return completed
+
+    def test_script_exists_and_does_not_target_production_stack(self):
+        text = self.script.read_text(encoding="utf-8")
+        for token in ("pg_restore --list", "pg_restore --no-owner", "--exit-on-error",
+                      "axyron-atomic", "axion-atomic", "RESTORE $DATABASE"):
+            self.assertIn(token, text)
+
+    def test_refuses_production_database_names_before_docker(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            env = self._fake_docker(root)
+            for name in ("axion_atomic", "axyron_atomic", "postgres", "template1"):
+                completed = self._run(root, env, database=name, confirm=f"RESTORE {name}")
+                self.assertNotEqual(completed.returncode, 0, name)
+                self.assertIn("producción o del sistema", completed.stderr)
+
+    def test_refuses_backup_symlink(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            env = self._fake_docker(root)
+            target = root / "target.dump"
+            target.write_bytes(b"data")
+            link = root / "link.dump"
+            link.symlink_to(target)
+            completed = self._run(root, env, backup=link)
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("enlace simbólico", completed.stderr)
+
+    def test_refuses_production_compose_container(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            env = self._fake_docker(root, project="axyron-atomic")
+            completed = self._run(root, env)
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("stack de producción", completed.stderr)
+
+    def test_requires_exact_confirmation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            env = self._fake_docker(root)
+            completed = self._run(root, env, confirm="RESTORE otra_base")
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("Confirmación incorrecta", completed.stderr)
+
+    def test_restores_into_empty_disposable_database_and_verifies(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            env = self._fake_docker(root)
+            completed = self._run(root, env)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn("Restauración verificada", completed.stdout)
