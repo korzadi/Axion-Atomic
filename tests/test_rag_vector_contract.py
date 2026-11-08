@@ -3,6 +3,7 @@ import unittest
 
 from core.errors import TransportError
 from rag.embedder import OllamaEmbedder
+from rag.embedding_identity import EmbeddingIdentity
 from rag.vector_contract import validate_embedding_batch, validate_embedding_vector
 
 
@@ -53,6 +54,15 @@ class OllamaEmbedderContractTests(unittest.IsolatedAsyncioTestCase):
     async def test_returns_normalized_vectors(self):
         embedder = OllamaEmbedder(StubTransport([[1, 2]]), "nomic", 2)
         self.assertEqual(await embedder.embed(["document"]), [[1.0, 2.0]])
+
+    async def test_exposes_canonical_embedding_identity(self):
+        embedder = OllamaEmbedder(StubTransport([[1, 2]]), "nomic", 2)
+        self.assertEqual(embedder.identity, EmbeddingIdentity("nomic:latest", 2))
+
+    async def test_rejects_invalid_batch_size_at_construction(self):
+        for batch_size in (0, -1, True):
+            with self.subTest(batch_size=batch_size), self.assertRaises(ValueError):
+                OllamaEmbedder(StubTransport([]), "nomic", 2, batch_size=batch_size)
 
 
 if __name__ == "__main__":
