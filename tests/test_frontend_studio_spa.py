@@ -58,8 +58,16 @@ def test_billing_view_displays_only_real_credit_balance_and_ledger():
     assert 'credits.totals.reserved' in source
     assert 'credits.totals.consumed' in source
     assert 'credits.recent_ledger' in source
-    assert "No hay cuotas ni lotes de créditos asignados" in source
+    assert "Todavía no hay créditos en esta cuenta" in source
     assert "proceden de PostgreSQL" in source
+
+
+def test_billing_view_uses_real_checkout_contract_when_enabled():
+    source = (FRONTEND / "studio.js").read_text(encoding="utf-8")
+    assert 'api("/billing/checkout/orders",{method:"POST"' in source
+    assert '"/verify",{method:"POST"}' in source
+    assert 'data-buy=' in source
+    assert "catalog.checkout_enabled===true" in source
 
 
 def test_studio_dashboard_uses_full_readiness_not_liveness_only():
@@ -101,11 +109,14 @@ def test_integrations_and_extensions_are_explicitly_future_features():
         assert label in readme
 
 
-def test_spa_has_no_fake_admin_or_commercial_mutations():
+def test_spa_has_no_fake_admin_or_unregistered_commercial_mutations():
     source = (FRONTEND / "studio.js").read_text(encoding="utf-8")
     assert "/admin/users" not in source
-    assert "/billing/checkout" not in source
+    # El checkout real (aprobado por el propietario el 2026-11-08) solo usa las rutas
+    # registradas en el backend; nada de payment_intent ni mutaciones inventadas.
     assert "payment_intent" not in source
+    assert '"/billing/subscriptions"' not in source
+    assert '"/billing/checkout/orders"' in source
     assert 'canDecide=["owner","admin"].includes(role)' in source
     assert 'canEdit=["owner","admin","editor"].includes(role)' in source
     assert 'x.status==="awaiting_approval"&&canEdit' in source

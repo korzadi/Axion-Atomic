@@ -21,6 +21,7 @@ from api.workspace_routes import router as workspace_router
 from api.payment_routes import router as payment_router
 from api.admin_routes import router as admin_router
 from api.catalog_routes import router as catalog_router
+from api.checkout_routes import router as checkout_router
 from api.usage_routes import router as usage_router
 from api.capacity import CapacityExceeded
 from api.rcache import close_cache, ping_cache
@@ -59,6 +60,7 @@ app.include_router(auth_router)
 app.include_router(auth_recovery_router)
 app.include_router(workspace_router)
 app.include_router(payment_router)
+app.include_router(checkout_router)
 app.include_router(admin_router)
 app.include_router(catalog_router)
 app.include_router(usage_router)

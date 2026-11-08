@@ -171,6 +171,58 @@ try {
   await managePage.locator("#billing-recovery-run").click();
   await managePage.getByText("Liquidadas: 2").waitFor();
   await managePage.close();
+  const billingPage = await browser.newPage();
+  let checkoutOrderCreated = false;
+  await billingPage.route("**/auth/me", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ user: { id: "user-1", email: "user@example.test", display_name: "Usuario Prueba" } })
+  }));
+  await billingPage.route("**/auth/projects", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ items: [{ id: "p1", name: "Proyecto demo", role: "owner" }] })
+  }));
+  await billingPage.route("**/billing/catalog", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      version: 1, status: "active", checkout_enabled: true, payment_provider: "qvapay_lightning",
+      free_credits_on_verify: 50, credit_packages: [],
+      models: [{ code: "atomic-code", name: "ATOMIC CODE", description: "Modelo de programación de AXYRON ATOMIC.", available_for_chat: true, billing_candidate: true, billing_enabled: true }],
+      plans: [{ code: "starter_300", name: "Axyron Atomic STARTER", description: "300 créditos (30.000 tokens) de Atomic Code. Compra única.", credits: 300, price_minor: 499, currency: "USD", one_time: true }]
+    })
+  }));
+  await billingPage.route("**/billing/orders**", route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && url.pathname === "/billing/orders") {
+      const items = checkoutOrderCreated
+        ? [{ id: "o-1", product_code: "starter_300", amount_minor: 499, currency: "USD", credits: 300, status: "pending", payment_method: "qvapay_lightning", expires_at: "2026-12-01T00:00:00Z", paid_at: null, created_at: "2026-11-08T00:00:00Z" }]
+        : [];
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items, limit: 50, offset: 0, total: items.length }) });
+    }
+    return route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
+  });
+  await billingPage.route("**/billing/credits", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ provisioned: true, totals: { available: 50, reserved: 0, consumed: 0 }, quotas: [], purchased_lots: { count: 1, granted: 50, available: 50, reserved: 0, consumed: 0 }, recent_ledger: [{ event_type: "grant", available_delta: 50, reserved_delta: 0, consumed_delta: 0, reason: "Concesión FREE", created_at: "2026-11-08T00:00:00Z" }] })
+  }));
+  await billingPage.route("**/billing/checkout/orders", route => {
+    if (route.request().method() !== "POST") return route.fulfill({ status: 405, contentType: "application/json", body: "{}" });
+    checkoutOrderCreated = true;
+    return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ order_id: "o-1", product_code: "starter_300", amount_minor: 499, currency: "USD", credits: 300, reference: "axyastartdemo1234567890", bolt11: "lnbc" + "1".repeat(120), amount_sats: 4990, expires_at: "2026-12-01T00:00:00Z", status: "pending" }) });
+  });
+  await billingPage.route("**/billing/checkout/orders/o-1/verify", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ order_id: "o-1", status: "paid", paid: true, outcome: "confirmed" })
+  }));
+  await billingPage.goto(baseUrl + "/#app/facturacion");
+  await billingPage.getByRole("heading", { name: "Facturación" }).waitFor();
+  await billingPage.getByText("Checkout habilitado").waitFor();
+  await billingPage.getByRole("button", { name: "Comprar" }).click();
+  await billingPage.getByRole("heading", { name: "Factura Lightning para tu pago" }).waitFor();
+  await billingPage.getByRole("button", { name: "Confirmar pago" }).click();
+  await billingPage.getByText("Pago confirmado.").waitFor();
+  await billingPage.close();
+  process.stdout.write("Axyron Atomic facturación: catálogo activo, compra simulada y confirmación de pago aprobadas\n");
+
   process.stdout.write("Axyron Atomic landing, admin MFA, user management, billing QvaPay reconcile, recovery and reversal browser E2E: passed\\n");
 } finally {
   await browser.close();
