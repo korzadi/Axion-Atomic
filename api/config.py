@@ -5,6 +5,57 @@ from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def is_public_https_origin(value: object) -> bool:
+    """Return whether value is a syntactically valid public HTTPS origin."""
+    if not isinstance(value, str) or not value.strip():
+        return False
+    try:
+        parsed = urlsplit(value.strip())
+        _ = parsed.port  # Also rejects non-numeric and out-of-range ports.
+        # urlsplit accepts an empty explicit port (example.com:); reject it.
+        authority_host = parsed.netloc.rsplit("@", 1)[-1]
+        if authority_host.endswith(":"):
+            return False
+    except ValueError:
+        return False
+    raw_host = (parsed.hostname or "").lower()
+    # DNS permits one terminal root dot, but repeated terminal dots are malformed.
+    if raw_host.endswith(".."):
+        return False
+    host = raw_host[:-1] if raw_host.endswith(".") else raw_host
+    if (
+        parsed.scheme.lower() != "https"
+        or not host
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in ("", "/")
+        or host == "localhost"
+        or host.endswith((".localhost", ".local", ".internal"))
+    ):
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return False
+    except ValueError:
+        pass
+    try:
+        ascii_host = host.encode("idna").decode("ascii")
+    except UnicodeError:
+        return False
+    if len(ascii_host) > 253 or "." not in ascii_host:
+        return False
+    labels = ascii_host.split(".")
+    return all(
+        1 <= len(label) <= 63
+        and label[0].isalnum()
+        and label[-1].isalnum()
+        and all(char.isalnum() or char == "-" for char in label)
+        for label in labels
+    )
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     ollama_base_url: str = "http://localhost:11434"
@@ -19,49 +70,21 @@ class Settings(BaseSettings):
     @field_validator("qdrant_url")
     @classmethod
     def require_managed_qdrant_endpoint(cls, value: str) -> str:
-        """Reject local/insecure endpoints; the application store is Qdrant Cloud only."""
-        parsed = urlsplit(value.strip())
-        host = (parsed.hostname or "").rstrip(".").lower()
-        if parsed.scheme != "https" or not host:
-            raise ValueError("QDRANT_URL debe ser una URL HTTPS de Qdrant Cloud")
-        if parsed.username or parsed.password or parsed.query or parsed.fragment:
-            raise ValueError("QDRANT_URL no debe contener credenciales, query ni fragmentos")
-        if parsed.path not in ("", "/"):
-            raise ValueError("QDRANT_URL debe apuntar a la raíz del clúster")
-        try:
-            ipaddress.ip_address(host)
-        except ValueError:
-            pass
-        else:
-            raise ValueError("QDRANT_URL debe usar el hostname del clúster, no una IP")
-        if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
-            raise ValueError("QDRANT_URL no puede apuntar a un servicio local")
-        if "." not in host:
-            raise ValueError("QDRANT_URL debe usar un hostname público")
+        """Require a public HTTPS origin for the managed Qdrant cluster."""
+        if not is_public_https_origin(value):
+            raise ValueError("QDRANT_URL debe ser una URL HTTPS pública válida del clúster")
         return value.strip()
+
     @field_validator("oauth_public_base_url")
     @classmethod
     def require_secure_oauth_public_origin(cls, value: str | None) -> str | None:
         """OAuth callbacks and email links must use a trusted HTTPS origin."""
         if value is None or not value.strip():
             return None
-        normalized = value.strip()
-        parsed = urlsplit(normalized)
+        if not is_public_https_origin(value):
+            raise ValueError("OAUTH_PUBLIC_BASE_URL debe ser un origen HTTPS público válido")
+        parsed = urlsplit(value.strip())
         host = (parsed.hostname or "").rstrip(".").lower()
-        if parsed.scheme != "https" or not host:
-            raise ValueError("OAUTH_PUBLIC_BASE_URL debe ser un origen HTTPS público")
-        if parsed.username or parsed.password or parsed.query or parsed.fragment:
-            raise ValueError("OAUTH_PUBLIC_BASE_URL no debe contener credenciales, query ni fragmentos")
-        if parsed.path not in ("", "/"):
-            raise ValueError("OAUTH_PUBLIC_BASE_URL debe ser un origen, sin ruta")
-        if host == "localhost" or host.endswith((".localhost", ".local", ".internal")) or "." not in host:
-            raise ValueError("OAUTH_PUBLIC_BASE_URL debe usar un hostname público")
-        try:
-            ipaddress.ip_address(host)
-        except ValueError:
-            pass
-        else:
-            raise ValueError("OAUTH_PUBLIC_BASE_URL debe usar un dominio, no una IP")
         return f"https://{host}" + (f":{parsed.port}" if parsed.port else "")
 
     qdrant_api_key: str | None = None
