@@ -150,3 +150,55 @@ async def admin_billing_overview(
         "ledger": [dict(row) for row in ledger],
         "executions": [dict(row) for row in executions],
     }
+
+@router.get("/billing/executions")
+async def admin_billing_executions(
+    limit: int = Query(default=25, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=100000),
+    _user=Depends(require_global_permission("billing.read")),
+):
+    """Detalle paginado de ejecuciones persistidas; omite ciphertext y secretos."""
+    with engine.connect() as conn:
+        total = conn.execute(text("""
+            SELECT count(*) FROM billing_inference_executions
+        """)).scalar_one()
+        rows = conn.execute(text("""
+            SELECT e.id, e.user_id, e.reservation_id, e.state,
+                   e.recovery_attempts, e.recovery_next_attempt_at,
+                   e.recovery_last_attempt_at, e.recovery_last_error_code,
+                   e.recovery_requires_review, e.recovery_settled_at,
+                   e.created_at, e.updated_at, e.completed_at,
+                   r.state AS reservation_state, r.requested_credits
+            FROM billing_inference_executions e
+            JOIN billing_usage_reservations r ON r.id = e.reservation_id
+            ORDER BY e.updated_at DESC, e.id DESC
+            LIMIT :limit OFFSET :offset
+        """), {"limit": limit, "offset": offset}).mappings().all()
+    return {
+        "executions": [
+            {
+                "id": str(row["id"]),
+                "user_id": row["user_id"],
+                "reservation_id": str(row["reservation_id"]),
+                "state": row["state"],
+                "reservation_state": row["reservation_state"],
+                "requested_credits": row["requested_credits"],
+                "recovery_attempts": row["recovery_attempts"],
+                "recovery_next_attempt_at": row["recovery_next_attempt_at"],
+                "recovery_last_attempt_at": row["recovery_last_attempt_at"],
+                "recovery_last_error_code": row["recovery_last_error_code"],
+                "recovery_requires_review": row["recovery_requires_review"],
+                "recovery_settled_at": row["recovery_settled_at"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+                "completed_at": row["completed_at"],
+            }
+            for row in rows
+        ],
+        "pagination": {
+            "limit": limit,
+            "offset": offset,
+            "total": total,
+            "has_more": offset + len(rows) < total,
+        },
+    }
