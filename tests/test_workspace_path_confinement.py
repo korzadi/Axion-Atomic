@@ -21,6 +21,27 @@ class WorkspacePathConfinementTests(unittest.TestCase):
             with self.subTest(path=path), self.assertRaises(PathViolation):
                 self.ws.resolve(path)
 
+    def test_resolve_rejects_always_invalid_forms(self):
+        for path in ("/etc/passwd", "C:\\Windows\\System32", "c:\\boot"):
+            with self.subTest(path=path), self.assertRaises(PathViolation):
+                self.ws.resolve(path)
+
+    def test_strict_relative_parts_reject_exotic_traversal_variants(self):
+        (self.root / "visible.txt").write_text("visible", encoding="utf-8")
+        for path in (
+            "sub\\..\\secret.txt",      # backslash traversal
+            "dir//file.txt",                # empty segment
+            "./visible.txt",                # dot segment
+            "C:\\Windows\\System32",    # backslash + drive
+        ):
+            with self.subTest(path=path), self.assertRaises(PathViolation):
+                self.ws.read(path)
+
+    def test_encoded_traversal_never_escapes_the_project_root(self):
+        with self.assertRaises((PathViolation, FileNotFoundError, AccessDenied)):
+            self.ws.read("..%2fsecret.txt")
+        self.assertEqual(self.external_file.read_text(encoding="utf-8"), "outside secret")
+
     def test_rejects_symlink_that_targets_outside_project(self):
         link = self.root / "external-link"
         try:
