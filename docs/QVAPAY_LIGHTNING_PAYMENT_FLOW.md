@@ -6,7 +6,7 @@
 
 La captura proporcionada por el propietario muestra un Lightning Address de QvaPay con estas opciones visibles:
 
-- Dirección Lightning mostrada: `axionatomic@qvpay.me`.
+- Dirección Lightning mostrada: `axyronatomic@qvpay.me`.
 - Modo seleccionado: recibir en dólares (USD), con conversión al precio del momento.
 - Comisión de conversión mostrada en esa pantalla: 0,5 %.
 - Alternativa: recibir satoshis sin conversión.

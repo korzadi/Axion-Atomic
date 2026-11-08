@@ -3,7 +3,7 @@
 ## Estado comercial y técnico
 
 - Aprobación comercial comunicada por el propietario: `APPROVED`.
-- Método elegido por el propietario para recibir pagos: Lightning Address de QvaPay (`axionatomic@qvpay.me`), con recepción en USD/conversión automática según la pantalla compartida.
+- Método elegido por el propietario para recibir pagos: Lightning Address de QvaPay (`axyronatomic@qvpay.me`), con recepción en USD/conversión automática según la pantalla compartida.
 - Integración técnica: contrato oficial de Lightning Address confirmado en la documentación pública el 8 de noviembre de 2026.
 - Adaptador de solo lectura/creación de invoice implementado en `api/qvapay_lightning.py`.
 - Persistencia de invoices y conciliación paginada implementadas en `api/qvapay_settlement.py` (migración 023); las rutas HTTP de checkout siguen pendientes.
@@ -25,7 +25,7 @@ La documentación pública consultada de QvaPay describe un flujo Merchant API d
 
 La captura compartida por el propietario mostraba:
 
-- Dirección Lightning: `axionatomic@qvpay.me`.
+- Dirección Lightning: `axyronatomic@qvpay.me`.
 - Recepción en USD con conversión automática.
 - Comisión de conversión mostrada en esa pantalla: 0,5 %.
 - Límites visibles en ese momento: USD 0,10–500 por pago y disponibilidad diaria de USD 1.000.
@@ -89,3 +89,29 @@ La futura acreditación debe validar desde backend la identidad de la transacci�
 - Crear factura Merchant: https://www.qvapay.com/docs/merchants/create-invoice
 - Detalle de transacción Merchant: https://www.qvapay.com/docs/merchants/transaction-detail
 - Firma de pagos mini-app: https://www.qvapay.com/docs/miniapps/payments
+
+## Verificación del Lightning Address (2026-11-08, con autorización del propietario)
+
+- Dirección confirmada por el propietario: `axyronatomic@qvpay.me`.
+- LNURL proporcionado por el propietario: decodifica a `https://www.qvapay.com/.well-known/lnurlp/axionatomic` (con "i"), que responde **HTTP 404 «Lightning Address no encontrada»**. El LNURL entregado **no corresponde** a la dirección confirmada y debe solicitarse/derivarse de nuevo.
+- El LNURL efectivo de la dirección confirmada responde **HTTP 200** (verificado 2026-11-08): payRequest válido con límites de envío de ~132 sats hasta ~527,160 sats (fluctúan con el precio BTC) y `commentAllowed=255`. Los valores completos se conservan solo en `.env` (`QVAPAY_LNURL`); no se replican en Git.
+- En consecuencia, el default de configuración del repositorio se corrigió de `axionatomic@qvpay.me` a `axyronatomic@qvpay.me` (config, plantilla `.env.example`, pruebas y docs). Sin push pendiente de decisión del propietario.
+- Verificación GET sin efecto sobre la API: no se crearon invoices ni operaciones; no se cargó ningún tarifario en BD; `BILLING_ENFORCEMENT_ENABLED=false` y `QVAPAY_ENABLED=false` siguen intactos; el checkout continúa bloqueado.
+
+## Sondeo del callback LNURL — 2026-11-08 (autorizado por el propietario)
+
+- Única consulta autorizada al callback con monto mínimo (133,000 msat = 133 sats) y comentario `axyron-verify-001`.
+- Respuesta: claves `pr`, `routes`, `successAction`. Bolt11 presente; **LUD-21 `verify` AUSENTE** — no existe URL pública de estado de la invoice.
+- Conclusión técnica: con solo Lightning Address + LNURL (sin token de cuenta), se pueden crear invoices pero **no se puede confirmar el pago** de forma programática en QvaPay. La conciliación requiere obligatoriamente el token de cuenta (consultas autenticadas `GET /user/lightning-address`/`GET /coins`) o un mecanismo oficial de notificación (el propietario indicó que no existe webhook Lightning de QvaPay).
+- La invoice creada expirará sin pagar; no se ejecutó ningún cobro ni movimiento de fondos.
+- Checkout permanece BLOQUEADO en la práctica hasta que el propietario obtenga uno de: token de cuenta QvaPay, mecanismo oficial de verificación server-to-server, o decisión comercial de no cobrar aún.
+
+## Verificación del contrato en vivo con el token real — 2026-11-08
+
+El propietario proporcionó el token de cuenta QvaPay (custodiado en `.env` `QVAPAY_USER_TOKEN`; nunca se muestra ni se commitea). Verificación con el cliente propio (`api/qvapay_lightning.QvaPayLightningClient`), solo lecturas, sin importes ni datos de pago impresos:
+
+- `GET https://api.qvapay.com/user/lightning-address` (Bearer): **OK** — dirección visible; 0 pagos en página 1.
+- `GET https://api.qvapay.com/coins`: **OK** (precio BTC/USD parseado).
+- `GET https://qvpay.me/.well-known/lnurlp/axyronatomic` vía cliente: **OK** (payRequest válido).
+
+Conclusión: el token funciona contra la API real y la integración técnicamente está lista de punta a punta para el flujo Lightning (crear invoice → conciliación autenticada paginada). Continúa bloqueado por la decisión comercial: checkout y cobros requieren cerrar la lista de release, precios/catálogo aprobados y autorización explícita del propietario. `QVAPAY_ENABLED=false` permanece; el reconcile admin queda funcional al activarlo el propietario.

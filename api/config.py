@@ -126,7 +126,7 @@ class Settings(BaseSettings):
     # es un secreto de servidor y nunca debe registrarse ni exponerse al frontend.
     qvapay_enabled: bool = False
     qvapay_user_token: SecretStr | None = None
-    qvapay_lightning_address: str = "axionatomic@qvpay.me"
+    qvapay_lightning_address: str = "axyronatomic@qvpay.me"
     qvapay_request_timeout_seconds: float = 10.0
 
     @field_validator("qvapay_lightning_address")

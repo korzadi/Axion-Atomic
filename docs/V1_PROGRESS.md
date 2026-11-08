@@ -724,7 +724,7 @@ Fase 11 pasa de 75 % a **80 %**: el inventario de solo lectura se ejecutó en el
 
 ## Fase 11 — plantilla .env completa para QvaPay (2026-11-08, `agent/opencode-vps`)
 
-- `.env.example` añade `QVAPAY_ENABLED=false`, `QVAPAY_USER_TOKEN=` (vacío), `QVAPAY_LIGHTNING_ADDRESS=axionatomic@qvpay.me` y `QVAPAY_REQUEST_TIMEOUT_SECONDS=10.0`, con comentarios de seguridad: sin catálogo/precios firmados no se activa; no hay webhook firmado (conciliación por consulta); el token se custodia fuera de Git. La instalación reproducible (`install_vps.sh --prepare` copia la plantilla y randomiza secretos) queda coherente: el `.env` generado incluye la integración desactivada.
+- `.env.example` añade `QVAPAY_ENABLED=false`, `QVAPAY_USER_TOKEN=` (vacío), `QVAPAY_LIGHTNING_ADDRESS=axyronatomic@qvpay.me` y `QVAPAY_REQUEST_TIMEOUT_SECONDS=10.0`, con comentarios de seguridad: sin catálogo/precios firmados no se activa; no hay webhook firmado (conciliación por consulta); el token se custodia fuera de Git. La instalación reproducible (`install_vps.sh --prepare` copia la plantilla y randomiza secretos) queda coherente: el `.env` generado incluye la integración desactivada.
 - `tests/test_env_example_contract.py`: exige `QVAPAY_ENABLED=false`, presencia de las 4 claves y token vacío/dirección `@qvpay.me`. 6 pruebas OK. Suite completa: **1007 passed, 11 skipped**.
 - Sin lecturas ni cambios sobre el `.env` real, el stack, PostgreSQL ni servicios.
 

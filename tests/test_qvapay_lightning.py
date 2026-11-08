@@ -18,7 +18,7 @@ from api.qvapay_lightning import (
 
 
 TOKEN = "qvapay-user-token-for-tests"
-ADDRESS = "axionatomic@qvpay.me"
+ADDRESS = "axyronatomic@qvpay.me"
 
 
 def _client(handler):
@@ -33,7 +33,7 @@ def _status_payload():
             "receiving": True,
             "address": {
                 "uuid": "0b9f3c1e-6a2d-4c5b-9e7f-2a1b3c4d5e6f",
-                "name": "axionatomic",
+                "name": "axyronatomic",
                 "address": ADDRESS,
                 "lnurl": "LNURL1TEST",
                 "status": "active",
@@ -159,7 +159,7 @@ def test_lnurl_pay_request_and_invoice_use_official_callback():
         if request.url.host == "qvpay.me":
             return httpx.Response(200, json={
                 "tag": "payRequest",
-                "callback": "https://www.qvapay.com/.well-known/lnurlp/axionatomic/callback",
+                "callback": "https://www.qvapay.com/.well-known/lnurlp/axyronatomic/callback",
                 "minSendable": 143000,
                 "maxSendable": 714285000,
                 "commentAllowed": 255,
@@ -169,13 +169,13 @@ def test_lnurl_pay_request_and_invoice_use_official_callback():
         return httpx.Response(200, json={"pr": "lnbc10u1ptest", "routes": []})
 
     invoice = asyncio.run(
-        _client(handler).create_invoice(name="axionatomic", sats=1000, comment="order-123")
+        _client(handler).create_invoice(name="axyronatomic", sats=1000, comment="order-123")
     )
     assert invoice.sats == 1000
     assert invoice.pr == "lnbc10u1ptest"
     assert paths == [
-        "https://qvpay.me/.well-known/lnurlp/axionatomic",
-        "https://www.qvapay.com/.well-known/lnurlp/axionatomic/callback?amount=1000000&comment=order-123",
+        "https://qvpay.me/.well-known/lnurlp/axyronatomic",
+        "https://www.qvapay.com/.well-known/lnurlp/axyronatomic/callback?amount=1000000&comment=order-123",
     ]
 
 
@@ -190,7 +190,7 @@ def test_lnurl_rejects_callback_outside_official_domain():
         })
 
     with pytest.raises(QvaPayLightningResponseError):
-        asyncio.run(_client(handler).lnurl_pay_request("axionatomic"))
+        asyncio.run(_client(handler).lnurl_pay_request("axyronatomic"))
 
 
 def test_invoice_rejects_amount_outside_lnurl_limits_without_creating_invoice():
@@ -200,7 +200,7 @@ def test_invoice_rejects_amount_outside_lnurl_limits_without_creating_invoice():
         calls.append(str(request.url))
         return httpx.Response(200, json={
             "tag": "payRequest",
-            "callback": "https://www.qvapay.com/.well-known/lnurlp/axionatomic/callback",
+            "callback": "https://www.qvapay.com/.well-known/lnurlp/axyronatomic/callback",
             "minSendable": 100000,
             "maxSendable": 200000,
             "commentAllowed": 255,
@@ -208,7 +208,7 @@ def test_invoice_rejects_amount_outside_lnurl_limits_without_creating_invoice():
 
     with pytest.raises(QvaPayLightningConfigError):
         asyncio.run(
-            _client(handler).create_invoice(name="axionatomic", sats=10, comment="order-123")
+            _client(handler).create_invoice(name="axyronatomic", sats=10, comment="order-123")
         )
     assert len(calls) == 1
 
@@ -248,4 +248,4 @@ def test_address_name_and_comment_validation():
     with pytest.raises(QvaPayLightningConfigError):
         asyncio.run(client.lnurl_pay_request("BAD NAME"))
     with pytest.raises(QvaPayLightningConfigError):
-        asyncio.run(client.create_invoice(name="axionatomic", sats=1, comment=""))
+        asyncio.run(client.create_invoice(name="axyronatomic", sats=1, comment=""))
