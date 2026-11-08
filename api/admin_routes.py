@@ -13,6 +13,7 @@ from api.billing_reservations import (
     ReservationNotFound,
     ReservationStateError,
     reconcile_confirmed_no_execution,
+    reverse_settled_reservation,
 )
 from api.billing_result_crypto import (
     AesGcmResultCipher,
@@ -695,6 +696,107 @@ async def admin_reconcile_no_execution(
     return {
         "reservation_id": result.reservation_id,
         "state": result.state,
+        "idempotent": result.idempotent,
+        "audited": True,
+    }
+
+
+class ReverseSettledReservationRequest(BaseModel):
+    reservation_id: str = Field(min_length=36, max_length=36)
+    reason: str = Field(min_length=10, max_length=500)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+@router.post("/billing/reservations/reverse")
+async def admin_reverse_settled_reservation(
+    payload: ReverseSettledReservationRequest,
+    user=Depends(require_global_permission("billing.manage")),
+    _csrf_user=Depends(_admin_csrf),
+):
+    """Revierte el consumo de una reserva liquidada con asientos compensatorios."""
+    try:
+        normalized = str(uuid.UUID(payload.reservation_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="reservation_id inválido") from exc
+    owner = await run_in_threadpool(_load_reservation_owner, normalized)
+    if owner is None:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
+    target_user_id, state = owner
+    if state != "settled":
+        raise HTTPException(
+            status_code=409,
+            detail="Solo se revierte el consumo de una reserva liquidada",
+        )
+    reason = payload.reason.strip()
+    idempotency_key = payload.idempotency_key.strip()
+    if not idempotency_key or any(
+        ord(char) < 0x21 or ord(char) > 0x7E for char in idempotency_key
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="La clave idempotente debe usar ASCII imprimible sin espacios",
+        )
+    try:
+        result = await run_in_threadpool(
+            reverse_settled_reservation,
+            engine=engine,
+            reservation_id=normalized,
+            actor_user_id=user["id"],
+            reason=reason,
+            idempotency_key=idempotency_key,
+        )
+    except ReservationNotFound as exc:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada") from exc
+    except IdempotencyConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="La reserva ya fue revertida con otra clave o motivo",
+        ) from exc
+    except ReservationStateError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="La reserva no está en un estado reversible",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Datos de reversión inválidos") from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="La reversión no pudo completarse",
+        ) from exc
+
+    audit_id = str(uuid.uuid5(
+        uuid.UUID("6f0a1f9e-8f6a-4f0e-9c63-6a7f4a0d2b51"),
+        f"reverse-settled-reservation:{idempotency_key}",
+    ))
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO global_admin_audit_events
+                        (id, actor_user_id, target_user_id, action, role, reason)
+                    VALUES
+                        (CAST(:id AS UUID), :actor_user_id, :target_user_id,
+                         'billing.reservation.reversed', NULL, :reason)
+                    ON CONFLICT (id) DO NOTHING
+                """),
+                {
+                    "id": audit_id, "actor_user_id": user["id"],
+                    "target_user_id": target_user_id, "reason": reason,
+                },
+            )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "La reversión se aplicó, pero no se pudo registrar en auditoría global; "
+                "reintente con la misma clave idempotente"
+            ),
+        ) from exc
+    return {
+        "reservation_id": result.reservation_id,
+        "state": result.state,
+        "reversed_credits": result.reversed_credits,
         "idempotent": result.idempotent,
         "audited": True,
     }

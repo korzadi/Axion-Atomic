@@ -13,9 +13,11 @@ from api.billing_budget import InferenceBudget
 from api.billing_execution import DuplicateExecution, execute_reserved_inference
 from api.billing_reservations import (
     IdempotencyConflict,
+    ReservationStateError,
     mark_reservation_unknown,
     reconcile_confirmed_no_execution,
     reserve_credits,
+    reverse_settled_reservation,
     settle_reservation,
 )
 
@@ -475,3 +477,111 @@ def test_concurrent_settlement_is_idempotent_and_never_double_charges():
     assert by_type["consume"] == (1, 7)
     assert by_type["release"] == (1, 0)
 
+
+
+def test_reversal_restores_consumed_quota_once_and_is_idempotent():
+    user_id, project_id = _account(quota=20)
+    reservation = _reserve(user_id, project_id, key="reversal-quota", amount=8)
+    settle_reservation(
+        engine=engine, user_id=user_id, reservation_id=reservation.reservation_id,
+        actual_credits=5,
+    )
+    first = reverse_settled_reservation(
+        engine=engine, reservation_id=reservation.reservation_id,
+        actor_user_id=user_id, reason="Reversión administrativa verificada",
+        idempotency_key="reversal-quota-1",
+    )
+    repeated = reverse_settled_reservation(
+        engine=engine, reservation_id=reservation.reservation_id,
+        actor_user_id=user_id, reason="Reversión administrativa verificada",
+        idempotency_key="reversal-quota-1",
+    )
+    assert first.reversed_credits == 5
+    assert first.idempotent is False
+    assert repeated.idempotent is True
+    with pytest.raises(IdempotencyConflict):
+        reverse_settled_reservation(
+            engine=engine, reservation_id=reservation.reservation_id,
+            actor_user_id=user_id, reason="Reversión administrativa verificada",
+            idempotency_key="reversal-quota-2",
+        )
+
+    with engine.connect() as conn:
+        balance = conn.execute(text("""
+            SELECT reserved_credits, consumed_credits
+            FROM billing_quota_periods WHERE user_id=:user_id
+        """), {"user_id": user_id}).one()
+        reversals = conn.execute(text("""
+            SELECT available_delta, reserved_delta, consumed_delta, related_entry_id
+            FROM billing_credit_ledger
+            WHERE user_id=:user_id AND event_type='reversal'
+        """), {"user_id": user_id}).all()
+    assert balance.reserved_credits == 0
+    assert balance.consumed_credits == 0
+    assert len(reversals) == 1
+    assert reversals[0].available_delta == 0
+    assert reversals[0].reserved_delta == 0
+    assert reversals[0].consumed_delta == -5
+    assert reversals[0].related_entry_id is not None
+
+
+def test_reversal_returns_purchased_credits_to_the_same_lot():
+    user_id, project_id = _account(quota=0)
+    now = datetime.now(timezone.utc)
+    lot_id = str(uuid.uuid4())
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO billing_credit_lots
+                (id, user_id, source, source_reference, granted_credits,
+                 available_credits, expires_at)
+            VALUES (CAST(:id AS UUID), :user_id, 'purchased', 'reversal-lot',
+                    10, 10, :expiry)
+        """), {"id": lot_id, "user_id": user_id, "expiry": now + timedelta(days=3)})
+    reservation = _reserve(
+        user_id, project_id, key="reversal-lot-reserve", amount=8,
+        purchased_fallback_allowed=True,
+    )
+    settle_reservation(
+        engine=engine, user_id=user_id, reservation_id=reservation.reservation_id,
+        actual_credits=6,
+    )
+    result = reverse_settled_reservation(
+        engine=engine, reservation_id=reservation.reservation_id,
+        actor_user_id=user_id, reason="Reversión administrativa verificada",
+        idempotency_key="reversal-lot-1",
+    )
+    assert result.reversed_credits == 6
+    with engine.connect() as conn:
+        lot = conn.execute(text("""
+            SELECT available_credits, reserved_credits, consumed_credits
+            FROM billing_credit_lots WHERE id=CAST(:id AS UUID)
+        """), {"id": lot_id}).one()
+        reversal = conn.execute(text("""
+            SELECT available_delta, reserved_delta, consumed_delta
+            FROM billing_credit_ledger
+            WHERE user_id=:user_id AND event_type='reversal'
+        """), {"user_id": user_id}).one()
+    assert (lot.available_credits, lot.reserved_credits, lot.consumed_credits) == (10, 0, 0)
+    assert (reversal.available_delta, reversal.reserved_delta, reversal.consumed_delta) == (6, 0, -6)
+
+
+def test_reversal_rejects_reservations_without_settled_consumption():
+    user_id, project_id = _account(quota=20)
+    held = _reserve(user_id, project_id, key="reversal-held", amount=4)
+    with pytest.raises(ReservationStateError):
+        reverse_settled_reservation(
+            engine=engine, reservation_id=held.reservation_id,
+            actor_user_id=user_id, reason="Reversión administrativa verificada",
+            idempotency_key="reversal-held-1",
+        )
+    settled_without_usage = _reserve(user_id, project_id, key="reversal-zero", amount=4)
+    settle_reservation(
+        engine=engine, user_id=user_id,
+        reservation_id=settled_without_usage.reservation_id, actual_credits=0,
+    )
+    with pytest.raises(ReservationStateError):
+        reverse_settled_reservation(
+            engine=engine, reservation_id=settled_without_usage.reservation_id,
+            actor_user_id=user_id, reason="Reversión administrativa verificada",
+            idempotency_key="reversal-zero-1",
+        )

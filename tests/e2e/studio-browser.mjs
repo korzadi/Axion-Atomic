@@ -145,6 +145,7 @@ try {
   });
   await managePage.goto(baseUrl + "/admin-test");
   await managePage.getByRole("heading", { name: "Gestión de usuarios y roles" }).waitFor();
+  await managePage.getByRole("heading", { name: "Reversión de consumo liquidado" }).waitFor();
   await managePage.locator("#um-user").fill("user-1");
   await managePage.locator("#um-reason").fill("Motivo administrativo verificado");
   await managePage.locator("#um-grant").click();

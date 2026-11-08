@@ -20,7 +20,7 @@
 | 6 | Memoria y RAG | 70% | EN PROGRESO |
 | 7 | Archivos y sandbox | 65% | EN PROGRESO |
 | 8 | Administración | 80% | EN PROGRESO |
-| 9 | Créditos y facturación | 75% | EN PROGRESO |
+| 9 | Créditos y facturación | 80% | EN PROGRESO |
 | 10 | Integración QvaPay | 25% | BLOQUEADA |
 | 11 | Instalación y documentación | 55% | EN PROGRESO |
 | 12 | QA y liberación V1.0 | 60% | EN PROGRESO |
@@ -294,3 +294,19 @@ Continuar con Fase 11 (instalación y documentación): revisar preflight del ins
 
 ### Siguiente tarea
 Validar el job PostgreSQL de CI con las pruebas administrativas y de facturación; después revisar conciliación/reversos sin inventar precios ni el contrato QvaPay.
+
+## Checkpoint Fase 9 — reversión auditada de consumo (2026-11-08)
+
+### Implementado
+- `reverse_settled_reservation` en `api/billing_reservations.py`: revierte únicamente reservas liquidadas con consumo, recalcula la parte usada de cada asignación y crea asientos `reversal` compensatorios. No edita ni borra asientos originales y no cambia el estado `settled`.
+- Restaura `consumed_credits` en cuotas o lotes comprados; en lotes también incrementa `available_credits`.
+- Idempotencia por clave y motivo; una segunda clave sobre la misma reserva se rechaza.
+- `POST /admin/billing/reservations/reverse` con `billing.manage`, CSRF, motivo obligatorio, auditoría global determinista y reintento seguro de la auditoría.
+- `frontend/admin.js`: formulario «Reversión de consumo liquidado» con confirmación y `aria-live`.
+
+### Verificación
+- 10 pruebas HTTP nuevas con motor simulado.
+- 3 pruebas PostgreSQL añadidas al archivo que ejecuta el job de CI; **no ejecutadas localmente**.
+- `python3 -m pytest -q` — **885 passed, 10 skipped**.
+- `compileall`, sintaxis JS, E2E de navegador y `git diff --check` — OK.
+- CI del HEAD: pendiente. No se activan cobros, precios ni QvaPay.

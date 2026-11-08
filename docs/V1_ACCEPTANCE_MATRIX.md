@@ -33,13 +33,13 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | DB-01 | Datos | Migraciones reproducibles en DB aislada | Migraciones y job PostgreSQL | CI histórica; HEAD pendiente |
 | DB-02 | Datos | Restauración real de backup en entorno aislado | Backup pre-migration documentado | Pendiente |
 | BILL-01 | Facturación | Medición tokens en shadow mode | `inference_usage_events`; agregado por modelo en `/admin/billing/overview` | Implementada; no cobra con facturación desactivada |
-| BILL-02 | Facturación | Reservas, ledger, reversos e idempotencia conectados a inferencia | `workspace_chat`, ejecución durable, atestación, recuperación administrativa | Implementada y probada con dobles; E2E PostgreSQL/Ollama pendiente |
+| BILL-02 | Facturación | Reservas, ledger, reversos e idempotencia conectados a inferencia | `workspace_chat`, ejecución durable, atestación, recuperación y reversión auditada de consumo liquidado | Implementada y probada con dobles; PostgreSQL real/Ollama pendiente |
 | PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada por propietario; integración técnica por validar | Bloqueada |
 | ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación/conciliación y gestión de roles/estado auditadas con CSRF; E2E de navegador de la gestión de usuarios ejecutado localmente | Parcial; PostgreSQL/E2E de recuperación pendientes |
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh` actualizado | Código publicado; CI pendiente |
 | OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución VPS pendiente |
 | OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador y documentación | Pendiente |
-| QA-01 | QA | Suite Python aprobada en HEAD evaluado | Rama `agent/opencode-vps`: `python3 -m pytest -q` → 875 pasan y 10 se omiten (PostgreSQL) con venv/local; CI del HEAD pendiente | Parcial; local aprobada, CI pendiente |
+| QA-01 | QA | Suite Python aprobada en HEAD evaluado | Rama `agent/opencode-vps`: `python3 -m pytest -q` → 885 pasan y 10 se omiten (PostgreSQL) con venv/local; CI del HEAD pendiente | Parcial; local aprobada, CI pendiente |
 | QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions | No confirmada para HEAD actual |
 | DOC-01 | Docs | README, AGENTS, instalación, seguridad y usuario alineados | Documentación del repo | Parcial |
 | REL-01 | Lanzamiento | Todas las puertas críticas aprobadas | Esta matriz | Bloqueada |
@@ -159,3 +159,14 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - El portal administrativo muestra la sección «Consumo por modelo» cuando el rol dispone de `billing.read`.
 - Verificación local: dos pruebas de contrato actualizadas con la cuarta consulta; `pytest -q` → **875 passed, 10 skipped** (PostgreSQL); sintaxis JS y E2E de navegador aprobados. Sin PostgreSQL real ni CI del HEAD.
 - BILL-01 permanece **Implementada**; no habilita cobros ni activa facturación.
+
+## Revisión incremental de reversión de consumo — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Se corrigió la matriz: la fila BILL-02 mencionaba «reversos» sin que existiera una operación de reversión en el código. Ahora la capacidad está implementada de verdad.
+- `api/billing_reservations.reverse_settled_reservation`: solo revierte reservas `settled` con consumo mayor que cero; recalcula el consumo por asignación, devuelve créditos al lote comprado o a la cuota original y crea asientos `reversal` compensatorios sin modificar el ledger original.
+- Idempotencia por clave y motivo: un reintento con la misma clave devuelve el mismo resultado; claves o motivos distintos sobre una reserva ya revertida se rechazan.
+- `POST /admin/billing/reservations/reverse`: exige `billing.manage`, CSRF, motivo de 10–500 caracteres y clave idempotente; registra auditoría global determinista y permite reintentar la auditoría con la misma clave.
+- `frontend/admin.js`: sección «Reversión de consumo liquidado» con confirmación explícita y resultado accesible.
+- Pruebas: 10 contratos HTTP con motor simulado y 3 pruebas PostgreSQL añadidas a `test_billing_reservations_postgres.py` (cuota, lote comprado y estados no reversibles).
+- Verificación local: **885 passed, 10 skipped** (PostgreSQL); sintaxis JS y E2E de navegador aprobados. Las pruebas PostgreSQL nuevas no se ejecutaron localmente; CI del HEAD pendiente.
+- No se habilitan cobros ni checkout; la reversión es una operación administrativa auditada.
