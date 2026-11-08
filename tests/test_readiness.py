@@ -112,6 +112,40 @@ class AuthReadinessTests(unittest.TestCase):
         self.assertNotIn("secret", repr(report))
 
 
+    def test_readiness_rejects_non_https_or_ambiguous_public_origins(self):
+        settings = SimpleNamespace(
+            auth_enabled=True,
+            auth_cookie_secure=True,
+            oauth_public_base_url="http://axyronatomic.com",
+        )
+        invalid_origins = (
+            "http://axyronatomic.com",
+            "ftp://axyronatomic.com",
+            "https://",
+            "https://user:password@axyronatomic.com",
+            "https://axyronatomic.com:invalid",
+            "https://axyronatomic.com?redirect=http://other.example",
+            "https://axyronatomic.com#fragment",
+            "https://localhost",
+            "https://127.0.0.1",
+            "https://axyronatomic.com/auth/callback",
+            "https://service.local",
+            "https://axyronatomic",
+        )
+        with (
+            patch("api.readiness.settings", settings),
+            patch("api.readiness.email_delivery_configured", return_value=True),
+            patch("api.readiness.EnvironmentMfaKeyProvider.active_key", return_value=("mfa-v1", b"x" * 32)),
+        ):
+            for origin in invalid_origins:
+                with self.subTest(origin=origin):
+                    settings.oauth_public_base_url = origin
+                    report = auth_readiness()
+                    self.assertEqual(report["status"], "blocked")
+                    self.assertFalse(report["checks"]["public_https_origin"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
 
