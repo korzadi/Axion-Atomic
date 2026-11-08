@@ -349,3 +349,61 @@ def test_mfa_storage_schema_is_encrypted_replay_safe_and_audited():
         "trg_user_mfa_audit_no_update_delete",
         "trg_user_mfa_audit_no_truncate",
     } <= set(triggers)
+
+
+def test_migration_runner_is_idempotent_on_the_ci_database():
+    from api.migrate import MIGRATIONS_DIR, run
+
+    with engine.connect() as conn:
+        before = conn.execute(text("SELECT version, checksum FROM schema_migrations ORDER BY version")).all()
+
+    assert run(database_url=DATABASE_URL, directory=MIGRATIONS_DIR) == []
+
+    with engine.connect() as conn:
+        after = conn.execute(text("SELECT version, checksum FROM schema_migrations ORDER BY version")).all()
+
+    assert after == before
+
+
+def test_migration_runner_rejects_changed_applied_checksum(tmp_path):
+    from api.migrate import run
+
+    # Reuse an already-applied version with deliberately different content.
+    # The temporary directory prevents any change to the repository migrations.
+    (tmp_path / "001_changed_for_test.sql").write_text(
+        "SELECT 'checksum mismatch';", encoding="utf-8"
+    )
+
+    with pytest.raises(RuntimeError, match="ya aplicada fue modificada"):
+        run(database_url=DATABASE_URL, directory=tmp_path)
+
+
+def test_failed_migration_transaction_does_not_register_version(tmp_path):
+    from api.migrate import run
+
+    version = "999999"
+    migration = tmp_path / f"{version}_transaction_failure.sql"
+    migration.write_text(
+        "CREATE TABLE migration_atomicity_probe (id INTEGER); "
+        "THIS IS NOT VALID SQL;",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(Exception):
+        run(database_url=DATABASE_URL, directory=tmp_path)
+
+    with engine.connect() as conn:
+        registered = conn.execute(
+            text("SELECT 1 FROM schema_migrations WHERE version = :version"),
+            {"version": version},
+        ).first()
+        table_exists = conn.execute(text("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = current_schema()
+                  AND table_name = 'migration_atomicity_probe'
+            )
+        """)).scalar_one()
+
+    assert registered is None
+    assert table_exists is False
