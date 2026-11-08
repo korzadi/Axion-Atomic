@@ -98,3 +98,8 @@ Durante la revisión del preflight se detectó una condición adicional: Python 
 - `embedding_dimension` entero positivo, excluyendo explícitamente booleanos.
 
 Se añadieron regresiones para modelo vacío, dimensión booleana, cero y dimensión serializada como texto. Esta ampliación está publicada después del HEAD que obtuvo CI 5/5; su propia ejecución de CI sigue pendiente. No se ha cambiado el filtro de recuperación ni se ha inferido identidad para puntos históricos.
+
+
+### Seguimiento de CI del endurecimiento
+
+La ejecución `42492913533` del HEAD `8d5a5b6` finalizó con cuatro jobs aprobados y un fallo en Python: `961 passed, 10 skipped, 1 failed`. El fallo no fue de la validación de identidad: la nueva prueba insertaba puntos en el doble Qdrant antes de crear su colección de prueba. Se corrigió inicializando la colección antes de insertar los casos malformados (commit `17586d9`). La nueva ejecución para ese commit debe confirmar la corrección; no se atribuye aprobación anticipada.
