@@ -113,7 +113,8 @@ async def register(req: RegisterRequest, request: Request):
             issued = await run_in_threadpool(issue_email_verification_token, engine=engine, user_id=user_id)
             await run_in_threadpool(send_verification_email, settings=settings, recipient=email, token=issued.token)
         except Exception:
-            raise HTTPException(status_code=503, detail="No se pudo enviar el correo. Solicita un nuevo envío más tarde.") from None
+            # Mantener respuesta indistinguible de una dirección ya registrada.
+            # El usuario puede solicitar el reenvío desde /resend-verification.
     return {"status": "pending_verification",
             "message": "Si los datos son válidos, recibirás un correo con los pasos para activar tu cuenta."}
 
