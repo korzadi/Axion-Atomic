@@ -16,6 +16,18 @@ En `tests/test_api_health.py` se añadieron tres pruebas asíncronas con `httpx.
 2. La ruta HTTP devuelve **200** cuando los controles requeridos están listos, aunque Redis (dependencia opcional) esté degradado; el estado opcional se conserva en la respuesta.
 3. La ruta HTTP `/health/live` devuelve **200** y `alive` sin invocar chequeos de dependencias, separando liveness de readiness.
 
+
+## API-02 — handlers HTTP de saturación
+
+Se amplió `tests/test_capacity_http.py` con dos pruebas asíncronas que provocan las excepciones a través de rutas temporales registradas en la aplicación FastAPI real:
+
+1. `CapacityExceeded` produce HTTP **503**, cabecera `Retry-After` con el tiempo configurado y mensaje público genérico.
+2. `SQLAlchemyPoolTimeout` produce HTTP **503**, `Retry-After: 3` y no revela el diagnóstico interno del pool/driver.
+
+Las rutas temporales se retiran al finalizar cada prueba. No se cambia la lógica de producción ni se conecta a una base de datos real.
+
+**Commit:** `857cad6843dfa4f8b463762bfab3a4dac21c9c1c`.
+
 ## Límites
 
 - Las pruebas usan dobles para dependencias; no certifican PostgreSQL, Ollama, Qdrant, Redis ni configuración de staging.
@@ -25,4 +37,4 @@ En `tests/test_api_health.py` se añadieron tres pruebas asíncronas con `httpx.
 ## Verificación
 
 - Implementación publicada en `agent/chatgpt`.
-- CI del commit nuevo: pendiente de resultado al crear este documento. No marcar como aprobada hasta revisar los cinco jobs del SHA correspondiente.
+- CI de `10b0f7a` (run `42497277051`): Python, imagen, Qdrant y browser E2E terminaron en success; el job PostgreSQL figura como `cancelled` pese a que sus pasos de migración e idempotencia aparecen completados. No se considera una ejecución 5/5 aprobada. CI del HEAD nuevo `857cad6`: pendiente de aparecer y revisarse.
