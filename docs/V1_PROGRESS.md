@@ -589,3 +589,16 @@ Confirmar CI del SHA publicado; después continuar Fase 11 (preflight/staging) y
   3. `test_workspace_knowledge_upload_rag_integration.py::…::test_http_handler_extracts_indexes_lists_and_retrieves_uploaded_file` (mismo origen).
 - `8318af6` (HEAD de `integration/chatgpt-opencode-20261108b`, PR #7) pasa las 28 pruebas de esos módulos y CI de 5 jobs en verde. La integración **no** incorpora los commits nuevos hasta que `agent/chatgpt` quede en verde (merge limpio, sin conflictos, según `git merge-tree`).
 - Detalle documentado en el PR #7 (comentario de coordinación). No se modificó `agent/chatgpt` ni `main`.
+
+## Checkpoint Fase 8/10 — invoices QvaPay agregadas en administración (2026-11-08, `agent/opencode-vps`)
+
+### Implementado
+- `GET /admin/billing/overview` añade `invoices`: por estado, número de invoices, suma de sats y `overdue_open` (invoices abiertas cuya orden ya venció), vía `payment_invoices JOIN payment_orders`. Sin referencias LNURL, sin `pr`, sin datos de usuario ni de orden.
+- `frontend/admin.js`: sección «Invoices QvaPay» en «Operaciones de créditos y facturación» (visible con `billing.read`).
+- `tests/e2e/studio-browser.mjs`: aserción de la nueva sección con mock (sats 21000).
+- Dos pruebas de `test_admin_audit_routes.py` actualizadas al quinto agregado.
+- SQL agregado verificado contra instancia PostgreSQL desechable con migraciones 001→023; contenedor eliminado.
+- CI `42490282851` (`d659eeb`): los cinco jobs en verde. Suite local: **920 passed, 11 skipped**.
+
+### Límites
+- Solo lectura; no habilita checkout, cobros ni acreditación. Catálogo/precios siguen pendientes del producto.
