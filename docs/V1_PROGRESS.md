@@ -22,7 +22,7 @@
 | 8 | Administración | 80% | EN PROGRESO |
 | 9 | Créditos y facturación | 80% | EN PROGRESO |
 | 10 | Integración QvaPay | 50% | EN PROGRESO |
-| 11 | Instalación y documentación | 65% | EN PROGRESO |
+| 11 | Instalación y documentación | 75% | EN PROGRESO |
 | 12 | QA y liberación V1.0 | 70% | EN PROGRESO |
 
 **Lectura de los porcentajes:** reflejan implementación y pruebas locales del código inspeccionado, no aceptación en staging. Las cifras heredadas del orden antiguo de fases se conservan solo como histórico en las secciones siguientes.
@@ -540,3 +540,108 @@ Confirmar CI del SHA publicado; después continuar Fase 11 (preflight/staging) y
 - Fase 8: ADM-01 verificada en backend/CI; pendiente E2E contra staging y validación manual del portal.
 - Fase 10: expiración automática de órdenes/invoices verificada (CI verde).
 - REL-01 sigue bloqueada (AUTH, sandbox, catálogo/precios, staging).
+
+## Checkpoint Fase 12 — integración ChatGPT+OpenCode preparada y validada (2026-11-08)
+
+### Integración
+- `agent/chatgpt` avanzó hasta `f6636fe` (reconciliación RAG, contrato de payload, lock por proyecto); `agent/opencode-vps` hasta `cd8f1cc`.
+- Conflicto único `docs/V1_ACCEPTANCE_MATRIX.md`, resuelto en `integration/chatgpt-opencode-20261108b` conservando los dos bloques completos (OpenCode primero, después RAG de ChatGPT). Sin conflictos funcionales: no hay solape en API, seguridad, base de datos ni migraciones.
+- Árbol combinado verificado: **933 passed, 11 skipped**; `compileall` y `check_frontend_js.py` OK; matriz PostgreSQL 74 passed en instancia desechable (migraciones 001→023 + doble ejecución del migrador).
+- PR **#7** abierto hacia `main` (sin merge; control del propietario). CI completa en verde sobre `8318af6` (run `42488953926`): studio-browser-e2e, container-image-build, postgres-migrations, python-tests, qdrant-cloud-integration.
+- La rama de integración es una rama nueva; no se modificó `agent/chatgpt` ni `main`, no hubo force-push ni reset.
+
+### Estado
+- REL-01 sigue bloqueada (AUTH, sandbox, catálogo/precios, staging). La V1.0 no se declara liberada.
+
+## Checkpoint Fase 11/12 — accesibilidad, traversal y README (2026-11-08, `agent/opencode-vps`)
+
+### Cambios
+- README: eliminada afirmación obsoleta («sin mutaciones administrativas»); el portal administrativo y la API ya gestionan usuarios/roles/estado con confirmaciones, MFA y auditoría.
+- `tests/e2e/a11y-scan.mjs`: escaneo axe WCAG 2 A/AA de landing, login administrativo y vista autenticada de gestión (mock): **0 violaciones** en las tres. Studio autenticado y navegación completa por teclado no escaneados.
+- `tests/test_workspace_path_confinement.py`: 3 regresiones nuevas (formas siempre inválidas en `resolve`, segmentos exóticos en `_relative_parts`, y traversal codificado que jamás escapa de la raíz; el archivo externo queda intacto).
+- Suite completa: **919 passed, 11 skipped**; 11 en el módulo de confinamiento.
+
+### Fase 11
+- Preflight, validación de configuración, `restore_postgres.sh` con simulacro real, sección de mantenimiento y contrato de `.env.example` completados; falta verificación contra VPS real/staging (autorización pendiente). Fase 11 pasa a 70%.
+
+## Checkpoint Fase 12 — contrato frontend-backend y accesibilidad (2026-11-08, `agent/opencode-vps`)
+
+### Cambios
+- README: corregida afirmación obsoleta sobre la API administrativa.
+- `tests/e2e/a11y-scan.mjs`: escaneo axe WCAG 2 A/AA; **0 violaciones** en la carga inicial de la landing, el login administrativo y la vista autenticada de gestión (mock). Studio autenticado y navegación completa por teclado sin cubrir.
+- `tests/test_workspace_path_confinement.py`: 3 regresiones nuevas contra traversal exotic (backslashes, segmentos vacíos/dobles, `.` inicial y traversal codificado `..%2f`; el archivo externo permanece intacto).
+- `tests/test_frontend_backend_routes.py`: contrato estático frontend→FastAPI; cada literal API de los cuatro archivos del frontend corresponde a una ruta registrada (exacta, prefijo o sufijo-fragmento).
+- CI `42489658918` (`a6b9c0c`): los cinco jobs en verde (studio-browser-e2e, container-image-build, postgres-migrations, python-tests, qdrant-cloud-integration).
+
+### Verificación
+- `.venv/bin/python -m pytest -q` → **920 passed, 11 skipped**.
+- `compileall`, sintaxis JS, `git diff --check` correctos.
+
+### Estado
+- Fase 12: QA local y CI en verde para el HEAD; REL-01 sigue bloqueada por dependencias externas.
+
+## Checkpoint Fase 12 — actualización de integración (corrección) (2026-11-08)
+
+**Corrección del checkpoint anterior.** La anotación «bloqueada por CI roja en agent/chatgpt» era errónea: las 3 pruebas fallidas solo lo hacían sin `DATABASE_URL` local, porque el dialect por defecto es PostgreSQL y el código nuevo intenta una conexión real. El job `python-tests` de CI ejecuta con `DATABASE_URL=sqlite:///./ci-test.db`; en ese entorno `agent/chatgpt` (cbdb5f4) da 932 passed y el árbol combinado 942 passed. El hallazgo correcto: CI de python-tests usa SQLite para desarrollo y CI; producción sigue siendo PostgreSQL.
+
+- `integration/chatgpt-opencode-20261108b` actualizada a `53781b3` (merge de `cbdb5f4`, CI del PR #7: 5/5 en verde, run `42490644871`).
+- Matriz PostgreSQL desechable del árbol combinado: **82 passed** (incluye `test_sqlalchemy_meta_store.py`).
+- PR #7 conversación registra la corrección. Sin conflictos; `main` y `agent/chatgpt` sin modificar.
+
+## Checkpoint Fase 12 — actualización de integración bloqueada por CI roja en agent/chatgpt (2026-11-08)
+
+- `origin/agent/chatgpt` avanzó a `acf37a6` (14 commits: serialización de mutaciones RAG y redacción de secretos legacy).
+- Al integrarlos sobre `8318af6`: **3 pruebas fallan**, todas ya rotas en `agent/chatgpt` por sí solo:
+  1. `test_rag_manual_ingest.py::ManualIngestSecurityTests::test_retrieval_redacts_legacy_secrets_from_text_and_source` (la implementación no redacta el prefijo `[Source: ...]`).
+  2. `test_rag_qdrant_integration.py::…::test_project_scoped_source_lifecycle_against_qdrant` (intento de conexión real a PostgreSQL 127.0.0.1:5433, autenticación fallida).
+  3. `test_workspace_knowledge_upload_rag_integration.py::…::test_http_handler_extracts_indexes_lists_and_retrieves_uploaded_file` (mismo origen).
+- `8318af6` (HEAD de `integration/chatgpt-opencode-20261108b`, PR #7) pasa las 28 pruebas de esos módulos y CI de 5 jobs en verde. La integración **no** incorpora los commits nuevos hasta que `agent/chatgpt` quede en verde (merge limpio, sin conflictos, según `git merge-tree`).
+- Detalle documentado en el PR #7 (comentario de coordinación). No se modificó `agent/chatgpt` ni `main`.
+
+## Checkpoint Fase 8/10 — invoices QvaPay agregadas en administración (2026-11-08, `agent/opencode-vps`)
+
+### Implementado
+- `GET /admin/billing/overview` añade `invoices`: por estado, número de invoices, suma de sats y `overdue_open` (invoices abiertas cuya orden ya venció), vía `payment_invoices JOIN payment_orders`. Sin referencias LNURL, sin `pr`, sin datos de usuario ni de orden.
+- `frontend/admin.js`: sección «Invoices QvaPay» en «Operaciones de créditos y facturación» (visible con `billing.read`).
+- `tests/e2e/studio-browser.mjs`: aserción de la nueva sección con mock (sats 21000).
+- Dos pruebas de `test_admin_audit_routes.py` actualizadas al quinto agregado.
+- SQL agregado verificado contra instancia PostgreSQL desechable con migraciones 001→023; contenedor eliminado.
+- CI `42490282851` (`d659eeb`): los cinco jobs en verde. Suite local: **920 passed, 11 skipped**.
+
+### Límites
+- Solo lectura; no habilita checkout, cobros ni acreditación. Catálogo/precios siguen pendientes del producto.
+
+## Checkpoint Fase 11 — instalación, documentación y secretos (2026-11-08, `agent/opencode-vps`)
+
+### Cambios
+- `docs/USER_GUIDE.md`: guía de usuario completa (cuenta, MFA, proyectos, Atomic Code, Conocimiento, agente con aprobaciones, consumo, facturación, administración, privacidad, límites y cosas no disponibles); README enlaza la guía.
+- `tests/test_secrets_in_repo_guard.py`: guardarraíl de secretos (rutas prohibidas en git, patrones de claves privadas/tokens, cobertura de .gitignore): 3 passed.
+- `.env.example` ya estaba blindado con `tests/test_env_example_contract.py` (5 pruebas).
+- `scripts/install_vps.sh --check` ejecutado en el host real: falla de forma segura ante stack existente (`Puerto 8070 ocupado; no se detendrá el servicio existente.`, exit 1); sin cambios ni secretos impresos.
+- `test_vps_installer_contract.py`: 23 passed. OPS-01/02/03 actualizados en la matriz.
+- Fase 11 pasa a 75%; pendiente: `--prepare/--check/--deploy` y rollback en staging, inventario real (operador), upgrade aislado. CI `42491118328` sobre `87d3b9d`: los cinco jobs en verde (studio-browser-e2e, container-image-build, postgres-migrations, python-tests, qdrant-cloud-integration).
+
+## Checkpoint Fase 12 — accesibilidad Studio verificada (2026-11-08, `agent/opencode-vps`)
+
+- `tests/e2e/a11y-scan.mjs` amplía el escaneo axe WCAG 2 A/AA a las vistas autenticadas del Studio (`#app/inicio`, `#app/facturacion`) con backend simulado: **0 violaciones** también en ambas.
+- STU-04 queda auditada a nivel automático inicial (landing, Studio, admin login y administración); siguen sin verificar navegación completa por teclado y lectores de pantalla reales, así como el backend en staging.
+- CI de la integración actualizada a `f98ead9`: 5/5 en verde. PR #7 pendiente de revisión del propietario.
+
+## Checkpoint Fase 9/10 — validación comercial V1 con mediciones reales (2026-11-08, `agent/opencode-vps`)
+
+### Alcance autorizado por el propietario
+
+El propietario autorizó el trabajo en `agent/opencode-vps` (no en `agent/chatgpt`). Se respetó: sin cambios en catálogo/precios/configuración, cobros desactivados, sin merge.
+
+### Implementado
+- `docs/COMMERCIAL_VALIDATION_V1.md`: **entregables A–H** de la especificación comercial aprobada:
+  - Auditoría del sistema (§A) con el estado real de payment_orders, reservas, ledger, reversos, expiración, conciliación QvaPay, medición sombra de tokens.
+  - Matriz de costes con datos **medidos** en el host (atomic-code:1.1: 26 tok/s prompt eval, ~10.3 tok/s eval output; prompt medio 26/96 tokens; embedding respondió) + tarifas del roadmap marcadas como provisional (no medida).
+  - Simulación por plan/paquete y sensibilidad de comisión (0,5 %/1 %/2,5 %): coste variable máximo por crédito para conservar margen ≥35 % (STARTER 0,0108, PLUS 0,0086, PRO 0,0076, STUDIO 0,0072 @0,5 %).
+  - Hallazgo crítico: pesos actuales 1 crédito = 1 token hacen inservible el catálogo (FREE ≈ 0,4 turnos); propuesta documentada de 1 crédito = 100 tokens **pendiente de decisión del propietario**.
+  - Ningún plan incumple el 35 % con hipótesis actuales; margen no certificable sin coste atribuible medido durante 30 días de sombra y comisión Lightning confirmada por escrito.
+- `scripts/measure_model_tokens.py`: runner reproducible de medición de tokens (solo lectura, sin secretos).
+- cobros, checkout y `BILLING_ENFORCEMENT_ENABLED` siguen desactivados; catálogo `preview_only`; VPS, `.env` y secretos intactos.
+
+### Pendiente
+- Decisiones del propietario (pesos de créditos, tarifa por modelo versionada en BD, confirmación por escrito de comisión QvaPay, atribución de costes, términos legales) antes de habilitar comercialización.
