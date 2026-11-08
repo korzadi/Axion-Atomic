@@ -79,18 +79,22 @@ class WorkspaceKnowledgeUploadRagIntegrationTests(unittest.IsolatedAsyncioTestCa
             retrieved_b = await service.retrieve("consulta", "project-models")
             self.assertIn("Contenido del modelo B.", retrieved_b)
             self.assertNotIn("Contenido del modelo A.", retrieved_b)
-            self.assertTrue(all(
-                point.payload.get("embedding_model") == service.settings.embed_model
-                for point in self.client.points.values()
+            model_b_points = [
+                point for point in self.client.points.values()
                 if point.payload.get("project_id") == "project-models"
-                and point.payload.get("text") in retrieved_b
-            ))
+                and point.payload.get("text") == "Contenido del modelo B."
+            ]
+            self.assertEqual(len(model_b_points), 1)
+            self.assertEqual(
+                model_b_points[0].payload["embedding_model"],
+                service.EmbeddingIdentity.from_settings(service.settings).model,
+            )
         finally:
             service.settings.embed_model = model_a
 
     async def test_legacy_points_block_retrieval_instead_of_being_silently_hidden(self):
         from qdrant_client import models
-        await service.ensure_collection()
+        service.ensure_collection()
         self.client.upsert(
             collection_name=self.collection,
             points=[models.PointStruct(
