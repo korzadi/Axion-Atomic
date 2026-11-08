@@ -188,11 +188,16 @@ def ensure_collection():
             )
         # Qdrant Cloud puede exigir índices keyword para filtrar payloads.
         # Se crean idempotentemente también en colecciones preexistentes.
-        for field_name in ("project_id", "source_id", "embedding_model", "embedding_dimension"):
+        for field_name, field_schema in (
+            ("project_id", models.PayloadSchemaType.KEYWORD),
+            ("source_id", models.PayloadSchemaType.KEYWORD),
+            ("embedding_model", models.PayloadSchemaType.KEYWORD),
+            ("embedding_dimension", models.PayloadSchemaType.INTEGER),
+        ):
             client.create_payload_index(
                 collection_name=settings.qdrant_collection,
                 field_name=field_name,
-                field_schema=models.PayloadSchemaType.KEYWORD,
+                field_schema=field_schema,
             )
         _collection_checked_at = time.monotonic()
 
