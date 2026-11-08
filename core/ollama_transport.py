@@ -7,6 +7,7 @@ from typing import AsyncIterator
 from core.errors import TransportError
 from core.http import open_url
 from core.models import ChatResponse
+from rag.embedding_identity import same_model
 
 
 class OllamaTransport:
@@ -59,9 +60,14 @@ class OllamaTransport:
         return {m["name"] for m in data.get("models", [])}
 
     async def embed(self, model: str, inputs: list[str]) -> list[list[float]]:
-        """POST /api/embed (lote). Devuelve un vector por entrada, en el mismo orden."""
+        """POST /api/embed (lote). Verifica identidad si Ollama la devuelve."""
         data = await asyncio.to_thread(self._post_json, "/api/embed", {"model": model, "input": inputs})
-        vecs = data.get("embeddings")
+        returned_model = data.get("model") if isinstance(data, dict) else None
+        if returned_model is not None and (
+            not isinstance(returned_model, str) or not same_model(returned_model, model)
+        ):
+            raise TransportError("Ollama devolvió un modelo de embeddings distinto al solicitado", retryable=False)
+        vecs = data.get("embeddings") if isinstance(data, dict) else None
         if not isinstance(vecs, list) or len(vecs) != len(inputs):
             raise TransportError("Respuesta de /api/embed inesperada", retryable=False)
         return vecs
