@@ -148,3 +148,42 @@ def test_admin_billing_overview_requires_billing_read_permission():
     finally:
         patcher.stop()
         app.dependency_overrides.clear()
+
+
+def test_admin_billing_overview_reads_persisted_aggregates():
+    client, patcher = _client_with_role("billing_support")
+    try:
+        with patch("api.admin_routes.engine.connect") as connect:
+            context = MagicMock()
+            context.__enter__.return_value = context
+            connect.return_value = context
+            results = []
+            for row in (
+                [{"state": "held", "count": 2, "credits": 40}],
+                [{"event_type": "consume", "count": 1, "available_delta": 0,
+                  "reserved_delta": -10, "consumed_delta": 10}],
+                [{"state": "completed", "count": 1, "requires_review": 0, "recovery_due": 0}],
+            ):
+                result = MagicMock()
+                result.mappings.return_value.all.return_value = row
+                results.append(result)
+            context.execute.side_effect = results
+            response = client.get("/admin/billing/overview")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["reservations"][0]["credits"] == 40
+        assert body["ledger"][0]["event_type"] == "consume"
+        assert body["executions"][0]["state"] == "completed"
+    finally:
+        patcher.stop()
+        app.dependency_overrides.clear()
+
+
+def test_admin_billing_overview_denies_role_without_billing_permission():
+    client, patcher = _client_with_role("billing_readonly")
+    try:
+        response = client.get("/admin/billing/overview")
+        assert response.status_code == 404
+    finally:
+        patcher.stop()
+        app.dependency_overrides.clear()
