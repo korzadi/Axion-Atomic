@@ -104,5 +104,36 @@ class ApiHealthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await main.health_live(), {"status": "alive"})
 
 
+    async def test_readiness_endpoint_preserves_dependency_failures_as_blocked_503(self):
+        failed_health = HTTPException(
+            status_code=503,
+            detail={"status": "degraded", "checks": {
+                "database": "ok", "ollama": "ok", "chat_model": "unavailable",
+                "embedding_model": "ok", "qdrant": "ok",
+            }},
+        )
+        auth_report = {"status": "ready", "checks": {"authentication_enabled": True}}
+        with patch.object(main, "health", side_effect=failed_health), patch.object(
+            main, "auth_readiness", return_value=auth_report
+        ):
+            response = await main.health_readiness()
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.body, b'{"status":"blocked","checks":{"authentication_enabled":true},"dependencies":{"database":"ok","ollama":"ok","chat_model":"unavailable","embedding_model":"ok","qdrant":"ok"},"optional":{}}')
+
+    async def test_readiness_endpoint_allows_optional_redis_degradation(self):
+        dependency_health = {"status": "degraded", "checks": {
+            "database": "ok", "ollama": "ok", "chat_model": "ok",
+            "embedding_model": "ok", "qdrant": "ok", "redis": "degraded",
+        }}
+        auth_report = {"status": "ready", "checks": {"authentication_enabled": True}}
+        with patch.object(main, "health", return_value=dependency_health), patch.object(
+            main, "auth_readiness", return_value=auth_report
+        ):
+            response = await main.health_readiness()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'"status":"ready"', response.body)
+        self.assertIn(b'"redis":"degraded"', response.body)
+
+
 if __name__ == "__main__":
     unittest.main()
