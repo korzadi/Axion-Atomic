@@ -226,5 +226,19 @@ class ApiHealthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["optional"]["redis"], "degraded")
 
 
+    async def test_liveness_http_route_stays_available_without_dependency_checks(self):
+        with patch.object(
+            main, "health", side_effect=AssertionError("liveness must not probe dependencies")
+        ):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=main.app),
+                base_url="http://test",
+            ) as client:
+                response = await client.get("/health/live")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "alive"})
+
+
 if __name__ == "__main__":
     unittest.main()
