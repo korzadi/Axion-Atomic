@@ -34,7 +34,44 @@ const server = createServer(async (request, response) => {
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 const baseUrl = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ headless: true });
+
+const json = (body) => ({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+const routeAdminMocks = (page) => {
+  page.route("**/auth/me", route => route.fulfill(json({ user: { id: "admin-1", email: "admin@example.test", display_name: "Admin" } })));
+  page.route("**/admin/**", route => {
+    const url = new URL(route.request().url());
+    const method = route.request().method();
+    let body = {};
+    if (url.pathname === "/admin/access/me") {
+      body = { administration_enabled: true, mutations_enabled: true, roles: ["platform_admin"], permissions: ["admin.access.read", "billing.read", "billing.manage", "users.read", "users.manage", "audit.read"] };
+    } else if (url.pathname === "/admin/audit") body = { events: [] };
+    else if (url.pathname === "/admin/users") body = { users: [], pagination: { total: 0, limit: 50, offset: 0, has_more: false } };
+    else if (url.pathname === "/admin/billing/overview") body = { reservations: [], ledger: [], executions: [], usage: [] };
+    else if (url.pathname === "/admin/billing/executions") body = { executions: [], pagination: { total: 0, limit: 25, offset: 0, has_more: false } };
+    else if (url.pathname.endsWith("/roles")) body = method === "POST" ? { user_id: "user-1", role: "billing_readonly", status: "granted" } : { user_id: "user-1", assignments: [] };
+    else if (url.pathname.endsWith("/status")) body = { user_id: "user-1", status: "disabled" };
+    route.fulfill(json(body));
+  });
+};
+
 try {
+  const managePage = await browser.newPage();
+  routeAdminMocks(managePage);
+  await managePage.goto(baseUrl + "/admin-test");
+  await managePage.getByRole("heading", { name: "Gestión de usuarios y roles" }).waitFor();
+  await managePage.waitForLoadState("networkidle");
+  await managePage.addScriptTag({ content: axeSource });
+  const manageReport = await managePage.evaluate(async () => {
+    // eslint-disable-next-line no-undef
+    const results = await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] } });
+    return results.violations.map(v => ({ id: v.id, impact: v.impact, description: v.description, nodes: v.nodes.length, target: v.nodes.slice(0, 2).map(n => n.target.join(" ")) }));
+  });
+  console.log(`\n=== /admin-test (autenticado, gestión) — ${manageReport.length} violaciones ===`);
+  for (const v of manageReport) {
+    console.log(`- [${v.impact}] ${v.id}: ${v.description} (${v.nodes} nodos) ${v.target.join(" | ")}`);
+  }
+  await managePage.close();
+
   for (const path of ["/", "/admin-test"]) {
     const page = await browser.newPage();
     await page.goto(baseUrl + path);

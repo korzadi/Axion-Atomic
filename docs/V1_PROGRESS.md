@@ -22,7 +22,7 @@
 | 8 | Administración | 80% | EN PROGRESO |
 | 9 | Créditos y facturación | 80% | EN PROGRESO |
 | 10 | Integración QvaPay | 50% | EN PROGRESO |
-| 11 | Instalación y documentación | 65% | EN PROGRESO |
+| 11 | Instalación y documentación | 70% | EN PROGRESO |
 | 12 | QA y liberación V1.0 | 70% | EN PROGRESO |
 
 **Lectura de los porcentajes:** reflejan implementación y pruebas locales del código inspeccionado, no aceptación en staging. Las cifras heredadas del orden antiguo de fases se conservan solo como histórico en las secciones siguientes.
@@ -552,3 +552,14 @@ Confirmar CI del SHA publicado; después continuar Fase 11 (preflight/staging) y
 
 ### Estado
 - REL-01 sigue bloqueada (AUTH, sandbox, catálogo/precios, staging). La V1.0 no se declara liberada.
+
+## Checkpoint Fase 11/12 — accesibilidad, traversal y README (2026-11-08, `agent/opencode-vps`)
+
+### Cambios
+- README: eliminada afirmación obsoleta («sin mutaciones administrativas»); el portal administrativo y la API ya gestionan usuarios/roles/estado con confirmaciones, MFA y auditoría.
+- `tests/e2e/a11y-scan.mjs`: escaneo axe WCAG 2 A/AA de landing, login administrativo y vista autenticada de gestión (mock): **0 violaciones** en las tres. Studio autenticado y navegación completa por teclado no escaneados.
+- `tests/test_workspace_path_confinement.py`: 3 regresiones nuevas (formas siempre inválidas en `resolve`, segmentos exóticos en `_relative_parts`, y traversal codificado que jamás escapa de la raíz; el archivo externo queda intacto).
+- Suite completa: **919 passed, 11 skipped**; 11 en el módulo de confinamiento.
+
+### Fase 11
+- Preflight, validación de configuración, `restore_postgres.sh` con simulacro real, sección de mantenimiento y contrato de `.env.example` completados; falta verificación contra VPS real/staging (autorización pendiente). Fase 11 pasa a 70%.
