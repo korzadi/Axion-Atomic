@@ -433,3 +433,45 @@ def test_execution_orchestrator_timeout_keeps_postgres_reservation_unknown():
     assert row.state == "unknown"
     assert row.reserved_credits == 150
     assert row.consumed_credits == 0
+
+
+def test_concurrent_settlement_is_idempotent_and_never_double_charges():
+    user_id, project_id = _account(quota=30)
+    reservation = _reserve(
+        user_id, project_id, key="concurrent-settlement", amount=12,
+    )
+
+    def settle():
+        return settle_reservation(
+            engine=engine, user_id=user_id,
+            reservation_id=reservation.reservation_id, actual_credits=7,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = [future.result(timeout=10) for future in [
+            pool.submit(settle), pool.submit(settle),
+        ]]
+
+    assert all(result.state == "settled" for result in results)
+    assert sorted(result.idempotent for result in results) == [False, True]
+    assert all(result.charged_credits == 7 for result in results)
+
+    with engine.connect() as conn:
+        balance = conn.execute(text("""
+            SELECT reserved_credits, consumed_credits
+            FROM billing_quota_periods WHERE user_id=:user_id
+        """), {"user_id": user_id}).one()
+        ledger = conn.execute(text("""
+            SELECT event_type, count(*) AS entries, coalesce(sum(consumed_delta), 0) AS credits
+            FROM billing_credit_ledger
+            WHERE user_id=:user_id
+            GROUP BY event_type
+        """), {"user_id": user_id}).all()
+
+    assert balance.reserved_credits == 0
+    assert balance.consumed_credits == 7
+    by_type = {row.event_type: (row.entries, row.credits) for row in ledger}
+    assert by_type["reserve"] == (1, 0)
+    assert by_type["consume"] == (1, 7)
+    assert by_type["release"] == (1, 0)
+
