@@ -85,3 +85,27 @@ Completar la matriz de pruebas integrales de autenticación y corregir cualquier
 - No instalar Qdrant local ni incorporar Open WebUI.
 - No reactivar `atomic-code:16k-8k`.
 - No simular integraciones ni declarar pruebas pendientes como aprobadas.
+
+
+## Auditoría de continuidad — 2026-11-08 07:27 (America/New_York)
+
+**HEAD inspeccionado:** `72947537c52262804b3c13e482d40c0eb0904f68` (`fix: preserve generic registration response on email failure`).
+
+### Cambios recientes confirmados en `main`
+- `72947537c52262804b3c13e482d40c0eb0904f68`: conserva la respuesta genérica de registro si falla el envío del correo.
+- `829ef638b19827fec300f948cf4583e0b1e45b93`: corrige aserciones de tokens inválidos en pruebas de recuperación.
+- `31634988b56b9c43c05b3d6b6fe91d6e7f557068`: añade cobertura para enlaces inválidos de verificación y recuperación.
+- `9c9bd9d07a275e2f29e865f81441307048e9742d`: corrige continuaciones de pruebas de rate limit.
+- `7e33fe1714fdd08328a003cab68d0d701afe0986`: prueba que el registro no revele enumeración por entrega de correo.
+
+### Verificación del HEAD actual
+- Lectura de `AGENTS.md`, `README.md`, `api/auth_routes.py`, `tests/test_auth_routes.py`, `docs/AUTHENTICATION_IMPLEMENTATION_STATUS.md` y workflow CI.
+- El diff de HEAD confirma que el fallo de entrega de correo queda absorbido y se mantiene la respuesta genérica; no se incluye el token en la respuesta.
+- La consulta de estados de commit para HEAD no devolvió checks/status publicados. Por tanto, **CI del HEAD actual: NO VERIFICADO**. No se declara superado.
+- No se ejecutaron pruebas locales ni navegador desde esta sesión: el acceso disponible permite inspección y cambios de archivos en GitHub, pero no ofrece ejecución de terminal/pytest ni acceso SSH al VPS.
+- No se ha modificado ni desplegado el VPS, PostgreSQL, Docker, servicios, volúmenes ni frontend.
+
+### Decisión de fase
+La Fase 1 permanece **EN CURSO**. No se incrementa el porcentaje ni se inicia Fase 2 hasta disponer de evidencia CI completa sobre el HEAD y completar la validación de staging (SMTP/OAuth/HTTPS/cookies) ya enumerada. La cifra 75% es el último valor registrado previamente; esta auditoría no la certifica de nuevo.
+
+**Siguiente tarea verificable:** ejecutar el workflow CI completo para el HEAD `72947537c52262804b3c13e482d40c0eb0904f68`, revisar todos los jobs y corregir cualquier fallo antes de cerrar Fase 1.
