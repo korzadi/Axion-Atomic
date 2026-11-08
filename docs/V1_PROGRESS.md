@@ -185,3 +185,21 @@ Los porcentajes heredados de la tabla anterior corresponden al orden anterior de
 - No se cambió código de producción ni se tocó PostgreSQL, Docker, VPS, frontend o servicios externos.
 
 **Siguiente tarea:** revisar y fortalecer la matriz de migraciones PostgreSQL en CI aislada, incluyendo idempotencia y contratos de esquema; no ejecutar migraciones sobre la base de producción.
+
+
+## Migraciones: orden numérico y pruebas de integridad — 2026-11-08
+
+### Implementación
+- Corregido `api/migrate.py::discover`: el orden de migraciones ahora usa el valor numérico de la versión. El orden lexicográfico anterior podía colocar `1000_*` antes de `999_*` al superar tres dígitos.
+- La detección de duplicados ahora compara versiones numéricas, por lo que `001_*` y `0001_*` se consideran una colisión y el migrador falla antes de aplicar SQL.
+- Añadido `tests/test_migrate.py` con cuatro pruebas: orden 010/999/1000, versiones duplicadas con padding distinto, nombre inválido y cambio de checksum al modificar el contenido.
+- Commits: `a9c92dfc416923891852726be56e9ffdefbd736e` (corrección) y `cd9dbf39ce795b2d4eaa0d98468c8a083e48bf96` (pruebas).
+
+### Verificación y límites
+- Confirmada la publicación de `api/migrate.py` y `tests/test_migrate.py` en `main` mediante lectura del repositorio.
+- No se ejecutó pytest en esta sesión; las cuatro pruebas están escritas, no aprobadas.
+- El workflow existente `postgres-migrations` ya ejecuta dos veces `python -m api.migrate` en un PostgreSQL efímero y luego valida esquema, reservas y persistencia. Esta ruta permanece como verificación CI requerida; no se tocó ninguna base de datos real.
+- No se modificaron SQL de migración, rollback, datos, volúmenes, VPS, Docker ni servicios externos.
+
+### Próxima tarea de Fase 1
+- Completar cobertura del contrato del migrador en PostgreSQL aislado: confirmar que una segunda ejecución no aplica migraciones nuevas, que un checksum histórico alterado provoca aborto y que los cambios transaccionales fallidos no dejan una versión registrada. Mantener toda prueba destructiva confinada al PostgreSQL efímero de CI.
