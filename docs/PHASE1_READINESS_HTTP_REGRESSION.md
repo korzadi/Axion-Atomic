@@ -45,3 +45,12 @@ Las rutas temporales se retiran al finalizar cada prueba. No se cambia la lógic
 - Motivo: `urllib.parse.urlsplit` elimina tabs y saltos de línea incrustados; no se debe aceptar una cadena malformada normalizándola silenciosamente a otro hostname.
 - Regresiones en `tests/test_config.py` para tabs y saltos de línea en QDRANT_URL y OAUTH_PUBLIC_BASE_URL.
 - No se cambia el origen configurado válido ni se modifica ningún secreto.
+
+## Corrección de enrutamiento de las pruebas HTTP — 2026-11-08
+
+- La ejecución CI 42497775952 detectó que las dos pruebas de handlers recibían 404: las rutas temporales se añadían después del montaje catch-all axyron-static.
+- tests/test_capacity_http.py ahora coloca cada ruta temporal antes del montaje estático, la invoca por ASGI y la retira en finally. No cambia handlers ni rutas productivas.
+- Commit correctivo: c010da6771f12573e8c2424fe91c06e5dc916acd.
+- CI del SHA exacto: run 42498371877, cinco de cinco jobs completados con success: python-tests, postgres-migrations, qdrant-cloud-integration, studio-browser-e2e y container-image-build.
+- El job Python terminó correctamente; PostgreSQL aplicó migraciones y verificó idempotencia/esquema; Qdrant, E2E de navegador y build/smoke de imagen también terminaron correctamente.
+- Esta evidencia certifica el HEAD indicado, no SMTP/OAuth real, staging ni aceptación funcional externa. Fase 1 permanece abierta.
