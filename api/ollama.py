@@ -101,7 +101,7 @@ async def chat(messages, temperature=0.2, max_tokens=2048):
 
 
 async def embed(value: str):
-    identity = EmbeddingIdentity(settings.embed_model, settings.embed_dimension)
+    identity = EmbeddingIdentity.from_settings(settings)
     # La clave usa identidad canónica: aliases sin etiqueta y :latest comparten
     # espacio de caché, mientras modelos/dimensiones diferentes nunca colisionan.
     cached = await get_embedding(identity.model, identity.dimension, value)
