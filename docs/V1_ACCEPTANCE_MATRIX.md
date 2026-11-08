@@ -276,3 +276,10 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - CI del HEAD `76c5356e0bd0001b659db0aa10eb2a51191256b2` (run `42496765302`, al redactar): **5/5 jobs en verde** — `python-tests` 1006 passed / 11 skipped; `postgres-migrations` 74 passed; `studio-browser-e2e` aprobado (incluye conciliación QvaPay en el portal); `container-image-build` y `qdrant-cloud-integration` success.
 - `QA-01` y `QA-02`: evidencia en verde para `76c5356`. `ADM-01`: el endpoint `POST /admin/billing/qvapay/reconcile` queda cubierto por CI (python-tests + e2e browser). Sigue pendiente la validación en staging.
 - `REL-01` sigue **bloqueada** (AUTH/MFA sin habilitar, AGT-04, catálogo/precios QvaPay, staging). No se declara la V1.0 liberada.
+
+## Fase 11 — inventario ejecutado con autorización — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- `scripts/inspect_vps_state.sh` ejecutado en el host real (HEAD `4508226`): stack `axyron-atomic` presente y sano (api/frontend Up 16 h; postgres y redis healthy); volumen `axyron_atomic_pgdata` presente y referenciado; proyecto legado `axion-atomic` sin contenedores/volumen/redes; listeners `127.0.0.1:8070` y `127.0.0.1:5433`. Sin lectura ni impresión de `.env`, sin cambios en recursos. **OPS-02: ejecutado en el host**; pendiente la revisión operativa del operador como control de cualquier actualización.
+- `install_vps.sh --check`: falla segura de nuevo (exit 1, puerto 8070 ocupado, stack intacto). `--prepare/--check/--deploy/--upgrade-frontend` en staging siguen pendientes de autorización interactiva sobre el stack.
+- `OPS-03`: el restore aislado conserva su evidencia del 2026-11-08 (sin repetirla sin cambios en migraciones/scripts); upgrade/rollback sin ensayar en stack real.
+- No se desplegó, reinició, construyó ni reconfiguró nada; `main` intacto. `REL-01` sigue bloqueada.

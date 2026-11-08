@@ -697,3 +697,18 @@ El propietario autorizó el trabajo en `agent/opencode-vps` (no en `agent/chatgp
 - CI del commit combinado `000393c` (run `42497299420`): **5/5 en verde** — python-tests 1021/1021, postgres-migrations 74 passed, studio-browser-e2e aprobado, container-image-build y qdrant-cloud-integration success.
 - GitHub marcó el PR #9 (agent/opencode-vps → integration/chatgpt-opencode-20261108b) como **MERGED** de forma automática al quedar todas las ramas integradas en la candidata; no se fusionó nada a `main` ni se modificó `agent/chatgpt`. `main` permanece sin tocar; la integración final corresponde al propietario.
 - La candidata de integración sigue cubriendo las mismas puertas REL-01: AUTH/MFA en staging, AGT-04 (daemon/TLS/digests), catálogo/precios QvaPay y sandbox oficial de QvaPay. V1.0 no se declara liberada.
+
+## Fase 11 — autorización del operador: inventario ejecutado (2026-11-08, `agent/opencode-vps`)
+
+El propietario autorizó el alcance de la Fase 11. Se ejecutaron las verificaciones de solo lectura permitidas:
+
+- `bash scripts/inspect_vps_state.sh` (HEAD `4508226`): inventario completado sin modificar nada ni mostrar secretos:
+  - Proyecto Compose `axyron-atomic`: frontend, api (Up 16 h), postgres 16-alpine (healthy), redis 7.4-alpine (healthy); volumen `axyron_atomic_pgdata` presente (driver `local`) y referenciado por `axyron-atomic-postgres-1`; red `axyron-atomic_default`.
+  - Proyecto legado `axion-atomic`: sin contenedores; volumen `axion_atomic_pgdata` inexistente; sin redes.
+  - Puertos en escucha: `127.0.0.1:8070` (API) y `127.0.0.1:5433` (PostgreSQL).
+  - El script no leyó ni imprimió `.env`, no inspeccionó contenedores ajenos y no modificó recursos.
+- `bash scripts/install_vps.sh --check`: vuelve a fallar de forma segura (`Puerto 8070 ocupado; no se detendrá el servicio existente.`, exit 1). No se detuvo ni alteró el stack; no se ejecutó `--deploy` ni `--upgrade-frontend` (requieren intervención interactiva del operador sobre el stack en vivo).
+- Se eliminó un artefacto de pruebas local (`ci-test.db`) que quedó como no rastreado tras una corrida de la suite; el árbol de trabajo queda limpio.
+- La restauración de backup en entorno desechable (DB-02) ya tiene evidencia válida (2026-11-08, migraciones 001→023 + doble ejecución del migrador; contenedor eliminado). No se repite sin cambios en migraciones o scripts de restauración.
+- `inspect_vps_state.sh` de OPS-02 pasa a **ejecutado en el host** (evidencia reproducible); sigue pendiente la revisión operativa por parte del operador como control previo a cualquier actualización.
+- No se desplegó, reinició, construyó ni reconfiguró nada; PostgreSQL, Redis, API y frontend siguen como estaban.
