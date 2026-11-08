@@ -117,7 +117,8 @@ class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=320)
     password: str = Field(min_length=12, max_length=1024)
     display_name: str = Field(min_length=1, max_length=120)
-    terms_accepted: bool = False
+    # Legal consent must be an explicit JSON boolean; do not coerce 1/0 or strings.
+    terms_accepted: bool = Field(default=False, strict=True)
 
 
 class LoginRequest(BaseModel):
