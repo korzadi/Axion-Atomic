@@ -116,3 +116,37 @@ async def list_admin_users(
             "has_more": offset + len(rows) < total,
         },
     }
+
+
+@router.get("/billing/overview")
+async def admin_billing_overview(
+    _user=Depends(require_global_permission("billing.read")),
+):
+    """Resumen agregado de reservas, ledger y ejecuciones persistidos."""
+    with engine.connect() as conn:
+        reservations = conn.execute(text("""
+            SELECT state, count(*) AS count, coalesce(sum(requested_credits), 0) AS credits
+            FROM billing_usage_reservations
+            GROUP BY state ORDER BY state
+        """)).mappings().all()
+        ledger = conn.execute(text("""
+            SELECT event_type, count(*) AS count,
+                   coalesce(sum(available_delta), 0) AS available_delta,
+                   coalesce(sum(reserved_delta), 0) AS reserved_delta,
+                   coalesce(sum(consumed_delta), 0) AS consumed_delta
+            FROM billing_credit_ledger
+            GROUP BY event_type ORDER BY event_type
+        """)).mappings().all()
+        executions = conn.execute(text("""
+            SELECT state, count(*) AS count,
+                   count(*) FILTER (WHERE recovery_requires_review) AS requires_review,
+                   count(*) FILTER (WHERE recovery_next_attempt_at IS NOT NULL
+                                     AND recovery_next_attempt_at <= now()) AS recovery_due
+            FROM billing_inference_executions
+            GROUP BY state ORDER BY state
+        """)).mappings().all()
+    return {
+        "reservations": [dict(row) for row in reservations],
+        "ledger": [dict(row) for row in ledger],
+        "executions": [dict(row) for row in executions],
+    }
