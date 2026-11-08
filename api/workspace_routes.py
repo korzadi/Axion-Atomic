@@ -458,7 +458,6 @@ async def workspace_model_availability(
         "models": [{
             "code": "atomic-code",
             "available": available,
-            "runtime_model": settings.chat_model if available else None,
         }]
     }
 
