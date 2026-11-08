@@ -54,6 +54,22 @@ class CapacityHttpRouteTests(unittest.IsolatedAsyncioTestCase):
             raise exception
 
         app.add_api_route(path, raise_capacity_error, methods=["GET"], name=route_name)
+        registered_route = next(
+            route for route in app.router.routes
+            if getattr(route, "name", None) == route_name
+        )
+        # The application mounts StaticFiles at "/" as its final route. Move the
+        # temporary regression route before that catch-all so the real exception
+        # handlers are reached through ASGI instead of receiving a static 404.
+        app.router.routes.remove(registered_route)
+        static_mount_index = next(
+            (
+                index for index, route in enumerate(app.router.routes)
+                if getattr(route, "name", None) == "axyron-static"
+            ),
+            len(app.router.routes),
+        )
+        app.router.routes.insert(static_mount_index, registered_route)
         try:
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
@@ -61,9 +77,7 @@ class CapacityHttpRouteTests(unittest.IsolatedAsyncioTestCase):
             ) as client:
                 response = await client.get(path)
         finally:
-            app.router.routes = [
-                route for route in app.router.routes if getattr(route, "name", None) != route_name
-            ]
+            app.router.routes.remove(registered_route)
 
         assert response.status_code == 503
         assert response.headers["retry-after"] == expected_retry_after
