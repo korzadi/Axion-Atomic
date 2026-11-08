@@ -527,3 +527,16 @@ API-02 queda con cobertura de regresión ampliada, **pendiente de ejecución CI*
 
 ### Siguiente tarea
 Confirmar CI del SHA publicado; después continuar Fase 11 (preflight/staging) y Fase 10 (rutas de checkout condicionadas a catálogo/precios aprobados).
+
+## Checkpoint Fase 8 — E2E de reversión y recuperación administrativas (2026-11-08, `agent/opencode-vps`)
+
+### Implementado y verificado
+- `tests/e2e/studio-browser.mjs` amplía la gestión administrativa: reversión auditada (`#billing-reversal-*`) y recuperación de liquidaciones (`#billing-recovery-run`) con respuestas simuladas y confirmaciones aceptadas.
+- ADM-01 pasa a verificada a nivel backend/CI: PostgreSQL (CI verde, 70→74 pruebas en `postgres-migrations` incluyendo QvaPay) y E2E de navegador de gestión de usuarios, reversión y recuperación.
+- `.gitignore` ignora `/node_modules/`; la instalación local replica el patrón `npm install --no-save` del job CI.
+- CI `42488531176` (`68ffa13`) y `42488645522` (`1db1d32`): cinco jobs en verde en ambos SHA.
+
+### Estado
+- Fase 8: ADM-01 verificada en backend/CI; pendiente E2E contra staging y validación manual del portal.
+- Fase 10: expiración automática de órdenes/invoices verificada (CI verde).
+- REL-01 sigue bloqueada (AUTH, sandbox, catálogo/precios, staging).

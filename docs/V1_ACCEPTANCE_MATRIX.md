@@ -35,7 +35,7 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | BILL-01 | Facturación | Medición tokens en shadow mode | `inference_usage_events`; agregado por modelo en `/admin/billing/overview` | Implementada; no cobra con facturación desactivada |
 | BILL-02 | Facturación | Reservas, ledger, reversos e idempotencia conectados a inferencia | `workspace_chat`, ejecución durable, atestación, recuperación y reversión auditada de consumo liquidado | Implementada y probada con dobles; PostgreSQL real/Ollama pendiente |
 | PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada; contrato oficial verificado; cliente adaptador; persistencia de invoices (migración 023) y conciliación paginada idempotente con pruebas unitarias y PostgreSQL | Parcial; checkout, rutas HTTP y cobros reales bloqueados por catálogo/precios y sandbox oficial |
-| ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación/conciliación y gestión de roles/estado auditadas con CSRF; E2E de navegador de la gestión de usuarios ejecutado localmente | Parcial; PostgreSQL/E2E de recuperación pendientes |
+| ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación/conciliación y gestión de roles/estado auditadas con CSRF; pruebas PostgreSQL de gestión de usuarios y roles (CI verde); E2E de navegador de gestión de usuarios, reversión y recuperación de facturación (CI verde) | Verificada para `1db1d32` a nivel de backend/CI local; pendiente validación en staging |
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh` actualizado | Código publicado; CI pendiente |
 | OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución VPS pendiente |
 | OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador, `restore_postgres.sh` y simulacro de restauración real; sección de mantenimiento añadida | Restore verificado; upgrade/rollback aún no ensayados aislados |
@@ -189,3 +189,11 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Verificación de instalación reproducida localmente: migraciones 001→023 aplican limpiamente desde cero en PostgreSQL 16-alpine desechable; idempotencia confirmada.
 - REL-01 permanece **bloqueada**: AUTH/MFA sin habilitar en producción, sandbox sin daemon dedicado (AGT-04), catálogo/precios y sandbox oficial QvaPay, restauración/backup en staging, y validación manual en navegador pendientes. No se declara la V1.0 liberada.
 - No se ejecutaron pagos reales, despliegues, migraciones en producción, builds de imágenes ni cambios de infraestructura.
+
+## Revisión incremental administración y E2E — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- E2E de navegador ampliado (Playwright 1.58.2/Chromium): gestión de roles/estado, reversión auditada de consumo liquidado y recuperación auditada de liquidaciones, con confirmaciones y resultados accesibles; todo con backend simulado.
+- ADM-01 pasa a verificada a nivel backend/CI (PostgreSQL incluido); falta validación E2E contra staging real.
+- Herramientas: `/node_modules/` añadido a `.gitignore`; `npm install --no-save` local como en CI.
+- CI `42488531176` (`68ffa13`) y `42488645522` (`1db1d32`): los cinco jobs en verde.
+- Exportación de órdenes QvaPay con importes exactos supersede de invoice abierta y expiración automática verificadas en instancia PostgreSQL desechable.
