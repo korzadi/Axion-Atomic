@@ -105,6 +105,37 @@ class IndexerTests(PipelineBase):
         self.assertEqual(set(failing_store.points), old_ids)
         self.assertIn("src/tax.py", {point.payload["path"] for point in failing_store.points.values()})
 
+    async def test_cleanup_failure_keeps_new_metadata_and_retriever_ignores_old_vectors(self):
+        await self.idx.index_project(self.ws)
+        old_tax_ids = {
+            point.id for point in self.store.points.values()
+            if point.payload["project_id"] == "p1" and point.payload["path"] == "src/tax.py"
+        }
+        old_sha = self.meta.list_files("p1")["src/tax.py"]
+        (self.root / "src/tax.py").write_text(TAX + "\n# versión nueva\n")
+
+        class FailingCleanupStore(InMemoryVectorStore):
+            async def delete_ids(self, ids):
+                raise TransportError("vector cleanup unavailable", retryable=True)
+
+        failing_store = FailingCleanupStore()
+        failing_store.points = self.store.points
+        indexer = RepoIndexer(self.emb, failing_store, self.meta)
+        report = await indexer.index_project(self.ws)
+
+        new_sha = self.meta.list_files("p1")["src/tax.py"]
+        self.assertNotEqual(new_sha, old_sha)
+        self.assertTrue(any("src/tax.py" in error for error in report.errors))
+        self.assertTrue(old_tax_ids.issubset(failing_store.points))
+        self.assertTrue(any(
+            point.payload["path"] == "src/tax.py" and point.id not in old_tax_ids
+            for point in failing_store.points.values()
+        ))
+
+        result = await Retriever(self.emb, failing_store, self.meta).retrieve("p1", "calculate_tax rate", limit=10)
+        self.assertTrue(any("obsoletas" in warning for warning in result.warnings))
+        self.assertTrue(all(chunk.id not in old_tax_ids for chunk in result.chunks))
+
     async def test_truncated_walk_deletes_nothing(self):
         await self.idx.index_project(self.ws)
         small = RepoIndexer(self.emb, self.store, self.meta, max_files=1)
