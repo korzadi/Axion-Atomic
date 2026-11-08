@@ -1,5 +1,6 @@
 import threading
 import unittest
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -9,6 +10,17 @@ FAKE_AWS = "AKIA" + "ABCDEFGHIJKLMNOP"
 
 
 class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        @asynccontextmanager
+        async def local_test_lock(project_id):
+            yield
+
+        self.project_lock_patch = patch.object(service, "_project_mutation_lock", local_test_lock)
+        self.project_lock_patch.start()
+
+    async def asyncTearDown(self):
+        self.project_lock_patch.stop()
+
     async def test_secret_in_text_is_rejected_before_embedding_or_qdrant(self):
         embed = AsyncMock(return_value=[[0.1] * 4])
         upsert = patch.object(service.client, "upsert")
