@@ -32,14 +32,14 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | SEC-04 | Seguridad | Matriz HTTP de roles por endpoint | `authorize_project`, workspace tests | Parcial |
 | DB-01 | Datos | Migraciones reproducibles en DB aislada | Migraciones y job PostgreSQL | CI histórica; HEAD pendiente |
 | DB-02 | Datos | Restauración real de backup en entorno aislado | Backup pre-migration documentado | Pendiente |
-| BILL-01 | Facturación | Medición tokens en shadow mode | `inference_usage_events` | Implementada; no cobra con facturación desactivada |
+| BILL-01 | Facturación | Medición tokens en shadow mode | `inference_usage_events`; agregado por modelo en `/admin/billing/overview` | Implementada; no cobra con facturación desactivada |
 | BILL-02 | Facturación | Reservas, ledger, reversos e idempotencia conectados a inferencia | `workspace_chat`, ejecución durable, atestación, recuperación administrativa | Implementada y probada con dobles; E2E PostgreSQL/Ollama pendiente |
 | PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada por propietario; integración técnica por validar | Bloqueada |
 | ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación/conciliación y gestión de roles/estado auditadas con CSRF; E2E de navegador de la gestión de usuarios ejecutado localmente | Parcial; PostgreSQL/E2E de recuperación pendientes |
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh` actualizado | Código publicado; CI pendiente |
 | OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución VPS pendiente |
 | OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador y documentación | Pendiente |
-| QA-01 | QA | Suite Python aprobada en HEAD evaluado | Rama `agent/opencode-vps`: `python3 -m pytest -q` → 855 pasan y 9 se omiten (PostgreSQL) con venv/local; CI del HEAD pendiente | Parcial; local aprobada, CI pendiente |
+| QA-01 | QA | Suite Python aprobada en HEAD evaluado | Rama `agent/opencode-vps`: `python3 -m pytest -q` → 875 pasan y 10 se omiten (PostgreSQL) con venv/local; CI del HEAD pendiente | Parcial; local aprobada, CI pendiente |
 | QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions | No confirmada para HEAD actual |
 | DOC-01 | Docs | README, AGENTS, instalación, seguridad y usuario alineados | Documentación del repo | Parcial |
 | REL-01 | Lanzamiento | Todas las puertas críticas aprobadas | Esta matriz | Bloqueada |
@@ -151,3 +151,11 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Se ejecutó `tests/e2e/studio-browser.mjs` con Playwright 1.58.2 y Chromium headless en un entorno temporal: **aprobado**.
 - El recorrido cubre landing, ausencia de sesión ficticia, apertura de registro/login, portal administrativo, MFA y la nueva sección de gestión de usuarios/roles/estado con respuestas simuladas del backend.
 - Es evidencia local del frontend, no del job CI ni de un backend real. QA-02 sigue sin confirmar Docker, PostgreSQL y Qdrant del HEAD; REL-01 sigue bloqueada.
+
+## Revisión incremental de consumo por modelo — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- `GET /admin/billing/overview` añade el agregado `usage`: solicitudes, tokens de entrada/salida y mediciones no disponibles agrupadas por `requested_model`.
+- Solo expone agregados de `inference_usage_events`; no devuelve prompts, respuestas, usuarios ni identificadores de solicitud.
+- El portal administrativo muestra la sección «Consumo por modelo» cuando el rol dispone de `billing.read`.
+- Verificación local: dos pruebas de contrato actualizadas con la cuarta consulta; `pytest -q` → **875 passed, 10 skipped** (PostgreSQL); sintaxis JS y E2E de navegador aprobados. Sin PostgreSQL real ni CI del HEAD.
+- BILL-01 permanece **Implementada**; no habilita cobros ni activa facturación.

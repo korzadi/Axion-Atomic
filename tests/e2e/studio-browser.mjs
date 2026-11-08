@@ -131,7 +131,7 @@ try {
     } else if (url.pathname === "/admin/users") {
       body = { users: [], pagination: { total: 0, limit: 50, offset: 0, has_more: false } };
     } else if (url.pathname === "/admin/billing/overview") {
-      body = { reservations: [], ledger: [], executions: [] };
+      body = { reservations: [], ledger: [], executions: [], usage: [] };
     } else if (url.pathname === "/admin/billing/executions") {
       body = { executions: [], pagination: { total: 0, limit: 25, offset: 0, has_more: false } };
     } else if (url.pathname.endsWith("/roles")) {

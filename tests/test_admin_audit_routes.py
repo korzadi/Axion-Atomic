@@ -131,13 +131,20 @@ def test_admin_billing_overview_reads_persisted_aggregates():
                 {"state": "completed", "count": 3, "requires_review": 0,
                  "recovery_due": 0}
             ]
-            context.execute.side_effect = [reservations, ledger, executions]
+            usage = MagicMock()
+            usage.mappings.return_value.all.return_value = [
+                {"requested_model": "atomic-code:16k-8k", "count": 3,
+                 "prompt_tokens": 900, "output_tokens": 300, "unavailable": 0}
+            ]
+            context.execute.side_effect = [reservations, ledger, executions, usage]
             response = client.get("/admin/billing/overview")
         assert response.status_code == 200
         body = response.json()
         assert body["reservations"][0]["credits"] == 120
         assert body["ledger"][0]["consumed_delta"] == 120
         assert body["executions"][0]["count"] == 3
+        assert body["usage"][0]["prompt_tokens"] == 900
+        assert body["usage"][0]["unavailable"] == 0
     finally:
         patcher.stop()
         app.dependency_overrides.clear()
@@ -165,6 +172,8 @@ def test_admin_billing_overview_reads_persisted_aggregates():
                 [{"event_type": "consume", "count": 1, "available_delta": 0,
                   "reserved_delta": -10, "consumed_delta": 10}],
                 [{"state": "completed", "count": 1, "requires_review": 0, "recovery_due": 0}],
+                [{"requested_model": "atomic-code:16k-8k", "count": 1,
+                  "prompt_tokens": 10, "output_tokens": 5, "unavailable": 0}],
             ):
                 result = MagicMock()
                 result.mappings.return_value.all.return_value = row
@@ -176,6 +185,7 @@ def test_admin_billing_overview_reads_persisted_aggregates():
         assert body["reservations"][0]["credits"] == 40
         assert body["ledger"][0]["event_type"] == "consume"
         assert body["executions"][0]["state"] == "completed"
+        assert body["usage"][0]["requested_model"] == "atomic-code:16k-8k"
     finally:
         patcher.stop()
         app.dependency_overrides.clear()

@@ -278,3 +278,19 @@ Continuar con Fase 11 (instalación y documentación): revisar preflight del ins
 - `tests/e2e/studio-browser.mjs` ampliado para cubrir la gestión administrativa de usuarios.
 - Ejecutado localmente con Playwright 1.58.2/Chromium: landing, MFA del portal y concesión/cambio de estado de usuario **aprobados**.
 - No sustituye el job CI ni valida PostgreSQL/Docker/Qdrant reales.
+
+## Checkpoint Fase 9 — consumo por modelo en administración (2026-11-08)
+
+### Implementado
+- `GET /admin/billing/overview` incluye `usage`, agregado por `requested_model` con número de solicitudes, tokens de entrada/salida y mediciones no disponibles.
+- La consulta solo lee `inference_usage_events` y no expone prompts, respuestas, usuarios ni IDs de solicitud.
+- `frontend/admin.js` muestra «Consumo por modelo» dentro del panel de facturación visible con `billing.read`.
+
+### Verificación
+- `python3 -m pytest -q` — **875 passed, 10 skipped** (PostgreSQL omitido localmente).
+- `python3 scripts/check_frontend_js.py` — OK.
+- E2E de navegador — aprobado.
+- No se ejecutaron PostgreSQL real ni CI del HEAD. No se habilitan cobros ni facturación.
+
+### Siguiente tarea
+Validar el job PostgreSQL de CI con las pruebas administrativas y de facturación; después revisar conciliación/reversos sin inventar precios ni el contrato QvaPay.

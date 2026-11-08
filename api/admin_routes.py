@@ -441,10 +441,19 @@ async def admin_billing_overview(
             FROM billing_inference_executions
             GROUP BY state ORDER BY state
         """)).mappings().all()
+        usage = conn.execute(text("""
+            SELECT requested_model, count(*) AS count,
+                   coalesce(sum(prompt_tokens), 0) AS prompt_tokens,
+                   coalesce(sum(output_tokens), 0) AS output_tokens,
+                   count(*) FILTER (WHERE usage_source = 'unavailable') AS unavailable
+            FROM inference_usage_events
+            GROUP BY requested_model ORDER BY requested_model
+        """)).mappings().all()
     return {
         "reservations": [dict(row) for row in reservations],
         "ledger": [dict(row) for row in ledger],
         "executions": [dict(row) for row in executions],
+        "usage": [dict(row) for row in usage],
     }
 
 @router.get("/billing/executions")
