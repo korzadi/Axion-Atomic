@@ -727,3 +727,11 @@ Fase 11 pasa de 75 % a **80 %**: el inventario de solo lectura se ejecutó en el
 - `.env.example` añade `QVAPAY_ENABLED=false`, `QVAPAY_USER_TOKEN=` (vacío), `QVAPAY_LIGHTNING_ADDRESS=axionatomic@qvpay.me` y `QVAPAY_REQUEST_TIMEOUT_SECONDS=10.0`, con comentarios de seguridad: sin catálogo/precios firmados no se activa; no hay webhook firmado (conciliación por consulta); el token se custodia fuera de Git. La instalación reproducible (`install_vps.sh --prepare` copia la plantilla y randomiza secretos) queda coherente: el `.env` generado incluye la integración desactivada.
 - `tests/test_env_example_contract.py`: exige `QVAPAY_ENABLED=false`, presencia de las 4 claves y token vacío/dirección `@qvpay.me`. 6 pruebas OK. Suite completa: **1007 passed, 11 skipped**.
 - Sin lecturas ni cambios sobre el `.env` real, el stack, PostgreSQL ni servicios.
+
+## Integración de candidato (segunda actualización) — 2026-11-08 (`agent/opencode-vps`)
+
+- `origin/agent/chatgpt` avanzó a `c010da6` (14 commits: endurecimiento de orígenes HTTPS, nuevas regresiones de readiness y de capacidad vía ASGI, docs de traspaso de Fase 1).
+- `integration/chatgpt-opencode-20261108b` actualizada: merge de `c010da6` y merge de `origin/agent/opencode-vps` (`6553036`). Árbol combinado verificado: **1027 passed, 11 skipped**; `compileall`, `check_frontend_js.py` OK; E2E de navegador aprobado.
+- CI del commit combinado `6553036` (run `42498413465`): **5/5 en verde** — python-tests 1027/1027, postgres-migrations 74 passed, studio-browser-e2e aprobado, container-image-build y qdrant-cloud-integration success.
+- GitHub cerró el PR #9 como MERGED al contener la candidata ambas ramas; sigue sin fusionarse nada a `main`.
+- `REL-01` sigue bloqueada por AUTH/MFA en staging, AGT-04, catálogo/precios QvaPay y sandbox oficial; la V1.0 no está liberada.
