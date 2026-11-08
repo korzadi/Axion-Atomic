@@ -72,6 +72,7 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
             self.assertEqual(response.json()["id"], f"chatcmpl-{event['request_id']}")
             self.assertNotIn("hola", usage_logs.output[0])
 
+            self.role = "viewer"
             denied_ingest = self._post("/workspace/knowledge/ingest", {
                 "project_id": "project-a",
                 "text": "contenido seguro",
