@@ -21,5 +21,32 @@ class PasswordSecurityTests(unittest.TestCase):
         self.assertNotEqual(_digest("opaque-token"), _digest("different-token"))
 
 
+    def test_inactive_account_still_verifies_password_before_rejection(self):
+        from unittest.mock import Mock, patch
+        from fastapi import HTTPException
+        from api.auth import verify_credentials
+
+        row = {
+            "id": "inactive-user",
+            "email": "inactive@example.com",
+            "display_name": "Inactive",
+            "password_hash": "argon-hash",
+            "status": "disabled",
+        }
+        connection = Mock()
+        connection.__enter__ = Mock(return_value=connection)
+        connection.__exit__ = Mock(return_value=False)
+        result = Mock()
+        result.mappings.return_value.first.return_value = row
+        connection.execute.return_value = result
+
+        with patch("api.auth.engine.connect", return_value=connection):
+            with patch("api.auth.verify_password", return_value=True) as verify:
+                with self.assertRaises(HTTPException) as raised:
+                    verify_credentials("inactive@example.com", "StrongPassword123!")
+        self.assertEqual(raised.exception.status_code, 401)
+        verify.assert_called_once_with("argon-hash", "StrongPassword123!")
+
+
 if __name__ == "__main__":
     unittest.main()
