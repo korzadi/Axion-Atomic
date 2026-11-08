@@ -91,7 +91,9 @@ class Base(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def tearDownClass(cls): cls.srv.shutdown(); cls.srv.server_close()
 
-    def setUp(self): S["cols"].clear(); S["headers"].clear(); S["requests"].clear()
+    def setUp(self):
+        S["cols"].clear(); S["headers"].clear(); S["requests"].clear()
+        S["repeat_scroll_cursor"] = False
 
 
 class QdrantTests(Base):
