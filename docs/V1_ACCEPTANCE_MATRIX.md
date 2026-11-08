@@ -273,6 +273,6 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 
 ## Confirmación CI del bloque QvaPay/teclado — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
 
-- CI del HEAD `76c5356e0bd0001b659db0aa10eb2a51191256b2` (run `42496361002`, al redactar): **5/5 jobs en verde** — `python-tests` 1006 passed / 11 skipped; `postgres-migrations` 74 passed; `studio-browser-e2e` aprobado (incluye conciliación QvaPay en el portal); `container-image-build` y `qdrant-cloud-integration` success.
+- CI del HEAD `76c5356e0bd0001b659db0aa10eb2a51191256b2` (run `42496765302`, al redactar): **5/5 jobs en verde** — `python-tests` 1006 passed / 11 skipped; `postgres-migrations` 74 passed; `studio-browser-e2e` aprobado (incluye conciliación QvaPay en el portal); `container-image-build` y `qdrant-cloud-integration` success.
 - `QA-01` y `QA-02`: evidencia en verde para `76c5356`. `ADM-01`: el endpoint `POST /admin/billing/qvapay/reconcile` queda cubierto por CI (python-tests + e2e browser). Sigue pendiente la validación en staging.
 - `REL-01` sigue **bloqueada** (AUTH/MFA sin habilitar, AGT-04, catálogo/precios QvaPay, staging). No se declara la V1.0 liberada.

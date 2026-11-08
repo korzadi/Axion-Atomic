@@ -681,7 +681,7 @@ El propietario autorizó el trabajo en `agent/opencode-vps` (no en `agent/chatgp
 
 ## Evidencia CI del bloque anterior — 2026-11-08 (`agent/opencode-vps`)
 
-- CI del HEAD `76c5356e0bd0001b659db0aa10eb2a51191256b2` (run `42496361002` al redactar; rama `agent/opencode-vps`): los cinco jobs en verde:
+- CI del HEAD `76c5356e0bd0001b659db0aa10eb2a51191256b2` (run `42496765302` al redactar; rama `agent/opencode-vps`): los cinco jobs en verde:
   - `python-tests`: **1006 passed, 11 skipped** (con `DATABASE_URL=sqlite:///./ci-test.db`).
   - `postgres-migrations`: **74 passed** (PostgreSQL efímero, migraciones 001→023 + doble ejecución del migrador).
   - `studio-browser-e2e`: aprobado con la nueva sección «Conciliación de cobros QvaPay».
