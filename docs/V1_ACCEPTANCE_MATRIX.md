@@ -18,7 +18,7 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | STU-01 | Studio | Proyectos autenticados | `/auth/projects` y SPA | Parcial; AUTH desactivada operativamente |
 | STU-02 | Studio | Chat real, RAG por proyecto e historial persistente | `/workspace/chat/completions`, `/workspace/chat/history` | Implementada; E2E real pendiente |
 | STU-03 | Studio | Ingesta/listado/gestión de fuentes con permisos | `/workspace/knowledge/*` | Parcial; integración Qdrant real pendiente |
-| STU-04 | UX | Responsive, teclado, lector de pantalla y WCAG | SPA y browser tests | Auditoría pendiente |
+| STU-04 | UX | Responsive, teclado, lector de pantalla y WCAG | `tests/e2e/a11y-scan.mjs` (axe-core WCAG 2 A/AA): 0 violaciones en landing, login administrativo y vista autenticada de gestión de usuarios/facturación (backend simulado) | Parcial: vistas de Studio autenticado y navegación completa por teclado sin escanear; auditoría total pendiente |
 | AGT-01 | Agente | Inicio, listado, detalle y reanudación persistentes | `ProjectAgentRuntime`, `/workspace/agent/runs*` | Implementada; CI HEAD pendiente |
 | AGT-02 | Agente | Aprobación ligada al hash y revisor autenticado | `DbApprovalGate`, `action_approvals` | Implementada; CI HEAD pendiente |
 | AGT-03 | Agente | Acciones interrumpidas requieren reconciliación | `needs_reconciliation`, `/runs/{run_id}/reconcile`, tests de persistencia | Implementada; CI HEAD pendiente |
@@ -36,9 +36,9 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | BILL-02 | Facturación | Reservas, ledger, reversos e idempotencia conectados a inferencia | `workspace_chat`, ejecución durable, atestación, recuperación y reversión auditada de consumo liquidado | Implementada y probada con dobles; PostgreSQL real/Ollama pendiente |
 | PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada; contrato oficial verificado; cliente adaptador; persistencia de invoices (migración 023) y conciliación paginada idempotente con pruebas unitarias y PostgreSQL | Parcial; checkout, rutas HTTP y cobros reales bloqueados por catálogo/precios y sandbox oficial |
 | ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación/conciliación y gestión de roles/estado auditadas con CSRF; pruebas PostgreSQL de gestión de usuarios y roles (CI verde); E2E de navegador de gestión de usuarios, reversión y recuperación de facturación (CI verde) | Verificada para `1db1d32` a nivel de backend/CI local; pendiente validación en staging |
-| OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh` actualizado | Código publicado; CI pendiente |
-| OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución VPS pendiente |
-| OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador, `restore_postgres.sh` y simulacro de restauración real; sección de mantenimiento añadida | Restore verificado; upgrade/rollback aún no ensayados aislados |
+| OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh`; contrato probado por `test_vps_installer_contract.py` (23 pruebas) | Código publicado y CI en verde; falta ensayo sobre stack ocupado en staging (ejecución `--check` real confirma cierre seguro: puerto 8070 ocupado, no se detiene el servicio) |
+| OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución real en VPS pendiente de autorización del operador |
+| OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador, `restore_postgres.sh` y simulacro de restauración real; sección de mantenimiento añadida | Restore verificado en entorno desechable con backup real; upgrade/rollback sin ensayar en staging |
 | QA-01 | QA | Suite Python aprobada en HEAD evaluado | `agent/opencode-vps` `08b6e65`: `pytest -q` → 911 passed, 11 skipped; CI `42485697750` green en `5e55582` (python-tests incluido) | Verificada local y en CI para `c41f490` (run `42488024013`) |
 | QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions: `42485697750` sobre `5e55582` — studio-browser-e2e, container-image-build, postgres-migrations, qdrant-cloud-integration, python-tests: success | Verificada para `5e55582` y `c41f490` (run `42488024013`) |
 | DOC-01 | Docs | README, AGENTS, instalación, seguridad y usuario alineados | Documentación del repo | Parcial |
@@ -245,3 +245,19 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Regresión `test_remove_project_metadata_first_and_reconcile_vector_failure`: simula fallo de borrado vectorial, verifica SQL vacío, ausencia de fragmentos recuperados y reparación posterior de los vectores huérfanos.
 - Commits: `1372289` (corrección), `7bc05e3` (prueba). CI del nuevo HEAD pendiente.
 - La Fase 1 continúa abierta; ARC-01 sigue parcial hasta revisar todos los criterios y la CI del HEAD vigente.
+
+## Auditoría automática de accesibilidad inicial — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Nuevo `tests/e2e/a11y-scan.mjs` (axe-core 4.10.2, WCAG 2 A/AA): escanea la landing (`/`) y el portal administrativo (`/admin-test`) servidos estáticamente. Resultado: **0 violaciones** en la carga inicial de ambas páginas.
+- El script es una herramienta de diagnóstico local; requiere `npm install --no-save playwright@1.58.2 axe-core@4.10.2`. Alcance escaneado: landing, Studio autenticado (`#app/inicio`, `#app/facturacion`), login administrativo y vista autenticada de gestión — 0 violaciones WCAG 2 A/AA. No cubre backend real ni navegación completa por teclado.
+- STU-04 queda como **parcial**; no se declara cubierta la auditoría completa.
+- No se modificó código de producción ni comportamiento del frontend.
+
+## Fase 11 — instalación y documentación (2026-11-08, rama `agent/opencode-vps`)
+
+- `.gitignore` cubre `.env`, `.env.*`, `backups/`, `knowledge/`, `workspace/`, `/node_modules/`; `git ls-files` no muestra rutas prohibidas; nuevo `tests/test_secrets_in_repo_guard.py` (rutas prohibidas, patrones de claves privadas/tokens, cobertura del gitignore): **3 passed**.
+- `.env.example` blindado con contrato (`tests/test_env_example_contract.py`): flags peligrosos en `false`, sin secretos reales, baseline completa.
+- Guía de usuario añadida: `docs/USER_GUIDE.md`; enlazada desde README. Describe solo capacidades reales y sus límites.
+- `scripts/install_vps.sh --check` ejecutado en el host: detección fail-closed correcta (`[ERROR] Puerto 8070 ocupado; no se detendrá el servicio existente.`), exit 1, sin tocar el stack ni imprimir secretos. `test_vps_installer_contract.py`: **23 passed**.
+- `docs/VPS_INSTALLATION.md`: simulacro real de restauración documentado y sección «Mantenimiento rutinario»; README corregido.
+- Pendiente: ejecución `--prepare/--check/--deploy` en staging con autorización del operador; `--upgrade-frontend` y rollback sin ensayar aislados; inventario real (OPS-02) requiere operador.
