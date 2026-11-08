@@ -55,6 +55,17 @@ class Q(BaseHTTPRequestHandler):
             else:
                 col["points"] = {k: p for k, p in col["points"].items() if not match(p["payload"], body["filter"])}
             return self._send(200, {"result": {}})
+        if sub == "/points/scroll":
+            points = [
+                {"id": point["id"]}
+                for point in col["points"].values()
+                if match(point["payload"], body["filter"])
+            ]
+            offset = body.get("offset")
+            start = next((i + 1 for i, point in enumerate(points) if point["id"] == offset), 0)
+            page = points[start:start + body["limit"]]
+            next_offset = page[-1]["id"] if start + len(page) < len(points) and page else None
+            return self._send(200, {"result": {"points": page, "next_page_offset": next_offset}})
         if sub == "/points/search":
             def cos(a, b):
                 na, nb = math.sqrt(sum(x * x for x in a)) or 1, math.sqrt(sum(x * x for x in b)) or 1
@@ -124,6 +135,21 @@ class QdrantTests(Base):
         self.assertEqual(set(S["cols"]["col"]["points"]), {"b"})
         request = [r for r in S["requests"] if r[1].startswith("/collections/col/points/delete?")][-1]
         self.assertEqual(request[2], {"points": ["a", "c"]})
+
+    async def test_list_project_ids_uses_project_filter_and_all_scroll_pages(self):
+        st = QdrantStore(self.url, "col", 4); await st.ensure()
+        points = [
+            Point(f"p1-{i}", [1, 0, 0, 0], {"project_id": "p1", "path": "a.py"})
+            for i in range(260)
+        ] + [Point("other", [0, 1, 0, 0], {"project_id": "p2", "path": "a.py"})]
+        await st.upsert(points)
+        ids = await st.list_project_ids("p1")
+        self.assertEqual(len(ids), 260)
+        self.assertNotIn("other", ids)
+        requests = [r for r in S["requests"] if r[1].endswith("/points/scroll")]
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(requests[0][2]["filter"]["must"][0]["key"], "project_id")
+        self.assertEqual(requests[0][2]["filter"]["must"][0]["match"]["value"], "p1")
 
     async def test_upsert_requires_complete_payload_before_any_http_write(self):
         st = QdrantStore(self.url, "col", 4); await st.ensure()
