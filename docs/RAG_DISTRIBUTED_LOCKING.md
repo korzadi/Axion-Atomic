@@ -17,7 +17,9 @@ La exclusión basada únicamente en `asyncio.Lock` protege una instancia de `Rep
 
 ## Cobertura
 
-`RepoIndexer.index_project`, `reconcile_project` y `remove_project` usan el mismo guard. La reconciliación interna invocada desde la indexación no vuelve a adquirir el lock, evitando deadlock por adquisición recursiva.\n\nLas mutaciones HTTP de `rag.service` (`ingest_text`, `replace_source` y `delete_source`) utilizan ahora `SqlAlchemyMetaStore(engine).project_lock` con el mismo identificador y la misma función de derivación de clave. La validación de contenido sensible, proyecto y límites ocurre antes de adquirir el lock. El bloqueo cubre la generación de embeddings y las escrituras/retiradas en Qdrant, evitando que el indexador de repositorio y la ingesta manual modifiquen simultáneamente el mismo proyecto.
+`RepoIndexer.index_project`, `reconcile_project` y `remove_project` usan el mismo guard. La reconciliación interna invocada desde la indexación no vuelve a adquirir el lock, evitando deadlock por adquisición recursiva.
+
+Las mutaciones HTTP de `rag.service` (`ingest_text`, `replace_source` y `delete_source`) utilizan ahora `SqlAlchemyMetaStore(engine).project_lock` con el mismo identificador y la misma función de derivación de clave. La validación de contenido sensible, proyecto y límites ocurre antes de adquirir el lock. El bloqueo cubre la generación de embeddings y las escrituras/retiradas en Qdrant, evitando que el indexador de repositorio y la ingesta manual modifiquen simultáneamente el mismo proyecto.
 
 Las pruebas del adaptador comprueban el SQL de adquisición/liberación, invalidación ante fallo de unlock y serialización entre dos instancias independientes del MetaStore con sesiones simuladas. Las pruebas de servicio verifican que ingestión, sustitución y eliminación mantienen el mismo lock, y que el rechazo de contenido sensible ocurre antes de reservar una conexión.
 
