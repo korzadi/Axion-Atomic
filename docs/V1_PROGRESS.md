@@ -834,3 +834,23 @@ Conclusión: el procedimiento de rollback documentado funciona en producción re
 ### Pendiente / bloqueado
 - `REL-01` bloqueada: buzón real (registro/verificación/MFA), `QVAPAY_USER_TOKEN` + catálogo/precios aprobados, AGT-04 (daemon TLS + imágenes por digest). V1.0 no liberada.
 - PR hacia `main` preparado; no se fusiona (decisión del propietario tras auditoría de ChatGPT).
+
+## Despliegue controlado a `main = a2f41d0` — 2026-11-08 (autorizado por el propietario, `agent/opencode-vps`)
+
+### Procedimiento ejecutado
+1. PR #16 (QA-HEAD-001/002, `be83ca6`) fusionado a `main` → **`main = a2f41d0`** (merge commit); CI del PR 5/5 verde (run `42517493977`).
+2. `main` local actualizado ff-only; árbol == `be83ca6`.
+3. Backup previo en producción: `backups/pre-qa-head-deploy-20261108T200210Z.dump` (0600, 297 objetos, formato CUSTOM) vía `pg_dump` dentro del contenedor; contenedor PostgreSQL **sin reinicios ni cambios**.
+4. Imágenes previas etiquetadas como ancla de rollback: `axyron-atomic-api:rollback-qa-head-20261108`, `axyron-atomic-frontend:rollback-qa-head-20261108` (= `main-20261108`).
+5. `docker compose build api frontend` desde `main` (api `92249f21f80c`); `up -d --no-deps api frontend`; postgres/redis intactos.
+
+### Verificación posterior (real)
+- `/health` 200: database, ollama, chat/embedding models, qdrant, redis — 6/6 ok.
+- `/health/readiness` 200 `ready` (auth/email/cookie/origin/MFA key true; billing `shadow`).
+- `/auth/me` → 401; landing 200; dominio público `https://axyronatomic.com/health` → 200; `admin.js` servido incluye conciliación QvaPay.
+- Assets servidos == repositorio (`studio.js`, `studio.css`, `workspace.js`, `admin.js`, index) — idénticos (`cmp`).
+- Logs de la API sin errores de arranque.
+- Producción == `main` (`a2f41d0`). Cambios de contenido respecto al despliegue anterior: corrección de hermeticidad de `tests/test_frontend_serving.py` y documentación de reconciliación — **sin código de producción modificado**.
+
+### Pendiente
+- Sin cambios en la decisión de cobros: `BILLING_ENFORCEMENT_ENABLED` sigue desactivado; `QVAPAY_ENABLED=false`; sandbox desactivado. `REL-01` bloqueada (buzón real, token/catálogo QvaPay, AGT-04). V1.0 no se declara liberada.

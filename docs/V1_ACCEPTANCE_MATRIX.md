@@ -340,3 +340,11 @@ Tareas asignadas por el propietario: certificar el estado del SHA de referencia 
 ### Bloqueadores pendientes (sin cambios)
 - `REL-01` **bloqueada**: (1) ensayo de registro/verificación/MFA con buzón real, (2) `QVAPAY_USER_TOKEN` + catálogo/precios aprobados, (3) `AGT-04` (daemon dedicado con TLS e imágenes por digest). La V1.0 no se declara liberada.
 - Producción sigue en el código del `main` previo; la actualización a `a5df4f7` corresponde al propietario.
+
+## Despliegue controlado a `main = a2f41d0` — 8 de noviembre de 2026 (`agent/opencode-vps`)
+
+- PR #16 fusionado con autorización del propietario; CI del head del PR (`be83ca6`, run `42517493977`) 5/5 verde.
+- Backup previo en producción: `backups/pre-qa-head-deploy-20261108T200210Z.dump` (297 objetos). Imágenes previas etiquetadas `rollback-qa-head-20261108`. `build` + `up -d --no-deps api frontend`; postgres y redis intactos.
+- Verificación real: `/health` 6/6 ok; readiness `ready`; `/auth/me` 401; landing/dominio 200; assets servidos idénticos al repo (`cmp`); logs sin errores.
+- Producción == `main` (`a2f41d0`). Contenido nuevo respecto al despliegue anterior: fix de hermeticidad de pruebas y documentación — sin cambios de código de producción.
+- `REL-01` sigue bloqueada (mismos tres bloqueadores). V1.0 no se declara liberada.
