@@ -143,3 +143,11 @@ def test_agent_workspace_uses_persistent_routes_and_project_role_gates():
     assert '["owner", "admin"].includes(currentProjectRole)' in workspace
     assert "La propuesta está pendiente." in workspace
     assert 'option.dataset.role = project.role || ""' in workspace
+
+def test_agent_workspace_can_restore_persisted_execution_history():
+    workspace = (FRONTEND.parent / "workspace.js").read_text(encoding="utf-8")
+    assert '"/workspace/agent/runs" + query' in workspace
+    assert '"/workspace/agent/runs/" + encodeURIComponent(item.id)' in workspace
+    assert "pending_actions: Array.isArray(detail.pending_actions)" in workspace
+    assert "Actualizar historial" in workspace
+    assert '["owner", "admin", "editor"].includes(currentProjectRole)' in workspace
