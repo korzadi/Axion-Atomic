@@ -85,7 +85,7 @@ AXYRON STUDIO se distribuye como un servicio independiente: `Dockerfile.frontend
 - **Consumo:** telemetría por proyecto cuando existen mediciones.
 - **Facturación:** catálogo y órdenes propias en modo informativo; no se inicia checkout ni se acreditan créditos desde la interfaz.
 - **Cuenta y seguridad:** datos de sesión y estado/enrolamiento MFA; las operaciones no expuestas por el backend no se simulan.
-- **Administración:** portal independiente en `https://admin.axyronatomic.com`; no forma parte de la navegación de Axyron Studio. La API actual permite consultar permisos y roles, sin mutaciones administrativas.
+- **Administración:** portal independiente en `https://admin.axyronatomic.com`; no forma parte de la navegación de Axyron Studio. La API permite consultar permisos y roles, conceder/revocar roles globales y cambiar el estado de cuentas de forma auditada con confirmaciones y MFA; los cobros y precios comerciales siguen desactivados.
 - **Privacidad y legal:** controles técnicos existentes y elementos legales pendientes, sin simular solicitudes de datos que aún no tienen endpoint.
 - **API e integraciones:** estado informativo de la API y conectores pendientes de un flujo seguro de credenciales.
 - **Herramientas:** capacidades del runtime supervisado y sandbox/automatización identificados como próximas actualizaciones cuando el ciclo no esté validado.

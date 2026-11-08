@@ -1,0 +1,63 @@
+import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
+import { chromium } from "playwright";
+import { readFileSync } from "node:fs";
+
+const frontend = new URL("../../frontend/", import.meta.url);
+const axeSource = readFileSync(new URL("../../node_modules/axe-core/axe.min.js", import.meta.url), "utf8");
+const files = {
+  "/": "Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html",
+  "/admin-test": "admin.html",
+};
+const assets = {
+  "/studio.js": "studio.js",
+  "/studio.css": "studio.css",
+  "/workspace.js": "workspace.js",
+  "/admin.js": "admin.js",
+};
+const server = createServer(async (request, response) => {
+  const url = request.url.split("?")[0];
+  if (files[url]) {
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(await readFile(new URL(files[url], frontend)));
+    return;
+  }
+  if (assets[url]) {
+    const contentType = url.endsWith(".css") ? "text/css" : "text/javascript";
+    response.writeHead(200, { "content-type": `${contentType}; charset=utf-8` });
+    response.end(await readFile(new URL(assets[url], frontend)));
+    return;
+  }
+  response.writeHead(404);
+  response.end();
+});
+await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+const baseUrl = `http://127.0.0.1:${server.address().port}`;
+const browser = await chromium.launch({ headless: true });
+try {
+  for (const path of ["/", "/admin-test"]) {
+    const page = await browser.newPage();
+    await page.goto(baseUrl + path);
+    await page.waitForLoadState("networkidle");
+    await page.addScriptTag({ content: axeSource });
+    const report = await page.evaluate(async () => {
+      // eslint-disable-next-line no-undef
+      const results = await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] } });
+      return results.violations.map(v => ({
+        id: v.id,
+        impact: v.impact,
+        description: v.description,
+        nodes: v.nodes.length,
+        target: v.nodes.slice(0, 2).map(n => n.target.join(" ")),
+      }));
+    });
+    console.log(`\n=== ${path} — ${report.length} violaciones ===`);
+    for (const v of report) {
+      console.log(`- [${v.impact}] ${v.id}: ${v.description} (${v.nodes} nodos) ${v.target.join(" | ")}`);
+    }
+    await page.close();
+  }
+} finally {
+  await browser.close();
+  await new Promise(resolve => server.close(resolve));
+}
