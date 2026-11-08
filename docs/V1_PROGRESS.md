@@ -109,3 +109,41 @@ Completar la matriz de pruebas integrales de autenticación y corregir cualquier
 La Fase 1 permanece **EN CURSO**. No se incrementa el porcentaje ni se inicia Fase 2 hasta disponer de evidencia CI completa sobre el HEAD y completar la validación de staging (SMTP/OAuth/HTTPS/cookies) ya enumerada. La cifra 75% es el último valor registrado previamente; esta auditoría no la certifica de nuevo.
 
 **Siguiente tarea verificable:** ejecutar el workflow CI completo para el HEAD `72947537c52262804b3c13e482d40c0eb0904f68`, revisar todos los jobs y corregir cualquier fallo antes de cerrar Fase 1.
+
+
+## Continuidad y reordenamiento del plan — 2026-11-08
+
+El propietario actualizó la taxonomía oficial de las 12 fases. Esta secuencia reemplaza los nombres y el orden anteriores; el trabajo previo se conserva y se reclasifica, no se repite:
+
+1. Estabilización y arquitectura.
+2. Autenticación y MFA.
+3. Axyron Studio.
+4. Modelos de IA.
+5. Agente AXYRON.
+6. Memoria y RAG.
+7. Archivos y sandbox.
+8. Administración.
+9. Créditos y facturación.
+10. Integración QvaPay.
+11. Instalación y documentación.
+12. QA y liberación V1.0.
+
+**Fase activa:** 1 — Estabilización y arquitectura. El trabajo histórico de autenticación pasa a la Fase 2 y se conserva íntegramente.
+
+### Bloque implementado en esta continuidad
+
+- Añadidas dos pruebas de integración de la función /health/readiness en tests/test_api_health.py.
+- La primera comprueba que una dependencia crítica ausente se traduce en HTTP 503 y estado blocked, conservando el detalle seguro de dependencias.
+- La segunda comprueba que Redis, al ser opcional, puede estar degradado sin bloquear readiness cuando las dependencias críticas están disponibles.
+- Commit: 466d85b0b7c7abccc70267adab74a1ed874911c6 — test: cover readiness endpoint dependency status mapping.
+- Estas pruebas se añadieron al repositorio, pero no se ejecutaron en esta sesión. No se consideran aprobadas hasta CI.
+- CI consultada para el commit de documentación anterior: no hay runs devueltas por la consulta disponible; no se afirma aprobación.
+- Sin cambios en frontend, configuración del VPS, contenedores, PostgreSQL, volúmenes ni servicios externos.
+
+### Criterio pendiente de Fase 1
+
+Confirmar por CI las pruebas nuevas y la suite completa; después continuar con las brechas de arquitectura/contratos y persistencia que sigan abiertas en docs/V1_ACCEPTANCE_MATRIX.md. No se cierra la fase con pruebas meramente escritas.
+
+### Nota sobre porcentajes
+
+Los porcentajes heredados de la tabla anterior corresponden al orden anterior de fases y no son directamente comparables con esta nueva taxonomía. No se presentan como porcentajes reales de las nuevas 12 fases hasta reclasificar los criterios de aceptación y recalcularlos con evidencias del mismo HEAD. La matriz de aceptación sigue siendo la fuente de verdad para esa recalibración.
