@@ -38,6 +38,26 @@ class WorkspaceAuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
         retrieve.assert_not_awaited()
         chat.assert_not_awaited()
 
+    async def test_chat_rejects_viewer_before_retrieval_or_model_call(self):
+        request = ChatRequest(
+            project_id="project-1",
+            messages=[Message(role="user", content="Genera una solución")],
+        )
+        denied = HTTPException(status_code=403, detail="forbidden")
+        with (
+            patch("api.workspace_routes._project_role", side_effect=denied) as authorize,
+            patch("api.workspace_routes.retrieve", new=AsyncMock()) as retrieve,
+            patch("api.workspace_routes.chat_with_usage", new=AsyncMock()) as chat,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_chat(request, user={"id": "viewer-1"})
+        self.assertEqual(raised.exception.status_code, 403)
+        authorize.assert_awaited_once_with(
+            {"id": "viewer-1"}, "project-1", ("owner", "admin", "editor")
+        )
+        retrieve.assert_not_awaited()
+        chat.assert_not_awaited()
+
     async def test_task_rejects_non_editor_before_planning_or_persisting(self):
         request = TaskRequest(project_id="foreign-project", goal="Analizar el proyecto")
         denied = HTTPException(status_code=404, detail="Proyecto no encontrado")
