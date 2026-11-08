@@ -791,3 +791,22 @@ Fase 11 pasa de 80 % a **85 %**: actualización controlada ejecutada y verificad
 
 ### Fase 11
 - 85 % → **90 %**: actualización en producción ensayada y verificada; migraciones reales aplicadas con rehearsal previo; inventario ejecutado; configuración validada; rollback documentado.
+
+## Rehearsal de rollback de aplicación y verificación de assets — 2026-11-08 (continuación, `agent/opencode-vps`)
+
+### Assets desplegados == repositorio (verificado byte a byte)
+`studio.js`, `studio.css`, `workspace.js`, `admin.js` e `index.html` servidos por `https://127.0.0.1:8070/` son **idénticos** a `frontend/` en `main` (`cmp`, sin diferencias). La instancia sirve exactamente el código auditado.
+
+### Rollback de aplicación ensayado en vivo (ida y vuelta)
+1. Imágenes actuales etiquetadas `main-20261108`; `latest` repuntado a `rollback-20261108` (imágenes previas al despliegue de hoy).
+2. `up -d --no-deps api frontend` con las imágenes antiguas: arranque correcto en 17 s; `/health` 6/6 ok; `admin.js` servido **sin** la sección QvaPay (comportamiento de la imagen previa, esperado).
+3. Re-forward a `main-20261108`: `up -d --no-deps api frontend`; `/health` 6/6 ok; readiness **ready**; landing 200; `admin.js` recuperado con la sección QvaPay (`billing-qvapay-run`).
+4. Dominio público `https://axyronatomic.com/health` → 200.
+
+Conclusión: el procedimiento de rollback documentado funciona en producción real contra la base ya migrada (023). No se requieren cambios adicionales; volumen y datos intactos durante todo el ejercicio.
+
+### Pendiente para el 100 % (bloqueos externos reales)
+1. `QVAPAY_USER_TOKEN` real y catálogo/precios aprobados → activar QVAPAY y pasar a cobro asistido.
+2. Buzón de prueba del propietario para ensayo de registro/verificación/MFA end-to-end (la configuración y el flujo SMTP están validados; falta el clic real en el correo).
+3. Sandbox AGT-04 (daemon dedicado no privilegiado + imágenes por digest + TLS).
+4. Declaración formal de REL-01/V1.0 liberada tras (1)-(3) y aceptación del propietario.
