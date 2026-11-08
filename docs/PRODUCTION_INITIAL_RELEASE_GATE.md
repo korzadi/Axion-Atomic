@@ -129,3 +129,10 @@ La ruta de login por contraseña establecía la cookie de sesión sin `HttpOnly`
 ### Readiness de modelos configurados
 
 La ruta `/health` comprueba ahora que el endpoint de etiquetas de Ollama incluya el modelo de chat y el modelo de embeddings configurados, además de verificar que el servicio responda. Si falta cualquiera de los dos modelos, readiness devuelve HTTP 503; `/health/live` conserva su función de liveness. Las pruebas de disponibilidad y modelo ausente pasaron en GitHub Actions `42400165930`.
+
+> **Estado actual verificado — 2026-11-08 (activación V1.0 autorizada, rama `agent/opencode-vps`).**
+> - Producción sirve el código de la rama con: `QVAPAY_ENABLED=true` (checkout operativo), `BILLING_ENFORCEMENT_ENABLED=true` (modo `ledger`, attestation y result key configuradas), `SANDBOX_DOCKER_ENABLED=true` (daemon dedicado userns-remapped con TLS, imagen por digest, aislamiento verificado), `AUTH_ENABLED=true`.
+> - `/health` 6/6; readiness **ready**; `/auth/me` 401 sin sesión; landing/Studio públicos sirviendo el árbol auditado (assets == repo).
+> - Registro verificado EN VIVO por el propietario (cuenta real `gemeni0305@gmail.com`, verificación de correo entregada, 50 créditos FREE acreditados atómicamente: lote `promotion` 50/50 y ledger `grant` +50).
+> - **Falta para la condición de salida:** publicación de términos/privacidad/reembolsos, primer pago real E2E de QvaPay, MFA E2E de cuenta real y aceptación formal del propietario. `REL-01` bloqueada; la V1.0 no se declara liberada.
+> - Intervención operativa autorizada documentada: IP secundaria 172.16.0.1 (br-54dec66c6382) por desaparición de docker0; regla UFW #14 para el daemon sandbox. Rollback de imágenes `rollback-v1.0-20261108` / `rollback-pre-pages`.

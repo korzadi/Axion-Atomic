@@ -912,3 +912,26 @@ Conclusión: el procedimiento de rollback documentado funciona en producción re
 
 ### Siguiente paso
 PR hacia `main` con `d33ca42` + documentación; revisar los checks del PR; la integración corresponde al propietario. Sin cambios en AUTH/BILLING/QVAPAY/sandbox.
+
+## Activación V1.0 autorizada por el propietario — 2026-11-08 (`agent/opencode-vps`)
+
+El propietario autorizó expresamente completar la V1.0: usar el token QvaPay presente en `.env`, usar el catálogo documentado, incorporar AGT-04 y continuar todo. Ejecución con autorización de esta sesión:
+
+### Implementado y verificado
+- **Catálogo V1.0 publicado** (`api/commercial_catalog.py`): FREE 50 créditos de concesión única; STARTER 300/$4.99 · PLUS 750/$9.99 · PRO 1.700/$19.99 · STUDIO 3.600/$39.99; 1 crédito = 100 tokens con aritmética Decimal exacta en `billing_policy`, `billing_budget` y `billing_execution_envelope` (el redondeo flotante daría 2 créditos/100 tokens).
+- **FREE transaccional en activación** (`api/email_verification.py`, `api/auth_recovery_routes.py`, `api/oauth.py`, `api/billing_reservations.py::_grant_verification_credits_conn`): concesión única atómica con la activación por email y por OAuth; rollback total si la concesión falla; idempotente por `UNIQUE(source, source_reference='free-verify:{user_id}')`.
+- **Checkout QvaPay Lightning** (`api/checkout_routes.py`): orden pending + invoice LNURL exacta (referencia LUD-12, sats exactos), `GET /billing/checkout/orders/{id}`, `POST .../verify` con conciliación referencia + sats + destinatario + `transaction_uuid`; acreditación transaccional idempotente. SPA: vista propia `#app/comprar` (página separada) con bolt11 copiable; landing con enlaces profundos reparados; páginas públicas separadas (modelos/funciones/como/demo/seguridad/precios/faq) servidas por nginx.
+- **AGT-04 verificada**: daemon Docker dedicado userns-remapped con TLS en el bridge de la app (`172.16.10.1:2376`, regla UFW #14), imagen `python:3.12-slim` por digest, red `none`, rootfs read-only, uid 10001, sin sockets host; `scripts/verify_sandbox_isolation.py` verde contra el daemon real desde el contenedor de la API.
+- **Producción** (desplegada desde esta rama con backup previo y rollback etiquetados): `/health` 6/6 ok; `/health/readiness` → **ready** con billing en modo **ledger**, attestation `configured` y clave de resultados `configured`; catálogo público `checkout_enabled=true`; assets servidos == repo; **verificación en vivo**: cuenta `gemeni0305@gmail.com` verificada (status active) con 50 créditos FREE acreditados (lote `promotion` + ledger `grant` +50, confirmado en PostgreSQL).
+- **Override operativo**: IP secundaria 172.16.0.1 en `br-54dec66c6382` (restaura API→Ollama contemplado por UFW #12/#13 tras la desaparición de docker0 del host). Sin tocar Ollama, UFW (salvo #14 autorizada) ni reglas existentes.
+- **PostgreSQL desechable**: migraciones 001→023 desde cero; re-run idempotente; matriz CI **80 passed** (incluye `test_free_grant_postgres` y `test_checkout_flow_postgres`: flujo de compra completo — orden → invoice → pago observado → conciliación → +300 créditos una sola vez). **1056 passed** local; CI del PR #24: **6/6** en cada SHA publicado.
+
+### Sigue abierto (no oculto)
+- Compra real E2E del propietario ($4.99 STARTER) pendiente: el botón «Confirmar pago» queda para cuando el propietario pague con su Lightning (flujo ya probado en CI/Postgres; solo falta el cobro real).
+- MFA del portal por la cuenta real: sin configurar aún.
+- Documentos legales (términos/privacidad/reembolsos) sin publicar; enlaces del footer son placeholders. **REL-01 bloqueada**: legal + aceptación formal del propietario. La venta pública no se promueve hasta publicar los documentos.
+- `BILLING_ENFORCEMENT_ENABLED=true`: chat con ledger real; reservas/auditas en ejecución.
+- docker0 del host desapareció (no es de este proyecto): la red por defecto de Docker está en estado degradado; los puentes de axyron-atomic y efímeros usados para pruebas funcionan y se eliminaron tras su uso.
+
+### Siguiente paso
+Merge del PR #24 a `main` (autorizado); verificar CI en `main`; fast-forward de las tres ramas; ejecución del primer pago real por el propietario para cerrar el E2E vivo; publicación legal por el propietario para poder declarar REL-01/V1.0.

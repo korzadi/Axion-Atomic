@@ -6,8 +6,8 @@
 - Método elegido por el propietario para recibir pagos: Lightning Address de QvaPay (`axyronatomic@qvpay.me`), con recepción en USD/conversión automática según la pantalla compartida.
 - Integración técnica: contrato oficial de Lightning Address confirmado en la documentación pública el 8 de noviembre de 2026.
 - Adaptador de solo lectura/creación de invoice implementado en `api/qvapay_lightning.py`.
-- Persistencia de invoices y conciliación paginada implementadas en `api/qvapay_settlement.py` (migración 023); las rutas HTTP de checkout siguen pendientes.
-- No se han realizado cobros reales y la acreditación automática permanece deshabilitada.
+- Persistencia de invoices y conciliación paginada implementadas en `api/qvapay_settlement.py` (migración 023) y rutas HTTP de checkout públicas (`api/checkout_routes.py`): `POST /billing/checkout/orders` (orden interna + invoice LNURL exacta, referencia LUD-12), `GET /billing/checkout/orders/{id}` y `POST /billing/checkout/orders/{id}/verify` (reconciliación referencia + sats exactos + destinatario + `transaction_uuid`; acreditación transaccional idempotente vía `confirm_verified_payment`).
+- El propietario autorizó la activación el 2026-11-08: catálogo V1.0 publicado (checkout `QVAPAY_ENABLED=true`), con la compra real pendiente de su primer pago E2E; hasta completarlo y publicar los documentos legales, la venta pública permanece en fase controlada.
 - Credenciales, códigos de acceso y secretos no deben solicitarse ni publicarse en Git, incidencias o logs.
 
 ## Distinción obligatoria entre dos productos/flows

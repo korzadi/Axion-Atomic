@@ -391,3 +391,25 @@ Tareas asignadas por el propietario: certificar el estado del SHA de referencia 
 - Auditoría estática adicional: sin `shell=True`/`eval`/`exec`/`pickle.loads`/`yaml.load` en código de producción; sin patrones de secretos versionados (solo `.env.example` y fixtures falsos de pruebas); sin CORS permisivo; flags peligrosos por defecto en `false`; sin registro de contraseñas/tokens en rutas.
 - Delta `a298344 → fa0a536`: solo documentos. `d33ca42` (este bloque de pruebas) modifica `tests/` únicamente; sin cambios de esquema, migraciones, frontend, configuración externa ni servicios.
 - `REL-01` sigue **bloqueada** (buzón real; token/catálogo QvaPay; AGT-04). La V1.0 no se declara liberada. CI del commit `d33ca42`: pendiente al redactar; debe confirmarse en el PR.
+
+## Activación V1.0 autorizada por el propietario — 2026-11-08 (`agent/opencode-vps`)
+
+El propietario autorizó expresamente la activación completa (catálogo documentado, token QvaPay del entorno, AGT-04 y continuación general). Evidencia verificada en vivo y en CI:
+
+- **SEC-01 (registro/verificación/login):** verificada EN VIVO en producción — cuenta real `gemeni0305@gmail.com` verificada, términos aceptados; concesión FREE atómica comprobada en PostgreSQL (lote `promotion` 50/50, ledger `grant` +50). E2E de MFA pendiente.
+- **SEC-03 (correo):** el correo de verificación se entregó y el enlace fue clicado por el propietario y procesado por el flujo (`verify-email`).
+- **PAY-01:** checkout técnico completo y verificado de punta a punta (Postgres real, proveedor simulado): orden → invoice LNURL → pago observado → conciliación → +300 créditos una sola vez. Cobro real del propietario pendiente; catálogo V1.0 publicado en producción (`checkout_enabled=true`).
+- **BILL-02:** facturación en modo **ledger** en producción con attestation configurada; `BILLING_ENFORCEMENT_ENABLED=true`; pruebas PostgreSQL completas.
+- **AGT-04:** **Verificada**. Daemon Docker dedicado userns-remapped con TLS en el bridge de la app; imagen `python:3.12-slim@sha256:5e2…`; ejecución con uid 10001, rootfs de solo lectura, red bloqueada, `/workspace` acotado, sin sockets Docker visibles. `scripts/verify_sandbox_isolation.py` verde desde el contenedor de la API.
+- **QA-01/QA-02:** **Verificada en CI** en cada SHA publicado de la activación (PR #24, run `42537317850`, 6/6 jobs: python-tests, postgres-migrations, qdrant-cloud-integration, qdrant-e2e, container-image-build, studio-browser-e2e); suite local **1056 passed, 24 skipped**.
+- **STU-01/STU-03:** registro live demostrado; el flujo Axyron Studio sirve en `/app/*` y los deep links públicos funcionan; axe 0 violaciones; teclado 0 problemas.
+- **REL-01:** sigue **BLOQUEADA** por (1) publicación de documentos legales (términos/privacidad/reembolsos; enlaces siguen placeholders) y (2) primer pago real E2E del propietario + aceptación formal. La venta pública no se promueve.
+- **docker0 del host desapareció** (externo a este proyecto): restaurada la conectividad API→Ollama mediante IP secundaria 172.16.0.1 en `br-54dec66c6382` con autorización expresa; Ollama y UFW no modificados (regla UFW #14 añadida con autorización para el daemon sandbox). La red Docker por defecto del host permanece degradada; no se usó.
+
+### Bloqueos que siguen vigentes
+1. Legal sin publicar (privacidad/términos/reembolsos).
+2. Primer pago real de QvaPay por el propietario ($4.99 STARTER).
+3. MFA E2E de la cuenta real (sin configurar aún).
+4. Aceptación formal del propietario para declarar V1.0 liberada.
+
+Notas de honestidad: la activación de flags se hizo sobre la rama de desarrollo con autorización del propietario; el despliegue se realizó desde esa rama con backup y rollback; la decisión de retener la venta pública hasta el legal corresponde al propietario. Los porcentajes de criterios no suben artificialmente: con los avisos vivos de arriba, la implementación es ~95 % y las pruebas verificadas ~85 %; la preparación productiva sigue limitada por REL-01 (legal + pago real).
