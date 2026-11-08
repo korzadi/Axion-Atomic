@@ -579,3 +579,13 @@ Confirmar CI del SHA publicado; después continuar Fase 11 (preflight/staging) y
 
 ### Estado
 - Fase 12: QA local y CI en verde para el HEAD; REL-01 sigue bloqueada por dependencias externas.
+
+## Checkpoint Fase 12 — actualización de integración bloqueada por CI roja en agent/chatgpt (2026-11-08)
+
+- `origin/agent/chatgpt` avanzó a `acf37a6` (14 commits: serialización de mutaciones RAG y redacción de secretos legacy).
+- Al integrarlos sobre `8318af6`: **3 pruebas fallan**, todas ya rotas en `agent/chatgpt` por sí solo:
+  1. `test_rag_manual_ingest.py::ManualIngestSecurityTests::test_retrieval_redacts_legacy_secrets_from_text_and_source` (la implementación no redacta el prefijo `[Source: ...]`).
+  2. `test_rag_qdrant_integration.py::…::test_project_scoped_source_lifecycle_against_qdrant` (intento de conexión real a PostgreSQL 127.0.0.1:5433, autenticación fallida).
+  3. `test_workspace_knowledge_upload_rag_integration.py::…::test_http_handler_extracts_indexes_lists_and_retrieves_uploaded_file` (mismo origen).
+- `8318af6` (HEAD de `integration/chatgpt-opencode-20261108b`, PR #7) pasa las 28 pruebas de esos módulos y CI de 5 jobs en verde. La integración **no** incorpora los commits nuevos hasta que `agent/chatgpt` quede en verde (merge limpio, sin conflictos, según `git merge-tree`).
+- Detalle documentado en el PR #7 (comentario de coordinación). No se modificó `agent/chatgpt` ni `main`.
