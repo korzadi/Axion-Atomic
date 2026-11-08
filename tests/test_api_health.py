@@ -52,6 +52,11 @@ class FakeEngine:
         return FakeConnection()
 
 
+class FailingEngine:
+    def connect(self):
+        raise RuntimeError("database unavailable")
+
+
 class ApiHealthTests(unittest.IsolatedAsyncioTestCase):
     async def test_health_reports_all_real_dependencies_and_configured_models(self):
         with patch.object(main, "engine", FakeEngine()), patch.object(
@@ -65,6 +70,28 @@ class ApiHealthTests(unittest.IsolatedAsyncioTestCase):
             "database": "ok", "ollama": "ok", "chat_model": "ok",
             "embedding_model": "ok", "qdrant": "ok"
         })
+
+    async def test_health_returns_503_when_database_connection_fails(self):
+        with patch.object(main, "engine", FailingEngine()), patch.object(
+            main.httpx, "AsyncClient", FakeHttpClient
+        ), patch.object(main.settings, "redis_cache_enabled", False):
+            with self.assertRaises(HTTPException) as raised:
+                await main.health()
+        self.assertEqual(raised.exception.status_code, 503)
+        self.assertEqual(raised.exception.detail["checks"]["database"], "unavailable")
+        self.assertEqual(raised.exception.detail["checks"]["ollama"], "ok")
+
+    async def test_health_marks_models_unavailable_for_malformed_inventory(self):
+        with patch.object(main, "engine", FakeEngine()), patch.object(
+            main.httpx, "AsyncClient",
+            lambda timeout=3.0: FakeHttpClient(timeout, models={"unexpected": "shape"})
+        ), patch.object(main.settings, "redis_cache_enabled", False):
+            with self.assertRaises(HTTPException) as raised:
+                await main.health()
+        self.assertEqual(raised.exception.status_code, 503)
+        self.assertEqual(raised.exception.detail["checks"]["ollama"], "ok")
+        self.assertEqual(raised.exception.detail["checks"]["chat_model"], "unavailable")
+        self.assertEqual(raised.exception.detail["checks"]["embedding_model"], "unavailable")
 
     async def test_health_fails_readiness_when_chat_model_is_missing(self):
         with patch.object(main, "engine", FakeEngine()), patch.object(
