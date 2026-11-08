@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from agent.workspace import Workspace
+from core.errors import TransportError
 from rag.chunker import Chunk
 from rag.indexer import RepoIndexer
 from rag.memory import MemoryManager
@@ -83,6 +84,26 @@ class IndexerTests(PipelineBase):
         rep = await bad.index_project(self.ws)
         self.assertEqual(len(rep.errors), 1); self.assertEqual(rep.removed, [])
         self.assertEqual((set(self.store.points), self.meta.stats("p1")), before)
+
+    async def test_vector_upsert_failure_keeps_previous_file_index(self):
+        await self.idx.index_project(self.ws)
+        old_ids = set(self.store.points)
+        old_sha = self.meta.list_files("p1")["src/tax.py"]
+        (self.root / "src/tax.py").write_text(TAX + "\n# cambio de versión\n")
+
+        class FailingStore(InMemoryVectorStore):
+            async def upsert(self, points):
+                raise TransportError("vector store unavailable", retryable=True)
+
+        failing_store = FailingStore()
+        failing_store.points = self.store.points
+        bad = RepoIndexer(self.emb, failing_store, self.meta)
+        report = await bad.index_project(self.ws)
+
+        self.assertTrue(any("src/tax.py" in error for error in report.errors))
+        self.assertEqual(self.meta.list_files("p1")["src/tax.py"], old_sha)
+        self.assertEqual(set(failing_store.points), old_ids)
+        self.assertIn("src/tax.py", {point.payload["path"] for point in failing_store.points.values()})
 
     async def test_truncated_walk_deletes_nothing(self):
         await self.idx.index_project(self.ws)
