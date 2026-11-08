@@ -138,6 +138,50 @@ class AuthRouteGateTests(unittest.TestCase):
         self.assertTrue(any(cookie.startswith("axion_session=") and "Max-Age=0" in cookie for cookie in cookies))
         self.assertTrue(any(cookie.startswith("axion_csrf=") and "Max-Age=0" in cookie for cookie in cookies))
 
+    def test_registration_never_returns_email_verification_token(self):
+        from types import SimpleNamespace
+        from api.auth_routes import register
+        request = Mock(spec=Request)
+        request.client.host = "198.51.100.21"
+        secret_token = "verification-secret-token-never-return-this"
+        with patch("api.auth_routes.settings.auth_enabled", True), \
+             patch("api.auth_routes._enforce_rate_limit"), \
+             patch("api.auth_routes.email_delivery_configured", return_value=True), \
+             patch("api.auth_routes.settings.oauth_public_base_url", "https://axion.example"), \
+             patch("api.auth_routes.create_user", return_value="new-user-id"), \
+             patch("api.auth_routes.issue_email_verification_token", return_value=SimpleNamespace(token=secret_token)), \
+             patch("api.auth_routes.send_verification_email") as send_email:
+            result = asyncio.run(register(
+                RegisterRequest(email="new@example.com", password="StrongPassword123!", display_name="New", terms_accepted=True),
+                request,
+            ))
+        send_email.assert_called_once()
+        self.assertEqual(send_email.call_args.kwargs["token"], secret_token)
+        self.assertEqual(result["status"], "pending_verification")
+        self.assertNotIn(secret_token, str(result))
+        self.assertNotIn("token", result)
+
+    def test_registration_email_failure_does_not_expose_verification_token(self):
+        from types import SimpleNamespace
+        from api.auth_routes import register
+        request = Mock(spec=Request)
+        request.client.host = "198.51.100.22"
+        secret_token = "verification-secret-token-never-return-this"
+        with patch("api.auth_routes.settings.auth_enabled", True), \
+             patch("api.auth_routes._enforce_rate_limit"), \
+             patch("api.auth_routes.email_delivery_configured", return_value=True), \
+             patch("api.auth_routes.settings.oauth_public_base_url", "https://axion.example"), \
+             patch("api.auth_routes.create_user", return_value="new-user-id"), \
+             patch("api.auth_routes.issue_email_verification_token", return_value=SimpleNamespace(token=secret_token)), \
+             patch("api.auth_routes.send_verification_email", side_effect=RuntimeError("mail transport failure")):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(register(
+                    RegisterRequest(email="new@example.com", password="StrongPassword123!", display_name="New", terms_accepted=True),
+                    request,
+                ))
+        self.assertEqual(raised.exception.status_code, 503)
+        self.assertNotIn(secret_token, str(raised.exception.detail))
+
     def test_oauth_provider_discovery_exposes_only_availability_flags(self):
         from api.auth_routes import oauth_providers
         with patch("api.auth_routes.configured", side_effect=lambda settings, provider: provider == "google"):
