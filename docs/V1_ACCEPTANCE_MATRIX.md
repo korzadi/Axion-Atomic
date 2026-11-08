@@ -12,7 +12,7 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 
 | ID | Área | Criterio | Evidencia inspeccionada | Estado |
 |---|---|---|---|---|
-| ARC-01 | Arquitectura | Contratos API, frontend, DB y RAG coherentes | `api/main.py`, routers, Compose | Parcial |
+| ARC-01 | Arquitectura | Contratos API, frontend, DB y RAG coherentes | `api/main.py`, routers, Compose; contrato homogéneo `project_id`/`path` en stores RAG y validación de lote previa a escritura (commit `31d44e3`) | Parcial |
 | API-01 | API | Health DB/Ollama/modelos/Qdrant/Redis | VPS devolvió 6/6 OK el 07-11-2026 | Verificada en VPS en ese momento |
 | API-02 | API | Errores de capacidad/pool controlados | Handlers en `api/main.py` | Implementada; prueba HEAD pendiente |
 | STU-01 | Studio | Proyectos autenticados | `/auth/projects` y SPA | Parcial; AUTH desactivada operativamente |
@@ -179,3 +179,14 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Nuevas 13 pruebas en `tests/test_qvapay_lightning.py` con `httpx.MockTransport`; cubren errores sin filtrar el token, límites LNURL, callback malicioso, precio BTC, conversión y emparejamiento.
 - Configuración desactivada por defecto: `QVAPAY_ENABLED=false`, token `SecretStr`, dirección validada y timeout positivo. No se solicitó ni registró ningún token real.
 - Verificación local: **898 passed, 10 skipped**; `compileall`, sintaxis JS y `git diff --check` correctos. Persisten pendientes persistencia de invoices, sincronización, rutas HTTP, catálogo/precios y pruebas en sandbox oficial; no hay cobros habilitados.
+
+
+## Revisión incremental RAG — contrato de payload y atomicidad de lote (8 de noviembre de 2026)
+
+- Hallazgo ARC-01: `InMemoryVectorStore.upsert` exigía `project_id` y `path`, mientras `QdrantStore.upsert` solo exigía `project_id`. Los dos backends aceptaban contratos distintos para la misma interfaz `VectorStore`.
+- Corrección en `rag/store.py`: validación común de `project_id` y `path` como cadenas no vacías, aplicada por ambos stores.
+- La validación ahora recorre el lote completo antes de mutar memoria o enviar cualquier batch HTTP a Qdrant. Un elemento inválido al final de un lote grande ya no deja publicados los primeros 64 puntos.
+- Regresiones en `tests/test_rag_store_http.py`: payload ausente/inválido, elemento inválido en el último segmento de un lote mayor de 64, ausencia de escrituras parciales y consistencia del backend en memoria.
+- Commits: `1aa749608e59402e0f7ccee7bd634b93b1b91fb9` (implementación) y `31d44e31238095c2af69d96063270f77d9685aa1` (regresiones).
+- Verificación: cambios publicados en `agent/chatgpt`; pytest y CI de estos commits todavía no se han ejecutado/confirmado. No se declara ARC-01 cerrado.
+- Alcance: no se cambió esquema SQL, migraciones, frontend, configuración externa ni datos de Qdrant; no se ejecutó ninguna operación contra servicios reales.
