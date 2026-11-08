@@ -1,5 +1,6 @@
 import threading
 import unittest
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -9,6 +10,17 @@ FAKE_AWS = "AKIA" + "ABCDEFGHIJKLMNOP"
 
 
 class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        @asynccontextmanager
+        async def local_test_lock(project_id):
+            yield
+
+        self.project_lock_patch = patch.object(service, "_project_mutation_lock", local_test_lock)
+        self.project_lock_patch.start()
+
+    async def asyncTearDown(self):
+        self.project_lock_patch.stop()
+
     async def test_secret_in_text_is_rejected_before_embedding_or_qdrant(self):
         embed = AsyncMock(return_value=[[0.1] * 4])
         upsert = patch.object(service.client, "upsert")
@@ -267,6 +279,38 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
                 await service.list_sources("project-a")
         self.assertEqual(str(caught.exception), "El almacén de conocimiento no está disponible")
         self.assertNotIn("private qdrant endpoint", str(caught.exception))
+
+
+    async def test_retrieval_redacts_legacy_secrets_from_text_and_source(self):
+        from types import SimpleNamespace
+
+        legacy_secret = "AKIA" + "ABCDEFGHIJKLMNOP"
+        payload = {
+            "project_id": "project-a",
+            "source": 'config API_KEY="legacy-source-secret-123"',
+            "text": f"Documento antiguo\nAWS_ACCESS_KEY={legacy_secret}\nContenido útil",
+        }
+        response = SimpleNamespace(points=[SimpleNamespace(payload=payload)])
+        with (
+            patch.object(service, "ensure_collection"),
+            patch.object(service, "embed", new=AsyncMock(return_value=[0.1, 0.2, 0.3, 0.4])),
+            patch.object(service.client, "query_points", return_value=response) as query,
+        ):
+            context = await service.retrieve("consulta segura", "project-a")
+
+        self.assertNotIn(legacy_secret, context)
+        self.assertIn("[REDACTED:aws_access_key]", context)
+        self.assertIn("[REDACTED:credential_assignment]", context)
+        self.assertIn("Contenido útil", context)
+        self.assertEqual(
+            query.call_args.kwargs["query_filter"].must[0].key,
+            "project_id",
+        )
+        self.assertEqual(
+            query.call_args.kwargs["query_filter"].must[0].match.value,
+            "project-a",
+        )
+
 
 
 if __name__ == "__main__":

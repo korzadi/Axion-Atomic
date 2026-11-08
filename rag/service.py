@@ -1,10 +1,13 @@
 import asyncio
 import logging
 import threading
+import inspect
+from contextlib import asynccontextmanager
+from functools import wraps
 import time
 import uuid
 
-from agent.secrets import find_secrets
+from agent.secrets import find_secrets, redact
 from qdrant_client import QdrantClient, models
 from api.config import settings
 from api.ollama import embed
@@ -14,6 +17,7 @@ client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
 logger = logging.getLogger(__name__)
 _collection_lock = threading.Lock()
 _collection_checked_at = 0.0
+_local_project_mutation_locks: dict[str, asyncio.Lock] = {}
 _COLLECTION_CHECK_INTERVAL_SECONDS = 60.0
 
 MAX_MANUAL_INGEST_CHARS = 100_000
@@ -51,6 +55,61 @@ def validate_manual_ingest(text: str, source: str, project_id: str) -> None:
         )
 
 
+
+@asynccontextmanager
+async def _project_mutation_lock(project_id: str):
+    """Comparte la misma clave advisory que RepoIndexer entre todas las rutas RAG."""
+    # Importación diferida para evitar ciclos durante la carga de api.main.
+    from api.database import engine
+    from agent.sqlalchemy_meta import SqlAlchemyMetaStore
+
+    # SQLite se usa en desarrollo y CI; no implementa advisory locks PostgreSQL.
+    # El fallback local evita romper esos entornos, pero no ofrece coordinación
+    # entre procesos y nunca debe confundirse con el bloqueo de producción.
+    if getattr(getattr(engine, "dialect", None), "name", None) != "postgresql":
+        lock = _local_project_mutation_locks.setdefault(project_id, asyncio.Lock())
+        async with lock:
+            yield
+        return
+
+    async with SqlAlchemyMetaStore(engine).project_lock(project_id):
+        yield
+
+
+def _serialize_project_mutation(preflight):
+    """Serializa escrituras manuales por proyecto, también entre workers API."""
+    def decorate(function):
+        signature = inspect.signature(function)
+
+        @wraps(function)
+        async def wrapped(*args, **kwargs):
+            bound = signature.bind(*args, **kwargs)
+            preflight(**bound.arguments)
+            project_id = bound.arguments["project_id"]
+            async with _project_mutation_lock(project_id):
+                return await function(*args, **kwargs)
+
+        return wrapped
+    return decorate
+
+
+def _preflight_ingest(*, text, source, project_id, source_id=None, **_):
+    validate_manual_ingest(text, source, project_id)
+    if source_id is not None:
+        try:
+            uuid.UUID(source_id)
+        except (ValueError, TypeError, AttributeError):
+            raise ValueError("source_id debe ser un UUID válido") from None
+
+
+def _preflight_delete(*, source_id, project_id, **_):
+    _project_filter(project_id)
+    try:
+        uuid.UUID(source_id)
+    except (ValueError, TypeError, AttributeError):
+        raise ValueError("source_id debe ser un UUID válido") from None
+
+
 def ensure_collection():
     """Comprueba/crea la colección con caché breve y sincronización entre threads.
 
@@ -85,6 +144,11 @@ def ensure_collection():
         _collection_checked_at = time.monotonic()
 
 
+def _manual_source_path(source_id: str) -> str:
+    """Representa una fuente manual bajo el mismo contrato project_id/path del índice."""
+    return f"manual/{source_id}"
+
+
 def _project_filter(project_id: str):
     if not isinstance(project_id, str) or not project_id.strip():
         raise ValueError("project_id es obligatorio")
@@ -97,8 +161,8 @@ def _project_filter(project_id: str):
     )
 
 
+@_serialize_project_mutation(_preflight_ingest)
 async def ingest_text(text, source, project_id: str, source_id: str | None = None):
-    validate_manual_ingest(text, source, project_id)  # Antes de Qdrant y del embedder.
     try:
         source_id = str(uuid.UUID(source_id)) if source_id else str(uuid.uuid4())
     except (ValueError, TypeError, AttributeError):
@@ -119,7 +183,7 @@ async def ingest_text(text, source, project_id: str, source_id: str | None = Non
             models.PointStruct(
                 id=str(uuid.uuid4()),
                 vector=vector,
-                payload={"text": chunk, "source": source, "source_id": source_id, "project_id": project_id, "chunk": index},
+                payload={"text": chunk, "source": source, "source_id": source_id, "project_id": project_id, "path": _manual_source_path(source_id), "chunk": index},
             )
         )
     if points:
@@ -131,9 +195,9 @@ async def ingest_text(text, source, project_id: str, source_id: str | None = Non
     return len(points)
 
 
+@_serialize_project_mutation(_preflight_ingest)
 async def replace_source(source_id: str, text: str, source: str, project_id: str) -> int:
     """Reindexa una fuente conservando su ID; publica la nueva versión antes de retirar la anterior."""
-    validate_manual_ingest(text, source, project_id)
     try:
         normalized_source_id = str(uuid.UUID(source_id))
     except (ValueError, TypeError, AttributeError):
@@ -183,7 +247,7 @@ async def replace_source(source_id: str, text: str, source: str, project_id: str
         new_points.append(models.PointStruct(
             id=str(uuid.uuid4()),
             vector=vector,
-            payload={"text": chunk, "source": source, "source_id": normalized_source_id, "project_id": project_id, "chunk": index},
+            payload={"text": chunk, "source": source, "source_id": normalized_source_id, "project_id": project_id, "path": _manual_source_path(normalized_source_id), "chunk": index},
         ))
     try:
         await asyncio.to_thread(
@@ -219,13 +283,11 @@ async def replace_source(source_id: str, text: str, source: str, project_id: str
     return len(new_points)
 
 
+@_serialize_project_mutation(_preflight_delete)
 async def delete_source(source_id: str, project_id: str) -> None:
     """Elimina todos los fragmentos de una fuente, siempre dentro del proyecto indicado."""
     project_filter = _project_filter(project_id)
-    try:
-        normalized_source_id = str(uuid.UUID(source_id))
-    except (ValueError, TypeError, AttributeError):
-        raise ValueError("source_id debe ser un UUID válido") from None
+    normalized_source_id = str(uuid.UUID(source_id))
     source_filter = models.Filter(
         must=project_filter.must + [
             models.FieldCondition(key="source_id", match=models.MatchValue(value=normalized_source_id))
@@ -320,8 +382,8 @@ async def retrieve(query: str, project_id: str, limit: int = 5):
             with_payload=True,
         )
         return "\\n\\n".join(
-            "[Source: " + str(h.payload.get("source", "unknown")) + "]\\n"
-            + str(h.payload.get("text", ""))
+            "[Source: " + redact(str(h.payload.get("source", "unknown"))) + "]\\n"
+            + redact(str(h.payload.get("text", "")))
             for h in result.points
             if h.payload and h.payload.get("project_id") == project_id
         )
