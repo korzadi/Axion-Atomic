@@ -3,7 +3,7 @@
 ## Estado comercial y técnico
 
 - Aprobación comercial comunicada por el propietario: `APPROVED`.
-- Método elegido por el propietario para recibir pagos: Lightning Address de QvaPay (`axionatomic@qvpay.me`), con recepción en USD/conversión automática según la pantalla compartida.
+- Método elegido por el propietario para recibir pagos: Lightning Address de QvaPay (`axyronatomic@qvpay.me`), con recepción en USD/conversión automática según la pantalla compartida.
 - Integración técnica: contrato oficial de Lightning Address confirmado en la documentación pública el 8 de noviembre de 2026.
 - Adaptador de solo lectura/creación de invoice implementado en `api/qvapay_lightning.py`.
 - Persistencia de invoices y conciliación paginada implementadas en `api/qvapay_settlement.py` (migración 023); las rutas HTTP de checkout siguen pendientes.
@@ -25,7 +25,7 @@ La documentación pública consultada de QvaPay describe un flujo Merchant API d
 
 La captura compartida por el propietario mostraba:
 
-- Dirección Lightning: `axionatomic@qvpay.me`.
+- Dirección Lightning: `axyronatomic@qvpay.me`.
 - Recepción en USD con conversión automática.
 - Comisión de conversión mostrada en esa pantalla: 0,5 %.
 - Límites visibles en ese momento: USD 0,10–500 por pago y disponibilidad diaria de USD 1.000.
@@ -89,3 +89,11 @@ La futura acreditación debe validar desde backend la identidad de la transacci�
 - Crear factura Merchant: https://www.qvapay.com/docs/merchants/create-invoice
 - Detalle de transacción Merchant: https://www.qvapay.com/docs/merchants/transaction-detail
 - Firma de pagos mini-app: https://www.qvapay.com/docs/miniapps/payments
+
+## Verificación del Lightning Address (2026-11-08, con autorización del propietario)
+
+- Dirección confirmada por el propietario: `axyronatomic@qvpay.me`.
+- LNURL proporcionado por el propietario: decodifica a `https://www.qvapay.com/.well-known/lnurlp/axionatomic` (con "i"), que responde **HTTP 404 «Lightning Address no encontrada»**. El LNURL entregado **no corresponde** a la dirección confirmada y debe solicitarse/derivarse de nuevo.
+- El LNURL efectivo de la dirección confirmada (`.../lnurlp/axyronatomic`) responde **HTTP 200** con `payRequest` válido: `minSendable=132000` (132 sats), `maxSendable=527160000` (527,160 sats), `commentAllowed=255`, metadatos `[["text/plain","Pago a axyronatomic en QvaPay"],["text/identifier","axyronatomic@qvpay.me"]]`.
+- En consecuencia, el default de configuración del repositorio se corrigió de `axionatomic@qvpay.me` a `axyronatomic@qvpay.me` (config, plantilla `.env.example`, pruebas y docs). Sin push pendiente de decisión del propietario.
+- Verificación GET sin efecto sobre la API: no se crearon invoices ni operaciones; no se cargó ningún tarifario en BD; `BILLING_ENFORCEMENT_ENABLED=false` y `QVAPAY_ENABLED=false` siguen intactos; el checkout continúa bloqueado.

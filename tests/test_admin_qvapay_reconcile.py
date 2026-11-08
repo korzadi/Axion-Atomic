@@ -31,7 +31,7 @@ def _settings(*, enabled=True, token="test-token"):
     mock_settings = MagicMock()
     mock_settings.qvapay_enabled = enabled
     mock_settings.qvapay_user_token = SecretStr(token) if token is not None else None
-    mock_settings.qvapay_lightning_address = "axionatomic@qvpay.me"
+    mock_settings.qvapay_lightning_address = "axyronatomic@qvpay.me"
     mock_settings.qvapay_request_timeout_seconds = 5.0
     return mock_settings
 

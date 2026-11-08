@@ -28,7 +28,7 @@ from api.qvapay_settlement import (
 from api.qvapay_lightning import LightningPayment
 
 engine = create_engine(DATABASE_URL, future=True, pool_pre_ping=True)
-ADDRESS = "axionatomic@qvpay.me"
+ADDRESS = "axyronatomic@qvpay.me"
 
 
 def _user():

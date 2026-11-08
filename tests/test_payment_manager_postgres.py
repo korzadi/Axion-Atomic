@@ -74,16 +74,16 @@ def test_exact_verified_payment_grants_credits_once_atomically():
     order = _order(user_id)
     payment = VerifiedPayment(
         provider_transaction_id="qv-lightning-tx-unique-001",
-        amount_minor=500, currency="USD", recipient="axionatomic@qvpay.me",
+        amount_minor=500, currency="USD", recipient="axyronatomic@qvpay.me",
         verification_source="provider_api", verified_at=datetime.now(timezone.utc),
     )
     assert confirm_verified_payment(
         engine=engine, order_id=order.order_id, payment=payment,
-        expected_recipient="axionatomic@qvpay.me",
+        expected_recipient="axyronatomic@qvpay.me",
     )
     assert not confirm_verified_payment(
         engine=engine, order_id=order.order_id, payment=payment,
-        expected_recipient="axionatomic@qvpay.me",
+        expected_recipient="axyronatomic@qvpay.me",
     )
     assert get_payment_order(engine=engine, user_id=user_id, order_id=order.order_id).status == "paid"
     with engine.connect() as conn:
@@ -107,12 +107,12 @@ def test_amount_mismatch_moves_order_to_review_without_grant():
     order = _order(user_id)
     payment = VerifiedPayment(
         provider_transaction_id="qv-lightning-tx-mismatch-002",
-        amount_minor=499, currency="USD", recipient="axionatomic@qvpay.me",
+        amount_minor=499, currency="USD", recipient="axyronatomic@qvpay.me",
         verification_source="provider_api", verified_at=datetime.now(timezone.utc),
     )
     assert not confirm_verified_payment(
         engine=engine, order_id=order.order_id, payment=payment,
-        expected_recipient="axionatomic@qvpay.me",
+        expected_recipient="axyronatomic@qvpay.me",
     )
     assert get_payment_order(engine=engine, user_id=user_id, order_id=order.order_id).status == "under_review"
     with engine.connect() as conn:
@@ -125,14 +125,14 @@ def test_same_provider_transaction_cannot_pay_two_orders():
     first, second = _order(user_id), _order(user_id)
     payment = VerifiedPayment(
         provider_transaction_id="qv-lightning-tx-replay-003",
-        amount_minor=500, currency="USD", recipient="axionatomic@qvpay.me",
+        amount_minor=500, currency="USD", recipient="axyronatomic@qvpay.me",
         verification_source="provider_api", verified_at=datetime.now(timezone.utc),
     )
     confirm_verified_payment(engine=engine, order_id=first.order_id, payment=payment,
-                             expected_recipient="axionatomic@qvpay.me")
+                             expected_recipient="axyronatomic@qvpay.me")
     with pytest.raises(Exception):
         confirm_verified_payment(engine=engine, order_id=second.order_id, payment=payment,
-                                 expected_recipient="axionatomic@qvpay.me")
+                                 expected_recipient="axyronatomic@qvpay.me")
     assert get_payment_order(engine=engine, user_id=user_id, order_id=second.order_id).status == "pending"
 
 
@@ -146,12 +146,12 @@ def test_payment_verified_after_order_expiry_goes_to_review_without_credit():
     )
     payment = VerifiedPayment(
         provider_transaction_id="qv-lightning-tx-late-004",
-        amount_minor=500, currency="USD", recipient="axionatomic@qvpay.me",
+        amount_minor=500, currency="USD", recipient="axyronatomic@qvpay.me",
         verification_source="provider_api", verified_at=now + timedelta(minutes=2),
     )
     assert not confirm_verified_payment(
         engine=engine, order_id=order.order_id, payment=payment,
-        expected_recipient="axionatomic@qvpay.me",
+        expected_recipient="axyronatomic@qvpay.me",
     )
     assert get_payment_order(engine=engine, user_id=user_id, order_id=order.order_id).status == "under_review"
     with engine.connect() as conn:

@@ -7,7 +7,7 @@ import pytest
 from api.qvapay_lightning import QvaPayLightningClient, QvaPayLightningConfigError
 from api.qvapay_settlement import fetch_recent_payments, new_payment_reference
 
-ADDRESS = "axionatomic@qvpay.me"
+ADDRESS = "axyronatomic@qvpay.me"
 TOKEN = "qvapay-user-token-for-tests"
 
 
@@ -19,7 +19,7 @@ def _status_payload(payments):
             "receiving": True,
             "address": {
                 "uuid": "0b9f3c1e-6a2d-4c5b-9e7f-2a1b3c4d5e6f",
-                "name": "axionatomic",
+                "name": "axyronatomic",
                 "address": ADDRESS,
                 "lnurl": "LNURL1TEST",
                 "status": "active",
