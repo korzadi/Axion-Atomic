@@ -42,7 +42,7 @@ El frontend ya existe como archivo estático `frontend/Axyron Atomic — Tu asis
 
 ### 3. Agente, ejecuciones y aprobaciones
 
-Las rutas HTTP de ejecuciones persistentes ya incluyen inicio, lectura, aprobación y reanudación autenticada por proyecto. Esto no demuestra ejecución de comandos: la API no inyecta un backend Docker. La recuperación de acciones interrumpidas requiere reconciliación humana y no las repite automáticamente. La validación end-to-end de todos los estados sigue pendiente. Las aprobaciones deben permanecer vinculadas a payload/hash, proyecto, actor autorizado y expiración.
+Las rutas HTTP de ejecuciones persistentes ya incluyen inicio, lectura, aprobación, reanudación, reconciliación y cancelación autenticadas por proyecto. La API puede inyectar un backend Docker solo si se configura un daemon dedicado con TLS, imágenes fijadas por digest y CLI disponible; la configuración permanece desactivada y no se ha validado end-to-end. La recuperación de acciones interrumpidas requiere reconciliación humana y no las repite automáticamente. Las aprobaciones deben permanecer vinculadas a payload/hash, proyecto, actor autorizado y expiración.
 
 ### 4. Aislamiento y sandbox
 
@@ -104,8 +104,8 @@ Esta sección registra una inspección adicional de `api/workspace_routes.py`, `
 - Las herramientas mutables de archivos y Git se representan como propuestas; el agente pausa en `awaiting_approval` y valida el hash antes de aplicar.
 - `RunStore` persiste ejecuciones y acciones por proyecto, evita reutilizar un hash con otra carga útil y marca acciones reclamadas como `running`. Una acción que quedó en ese estado requiere reconciliación humana y no se repite automáticamente.
 - `DbApprovalGate` ofrece aprobación persistente con expiración, decisión condicional y canje de un solo uso ligado al hash.
-- La ruta HTTP `POST /workspace/agent/tasks` todavía llama al planificador y crea una aprobación de plan; no instancia ni ejecuta `CodingAgent`. Las rutas de aprobación HTTP actualizan registros, pero devuelven expresamente `execution: not_executed`. Por tanto, el runtime existe como componentes, pero el flujo web end-to-end aún no está conectado.
-- No se encontró en las rutas workspace revisadas una operación HTTP para iniciar, reanudar, cancelar o reconciliar una ejecución del `CodingAgent`. La cancelación y la recuperación operacional siguen pendientes.
+- La ruta HTTP `POST /workspace/agent/tasks` es el planificador legacy: crea una aprobación de plan y no instancia ni ejecuta `CodingAgent`. El runtime real está conectado en `POST /workspace/agent/runs` y `POST /workspace/agent/runs/{run_id}/resume`; las aprobaciones de plan y de acción siguen sin ejecutar herramientas por sí mismas.
+- Las rutas workspace permiten iniciar, reanudar, reconciliar y cancelar ejecuciones del `CodingAgent` con autorización, CSRF y rate limit. La cancelación solo acepta ejecuciones en `awaiting_approval`; las ejecuciones en vuelo no se cancelan por esa vía y la reconciliación solo resuelve acciones `running` interrumpidas sin reejecutar la herramienta.
 - Debe verificarse en el punto de composición de la aplicación que la misma instancia/configuración persistente de `DbApprovalGate` se comparte entre el runtime y las decisiones HTTP. No asumir que el registro aprobado por la API es visible para una puerta en memoria.
 
 ### Hallazgos concretos del sandbox
@@ -121,9 +121,9 @@ Esta sección registra una inspección adicional de `api/workspace_routes.py`, `
 
 1. Inspeccionar el punto de composición/DI de FastAPI y las fábricas de runtime para demostrar que `Workspace`, `GitManager`, `SandboxExecutor`, `RunStore` y `DbApprovalGate` se construyen por proyecto y con la misma persistencia.
 2. Diseñar una capa de servicio de ejecuciones que derive el proyecto y el actor exclusivamente de la sesión autenticada; no aceptar rutas de workspace ni identidades arbitrarias del cliente.
-3. Añadir endpoints autenticados para crear, consultar, reanudar y cancelar ejecuciones solo después de definir la semántica de concurrencia, idempotencia y reconciliación.
+3. Definir la cancelación de ejecuciones en vuelo y su semántica de concurrencia; crear, consultar, reanudar, reconciliar y cancelar ejecuciones pendientes ya están implementados.
 4. Unificar las aprobaciones de plan legado y las aprobaciones de acciones del runtime, o documentar claramente sus contratos separados. No permitir que una aprobación de plan autorice una herramienta.
-5. Añadir pruebas de integración que cubran: proyecto ajeno, actor sin rol, CSRF, aprobación expirada, hash incorrecto, doble canje, reinicio con acción `running`, reanudación tras aprobación y ausencia de reejecución duplicada.
+5. Ampliar las pruebas de integración para cubrir aprobación expirada, hash incorrecto, doble canje y reinicio con acción `running` contra PostgreSQL real; ya hay cobertura unitaria de proyecto ajeno, rol, CSRF, reconciliación y ausencia de reejecución.
 6. Añadir pruebas del sandbox para red deshabilitada, límites de recursos, timeout, truncamiento, limpieza de contenedor/snapshot, symlinks, archivos sensibles y backend local rechazado por defecto.
 7. Solo tras esas pruebas, conectar las vistas de AXION STUDIO al ciclo real de ejecución.
 
@@ -163,7 +163,7 @@ Esta sección prevalece sobre las observaciones históricas anteriores cuando ex
 1. Validar las nuevas pruebas y la secuencia completa de aprobación/reanudación contra PostgreSQL real en CI; mantener pendiente una prueba end-to-end de agente con workspace aislado.
 2. Definir y probar el daemon/snapshot de Docker sandbox con aislamiento real. No habilitar comandos arbitrarios ni egress.
 3. Probar inferencia real de Atomic Code 1.1 desde el servicio en un entorno controlado y validar identidad, tokenizer, contexto y errores.
-4. Conectar facturación durable al endpoint de chat solo después de verificar presupuesto previo, reservas, liquidación y recuperación; mantener Shadow Mode y no cobrar.
+4. Verificar en PostgreSQL real la facturación durable ya conectada a `/workspace/chat/completions`; mantener `BILLING_ENFORCEMENT_ENABLED=false` y no cobrar hasta cerrar conciliación, KMS y E2E.
 5. Completar aceptación SMTP/OAuth/MFA en staging y revisión independiente de seguridad.
 6. Terminar contratos técnicos de QvaPay sandbox, webhooks firmados, consulta servidor-a-servidor, idempotencia y ledger.
 7. Verificar restauración de backups, monitorización, DNS/TLS del subdominio admin y plan de despliegue con autorización explícita.
@@ -210,8 +210,8 @@ El repositorio contiene:
 Los cambios documentales recientes generaron ejecuciones CI `42402384870` y `42402401857`; al momento de la revisión no había una conclusión final satisfactoria para el HEAD actual. No marcar CI como aprobada hasta que un run asociado al SHA exacto termine con `success`.
 
 ### Próximos bloqueos priorizados
-1. Integrar el backend Docker mediante un límite de confianza separado y no privilegiado; mantener terminal deshabilitada mientras tanto.
-2. Añadir pruebas de integración HTTP para start/resume/approval/reconciliation y autorización cruzada entre proyectos.
+1. Validar end-to-end el backend Docker mediante un límite de confianza separado y no privilegiado, con daemon dedicado, TLS e imágenes digest; mantener terminal deshabilitada mientras tanto.
+2. Ampliar las pruebas de integración HTTP de start/resume/approval/reconciliation contra PostgreSQL real y autorización cruzada entre proyectos.
 3. Ejecutar pruebas de aislamiento reales del contenedor (filesystem, red, capabilities, UID, recursos, timeout y limpieza) en runner dedicado.
 4. Probar inferencia real de Atomic Code 1.1 desde el servicio configurado, con límites de contexto/timeout y evaluación reproducible.
 5. Completar verificación de correo, recuperación, MFA/OAuth y pruebas negativas de sesiones antes de habilitar Auth.
@@ -225,7 +225,7 @@ Se endureció `agent/coding_agent.py`: el parser ahora rechaza contenido adicion
 La validación de GitHub Actions para el HEAD `e045d10158163be198128bba2708c598d00da410` terminó satisfactoriamente: **664 pruebas Python aprobadas, 9 omitidas y 4 warnings**; también pasaron E2E de Studio, build/smoke de imagen, migraciones PostgreSQL e integración remota autenticada de Qdrant Cloud ([run 42404444729](https://github.com/korzadi/Axion-Atomic/actions/runs/42404444729)).
 
 ### Límites que siguen bloqueando la activación completa
-- El runtime HTTP todavía no inyecta un `DockerBackend`; por tanto, no se habilita terminal ni ejecución de comandos desde Studio.
+- El runtime HTTP puede inyectar un `DockerBackend` solo con configuración explícita; la configuración permanece desactivada y no se ha validado end-to-end, por lo que no se habilita terminal ni ejecución de comandos desde Studio.
 - No se ha ejecutado una prueba E2E con el modelo Atomic Code 1.1 real, un usuario autenticado y workspace aislado en un entorno operativo.
 - No se han completado las pruebas de autenticación real, SMTP/OAuth/MFA ni la activación de cobros.
 - No se ha desplegado este HEAD en el VPS. Los resultados CI no equivalen a una certificación de producción.
@@ -266,7 +266,7 @@ El instalador se detendrá intencionalmente ante recursos anteriores. El siguien
 ### Brechas de V1.0 que permanecen
 
 1. Runtime Docker sandbox no integrado en el runtime HTTP; no ofrecer ejecución arbitraria ni terminal como capacidad disponible.
-2. Facturación durable todavía no conectada a `workspace_chat`; la inferencia continúa en Shadow Mode, sin reservas ni cargos reales.
+2. Facturación durable conectada a `workspace_chat` y desactivada por configuración; faltan pruebas PostgreSQL de concurrencia/interrupción, KMS y manifiesto de runtime verificado. No hay cargos reales.
 3. El flujo durable requiere un proveedor externo de claves/KMS, serialización versionada y validación antes de conectarse a rutas HTTP.
 4. QvaPay: aprobación comercial reportada por el operador, pero contrato técnico/credenciales, órdenes, webhook firmado, verificación servidor-a-servidor e idempotencia aún no demostrados.
 5. SMTP, OAuth y MFA necesitan pruebas end-to-end en staging; `AUTH_ENABLED=false` se mantiene.
@@ -336,8 +336,8 @@ Estado de verificación: GitHub Actions para el commit `528982b7dcf91838d6771999
 2. **Documentación de MFA ambigua/incorrecta:** `api/mfa.py` usa `json.loads` directamente sobre `AXYRON_MFA_ENCRYPTION_KEYRING_B64`; por tanto espera un objeto JSON literal cuyos valores individuales son claves Base64, no un objeto JSON codificado en Base64. Se corrige el comentario de `.env.example`. No se cambian claves ni valores runtime.
 3. **Instalador VPS:** ofrece `--prepare`, `--check`, `--deploy`; el preflight verifica variables, Compose, permisos y puertos; el despliegue requiere confirmación, crea backup PostgreSQL antes de migrar y no incluye rollback destructivo. Dado que la instalación real ya existe, **no ejecutar `--deploy`**: la reconciliación debe preceder cualquier actualización y no forma parte de esta pasada.
 4. **Autenticación:** el código incluye rutas y mecanismos de sesión, CSRF, MFA, OAuth, recuperación y correo; la configuración operativa permanece cerrada según el estado comunicado previamente. No activar `AUTH_ENABLED` sin aceptación end-to-end de SMTP/OAuth/MFA, HTTPS, proxy y pruebas negativas.
-5. **Agente/sandbox:** hay runtime persistente, aprobaciones y código de backend Docker aislado, pero la documentación del repositorio identifica que el runtime HTTP no integra un backend de ejecución Docker. La terminal/ejecución de comandos no debe anunciarse como funcional.
-6. **Facturación/pagos:** existen módulos, migraciones y diseños de reservas/ledger/ejecución durable, pero la puerta de lanzamiento documenta que no están conectados a inferencia/Studio para cobros. QvaPay está aprobado comercialmente según el propietario; la integración técnica verificable y los cobros siguen pendientes.
+5. **Agente/sandbox:** hay runtime persistente, aprobaciones y un backend Docker aislado que puede inyectarse con daemon dedicado. La configuración está desactivada y no se ha validado end-to-end; la terminal/ejecución de comandos no debe anunciarse como funcional.
+6. **Facturación/pagos:** la reserva, ledger, ejecución durable, atestación y recuperación están conectadas a `/workspace/chat/completions`, pero la facturación permanece desactivada y faltan pruebas PostgreSQL, KMS y conciliación operativa. QvaPay sigue pendiente de integración técnica verificable; no hay cobros.
 7. **Studio:** la SPA consume rutas reales y marca capacidades futuras, pero debe verificarse cada flujo de extremo a extremo y su accesibilidad; la prueba Playwright del workflow es una prueba declarada, no una ejecución confirmada para el HEAD actual.
 8. **Observabilidad y recuperación:** health básico está operativo. No se ha aportado evidencia actual de restauración de backup, monitorización/alertas, pruebas de carga, ni recuperación de fallos sobre un entorno aislado.
 

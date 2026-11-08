@@ -356,6 +356,13 @@ class CodingAgent:
                     result = "YA APLICADO: la acción figura como completada; no se repetirá."
                     self._observe(run, f"RESULTADO de {p.tool}", result)
                     continue
+                if stored and stored["state"] in ("failed", "rejected", "expired"):
+                    result = (
+                        f"No se aplicó: la acción figura como '{stored['state']}'. "
+                        "No se repetirá automáticamente."
+                    )
+                    self._observe(run, f"RESULTADO de {p.tool}", result)
+                    continue
 
             state, note = self.gate.status(p.proposal_id)
             if state == "rejected":

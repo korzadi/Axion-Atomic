@@ -15,3 +15,6 @@ workspace/
 # Local VPS backups and private knowledge data
 backups/
 knowledge/
+
+.env.backup-format
+.env.backup-mfa-*

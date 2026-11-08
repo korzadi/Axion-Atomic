@@ -148,7 +148,7 @@ Una tabla económica de auditoría debe guardar actor, acción, entidad, identif
 
 La operación de conciliación es idempotente mediante UNIQUE(request_id, settlement_kind) y transición condicional desde estados permitidos. Dos workers pueden competir, pero solo uno puede cerrar la petición.
 
-## 4.1 Cota de reserva previa para ATOMIC CODE (prototipo no conectado)
+## 4.1 Cota de reserva previa para ATOMIC CODE (conectada al preflight del chat)
 
 Se añadió `api/billing_budget.py` como cálculo puro y verificable de una cota previa. Para el runtime fijado `atomic-code:16k-8k`, la política reconoce únicamente el contrato de tokenizer Qwen byte-fallback. La cantidad de bytes UTF-8 del contenido completo es una cota superior conservadora de tokens de contenido para ese contrato; se suman 32 tokens por mensaje y 256 de overhead fijo de plantilla como margen explícito y versionado.
 
@@ -156,24 +156,24 @@ La función recibe la lista FINAL que se enviaría a Ollama, después de incorpo
 
 **Límites y condición de activación:**
 - Es una cota conservadora para el contrato Qwen byte-fallback, no un tokenizer ejecutable ni una medición de uso real.
-- La identificación del tag Ollama no demuestra por sí sola que su contenido no haya sido sustituido. Antes de activar cobro hay que verificar el digest/Modelfile/tokenizer del artefacto desplegado y fijar ese digest en el catálogo de modelo.
+- La identificación del tag Ollama no demuestra por sí sola que su contenido no haya sido sustituido. `api/runtime_attestation.py` compara digest, SHA-256 de plantilla y arquitectura del tokenizer antes de reservar; el manifiesto debe corresponder al artefacto desplegado.
 - Los 32 tokens por mensaje y 256 de plantilla son márgenes de seguridad configurables; deben contrastarse con la plantilla real del artefacto. No disminuirlos sin evidencia y pruebas.
-- El valor devuelto todavía NO se pasa a `reserve_credits`, no se crea reserva y no se llama desde la ruta HTTP. Shadow Usage sigue sin cargos.
-- La siguiente integración deberá calcular esta cota sobre los mensajes finales, persistir la reserva de forma atómica y solo después llamar a Ollama. Cualquier error o incertidumbre antes de la inferencia debe impedir la llamada.
+- El valor se pasa a `reserve_credits` mediante la orquestación durable cuando `BILLING_ENFORCEMENT_ENABLED=true`; la ruta exige `Idempotency-Key`, valida la clave de cifrado y atestigua el runtime antes de reservar. Con la facturación desactivada no hay cargos.
+- La cota se calcula sobre los mensajes finales y se persiste atómicamente antes de llamar a Ollama. Cualquier error o incertidumbre previa impide la llamada.
 
-## 4.2 Orquestación transaccional (servicio no conectado a HTTP)
+## 4.2 Orquestación transaccional (integrada en `/workspace/chat/completions`)
 
-Se añadió `api/billing_execution.py` como capa de orquestación aislada. Su secuencia es: reservar en PostgreSQL, llamar al motor una sola vez, verificar modelo/estado/contadores, calcular el uso real con los ponderadores del presupuesto y liquidar. La llamada al motor ocurre después de confirmar la reserva y fuera de la transacción SQL.
+`api/billing_execution_durable.py` implementa la orquestación: reservar en PostgreSQL, reclamar una única ejecución, llamar al motor una vez, verificar modelo/estado/contadores, cifrar y persistir el resultado, y liquidar. La llamada al motor ocurre fuera de la transacción SQL.
 
 Reglas fail-closed implementadas:
-- Una reserva idempotente existente nunca vuelve a ejecutar el modelo; esta capa lanza `DuplicateExecution` hasta que una capa superior recupere el resultado persistido o concilie la petición.
+- Una reserva idempotente existente nunca vuelve a ejecutar el modelo: si la ejecución está `completed`, se descifra y valida el resultado persistido; si está en otro estado, se exige conciliación.
 - Timeout, cancelación, excepción, modelo distinto, ejecución incompleta o contadores ausentes conservan la reserva en estado `unknown`.
-- Si el uso real supera la reserva, el servicio deja el caso en `review` y no devuelve el contenido al caller.
+- Si el uso real supera la reserva, el servicio deja el caso en `review`, conserva el resultado cifrado y no devuelve el contenido al caller.
 - Solo un resultado completo, del runtime esperado y con contadores reales de Ollama puede liquidarse.
 
-Se añadieron pruebas unitarias con dobles para verificar orden reserva→inferencia, ausencia de reejecución idempotente, estado desconocido y revisión por exceso.
+Se añadieron pruebas unitarias con dobles para verificar orden reserva→inferencia, ausencia de reejecución idempotente, estado desconocido y revisión por exceso. `api/billing_recovery.py` reintenta liquidaciones completadas sin repetir inferencia y el endpoint administrativo auditado expone esa recuperación.
 
-**No está conectado a `workspace_chat` ni habilita facturación.** Antes de conectarlo hacen falta persistencia recuperable de resultado/estado para reintentos, endpoint idempotente, digest y plantilla verificados del artefacto Ollama, pruebas PostgreSQL de la orquestación completa y autenticación de producción. El servicio no debe activarse mientras no existan esas piezas.
+**Integrado y desactivado por configuración.** `workspace_chat` exige idempotencia, atestación y clave de cifrado antes de reservar. Siguen pendientes las pruebas PostgreSQL de concurrencia/interrupción/restore, un proveedor KMS de producción y la verificación del manifiesto real. No activar cobros hasta cerrar esas puertas.
 
 ## 5. Concurrencia y límites
 

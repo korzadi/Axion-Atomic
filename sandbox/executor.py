@@ -63,7 +63,7 @@ class SandboxExecutor:
         with Snapshot(self.ws, base_dir=self.snapshot_dir) as snap:
             res = self.backend.run(argv, str(snap), self.limits, network)
             res.stdout, res.stderr = res.stdout.replace(str(snap), "/workspace"), res.stderr.replace(str(snap), "/workspace")
-        self.audit({"type": "sandbox_run", "project": self.ws.project_id, "command": " ".join(argv)[:300], "network": network,
+        self.audit({"type": "sandbox_run", "project": self.ws.project_id, "command": redact(" ".join(argv))[:300], "network": network,
                     "exit_code": res.exit_code, "timed_out": res.timed_out, "duration_s": round(res.duration_s, 2),
                     "backend": res.backend, "approval_id": approval_id})
         return res

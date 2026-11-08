@@ -238,7 +238,17 @@ def settle_reservation(
         if reservation is None:
             raise ReservationNotFound("Reserva inexistente")
         if reservation["state"] == "settled":
-            return SettlementResult(reservation_uuid, "settled", None, True)
+            # Un reintento idempotente debe devolver el mismo consumo lógico,
+            # no None, para que la respuesta HTTP sea equivalente.
+            charged = conn.execute(text("""
+                SELECT coalesce(sum(consumed_delta), 0)
+                FROM billing_credit_ledger
+                WHERE reservation_id=CAST(:id AS UUID) AND event_type='consume'
+            """), {"id": reservation_uuid}).scalar_one()
+            charged = int(charged)
+            if charged != actual_credits:
+                raise RuntimeError("Inconsistencia: consumo liquidado distinto al medido")
+            return SettlementResult(reservation_uuid, "settled", charged, True)
         if reservation["state"] != "held":
             raise ReservationStateError(f"No se puede liquidar una reserva en estado {reservation['state']}")
         if actual_credits > reservation["requested_credits"]:

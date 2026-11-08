@@ -4,6 +4,7 @@ from api.config import settings
 from api.email_delivery import email_delivery_configured
 from api.mfa import EnvironmentMfaKeyProvider, MfaError
 from api.billing_result_crypto import EnvironmentResultKeyProvider, ResultEncryptionError
+from api.runtime_attestation import runtime_attestation_configured
 
 
 def auth_readiness() -> dict:
@@ -25,7 +26,9 @@ def auth_readiness() -> dict:
     billing_enabled = bool(getattr(settings, "billing_enforcement_enabled", False))
     billing = {
         "mode": "ledger" if billing_enabled else "shadow",
-        "chat_execution": "not_integrated",
+        # /workspace/chat/completions ya usa reserva, claim, cifrado y settlement.
+        "chat_execution": "integrated",
+        "runtime_attestation": "not_required",
         "result_encryption_key": "not_required",
     }
     if billing_enabled:
@@ -34,15 +37,18 @@ def auth_readiness() -> dict:
             billing["result_encryption_key"] = "configured"
         except (ResultEncryptionError, ValueError):
             billing["result_encryption_key"] = "missing"
+        billing["runtime_attestation"] = (
+            "configured" if runtime_attestation_configured(settings) else "missing"
+        )
 
     auth_ready = all(checks.values())
-    # /v1/chat/completions todavía usa la ruta legacy y no invoca la
-    # orquestación durable. No declarar listo el modo ledger hasta conectar
-    # identidad autenticada, autorización de proyecto, preflight y settlement.
+    # Ledger exige clave dedicada y manifiesto verificado del artefacto Ollama.
+    # La ruta heredada /v1 sigue fuera de la facturación multiusuario.
     billing_ready = (
         not billing_enabled
         or (
             billing["result_encryption_key"] == "configured"
+            and billing["runtime_attestation"] == "configured"
             and billing["chat_execution"] == "integrated"
         )
     )

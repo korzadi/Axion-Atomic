@@ -21,7 +21,19 @@ def test_all_expected_migrations_are_registered():
         versions = conn.execute(
             text("SELECT version FROM schema_migrations ORDER BY version")
         ).scalars().all()
-    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016", "017", "018", "019", "020", "021"]
+    assert versions == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016", "017", "018", "019", "020", "021", "022"]
+
+
+def test_agent_run_status_allows_explicit_cancellation():
+    with engine.connect() as conn:
+        definitions = conn.execute(text("""
+            SELECT pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE conrelid = 'agent_runs'::regclass AND contype = 'c'
+        """)).scalars().all()
+    joined = " ".join(definitions)
+    assert "cancelled" in joined
+    assert "needs_reconciliation" in joined
 
 
 def test_core_postgresql_tables_exist():

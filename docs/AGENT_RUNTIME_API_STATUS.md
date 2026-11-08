@@ -5,13 +5,15 @@
 - `agent/runtime.py` construye `CodingAgent` con `DbApprovalGate` y `RunStore`.
 - `CodingAgent` dispone de `run`, `restore`, `continue_run` y `resume`.
 - `RunStore` y `DbApprovalGate` usan `MetaStore`, que requiere una conexión DB-API y administra commit/rollback por operación.
-- La API web usa SQLAlchemy `engine` y todavía no construye ni invoca el runtime persistente.
+- La API web usa SQLAlchemy `engine` y construye el runtime persistente mediante `ProjectAgentRuntime`, `build_authorized_project_toolset` y `SqlAlchemyMetaStore`.
 - `POST /workspace/agent/tasks` crea un plan con el planner y guarda una aprobación en la tabla legacy `approvals`. No crea un registro `agent_runs` ni ejecuta herramientas.
 - `GET /workspace/agent/runs` y `GET /workspace/agent/runs/{run_id}` solo leen registros existentes y filtran por membresía/proyecto.
 - Las aprobaciones de planes legacy y las aprobaciones de acciones son recursos diferentes. El endpoint `POST /workspace/agent/plan-approvals/{approval_id}` solo decide el plan y responde `execution=not_executed`.
-- Las aprobaciones de acciones se guardan en `action_approvals`; la decisión sincroniza `agent_run_actions` y tampoco ejecuta la acción. El runtime aún no está conectado para canjear y aplicar la acción desde una petición autenticada.
+- Las aprobaciones de acciones se guardan en `action_approvals`; la decisión sincroniza `agent_run_actions` y tampoco ejecuta la acción. La reanudación autenticada canjea la aprobación y aplica la herramienta una sola vez; si el estado es incierto, exige reconciliación humana.
 
-## Por qué no se conectó todavía
+## Motivos de diseño del adaptador (histórico)
+
+Esta sección conserva las razones del adaptador inicial; el runtime ya está conectado. La regla de no compartir conexiones globales sigue vigente.
 
 No se debe adaptar `MetaStore` creando una conexión DB-API global tomada del pool SQLAlchemy: una conexión global compartida entre peticiones asíncronas puede cruzar transacciones, provocar concurrencia insegura y romper el ciclo de vida del pool. Tampoco es correcto llamar a `CodingAgent.resume()` antes de definir la construcción segura de herramientas, workspace y backend sandbox por proyecto.
 
@@ -23,7 +25,7 @@ No se debe adaptar `MetaStore` creando una conexión DB-API global tomada del po
 4. Exigir backend Docker aislado. No habilitar LocalBackend en producción: no aísla el filesystem.
 5. Mantener red deshabilitada por defecto y comandos bloqueados fuera de la política. Las operaciones mutables deben producir propuestas y exigir aprobación ligada al hash exacto.
 6. Diseñar la reconciliación tras interrupciones. Una acción en estado `running` nunca se reejecuta automáticamente.
-7. Añadir pruebas HTTP de inicio, restauración, permisos, aprobación, rechazo, expiración, recuperación y aislamiento entre proyectos.
+7. Añadir pruebas HTTP de inicio, restauración, permisos, aprobación, rechazo, expiración, recuperación, cancelación y aislamiento entre proyectos.
 8. Probar migraciones y el flujo completo en un entorno de prueba con datos descartables antes de cualquier despliegue aprobado.
 
 ## Estado de seguridad
@@ -86,7 +88,7 @@ La inspección estática de `Dockerfile`, `compose.yaml` y `sandbox/backends.py`
 - `DockerBackend` rechaza toda ejecución solicitada con red. Se eliminó el opt-in `allow_egress`; también rechaza configuraciones que intenten proporcionar una red egress. No existe un mecanismo para habilitar salida de red hasta implementar y verificar una política real.
 - `LocalBackend` ya no interpreta silenciosamente la ausencia de `unshare` o de permisos para crear namespaces como si la red estuviera aislada. Si no puede crear el namespace de red y no existe una excepción explícita reservada a pruebas/desarrollo, rechaza la ejecución.
 - Las pruebas locales que necesitan red declaran ahora de forma explícita `AXION_ALLOW_UNSAFE_LOCAL_NETWORK=1`. Esa excepción no debe configurarse en producción.
-- Este cambio es de fail-closed; no habilita red ni conecta el runtime HTTP. El backend Docker continúa sin estar configurado en Compose y no se ejecutó ningún contenedor real.
+- Este cambio es de fail-closed; no habilita red. El backend Docker puede inyectarse con configuración explícita, pero no está configurado en Compose y no se ejecutó ningún contenedor real.
 
 
 ### Bloqueo reforzado de egress Docker
@@ -187,11 +189,11 @@ La inspección estática de `Dockerfile`, `compose.yaml` y `sandbox/backends.py`
 
 ## Estado actualizado: runtime persistente conectado a la API
 
-La revisión del código actual confirma que el runtime de ejecuciones sí está conectado a `POST /workspace/agent/runs` y `POST /workspace/agent/runs/{run_id}/resume`, a través de `ProjectAgentRuntime`, `build_authorized_project_toolset` y el adaptador SQLAlchemy de persistencia. El runtime verifica membresía antes de resolver el workspace, limita cada proyecto a su directorio privado y conserva el gate de aprobación por acción. El backend no permite reejecutar automáticamente acciones que quedaron en estado `running`; las marca para reconciliación humana.
+La revisión del código actual confirma que el runtime de ejecuciones sí está conectado a `POST /workspace/agent/runs`, `POST /workspace/agent/runs/{run_id}/resume`, `POST /workspace/agent/runs/{run_id}/reconcile` y `POST /workspace/agent/runs/{run_id}/cancel`, a través de `ProjectAgentRuntime`, `build_authorized_project_toolset` y el adaptador SQLAlchemy de persistencia. El runtime verifica membresía antes de resolver el workspace, limita cada proyecto a su directorio privado y conserva el gate de aprobación por acción. El backend no permite reejecutar automáticamente acciones que quedaron en estado `running`; las marca para reconciliación humana.
 
-La interfaz de Axyron Studio ya podía iniciar tareas y registrar aprobaciones, pero no exponía una acción para reanudar una ejecución tras la aprobación. Se añadió un botón visible solo para ejecuciones en estado `awaiting_approval`. Al usarlo, solicita confirmación y llama al endpoint real de reanudación. Si la aprobación sigue pendiente, el backend devuelve la ejecución sin aplicar nada; si una acción requiere reconciliación, la interfaz lo comunica y no intenta repetirla.
+La interfaz de Axyron Studio permite iniciar, reanudar, reconciliar y cancelar ejecuciones según el estado y el rol. El botón de reanudación se muestra a owner/admin/editor para ejecuciones `awaiting_approval`; la cancelación y la reconciliación se limitan a owner/admin. Si la aprobación sigue pendiente, el backend devuelve la ejecución sin aplicar nada; si una acción requiere reconciliación, la interfaz lo comunica y no intenta repetirla. Una ejecución cancelada no se reinicia.
 
-**Limitación de ejecución:** el runtime HTTP construye el toolset de proyecto sin un backend Docker inyectado por defecto. Las herramientas de lectura y cambios de archivos aprobados existen, pero comandos de shell/pruebas en sandbox no se ofrecen hasta configurar y validar un backend Docker aislado. No se debe describir la terminal/sandbox como disponible.
+**Limitación de ejecución:** por defecto el runtime HTTP construye el toolset sin backend Docker. Puede inyectarse con `SANDBOX_DOCKER_ENABLED=true` y un daemon dedicado, pero la configuración no está activada ni validada end-to-end. Las herramientas de lectura y cambios de archivos aprobados existen; no se debe describir la terminal/sandbox como disponible.
 
 Pruebas: `tests/test_frontend_studio_spa.py` ahora exige la ruta de reanudación, el control de confirmación y el botón para ejecuciones pendientes de aprobación. Las pruebas HTTP existentes en `tests/test_workspace_agent_runtime_http.py` cubren inicio, reanudación, permisos, CSRF y fallos cerrados. La ejecución CI de este commit debe completar antes de considerar el cambio validado.
 
@@ -206,7 +208,7 @@ Esta actualización prevalece sobre las secciones históricas anteriores que ind
 - `POST /workspace/agent/approvals/{approval_id}`: aprobación/rechazo por owner/admin; actualiza en una transacción la solicitud y la acción persistida, sin ejecutar la mutación dentro de la petición de decisión.
 - La siguiente petición autenticada de resume consulta `DbApprovalGate`, reclama la acción una sola vez, comprueba de nuevo el hash y aplica la herramienta aprobada. Estados inciertos no se reejecutan automáticamente.
 - `agent/sqlalchemy_meta.py` adapta stores al SQLAlchemy Engine mediante conexiones/cursors por operación; no comparte una conexión global.
-- La fábrica de proyecto solo acepta `DockerBackend` si se inyecta. Actualmente `_agent_runtime()` no inyecta backend Docker, por lo que el runtime HTTP expone herramientas de workspace/Git con aprobación, pero no herramientas de ejecución de comandos/sandbox. Esto es deliberado hasta cerrar la integración segura del daemon y snapshots.
+- La fábrica de proyecto solo acepta `DockerBackend` si se inyecta. `_agent_runtime()` lo inyecta solo con `SANDBOX_DOCKER_ENABLED=true` y configuración válida; por defecto expone herramientas de workspace/Git con aprobación, pero no ejecución de comandos/sandbox. La activación real sigue bloqueada hasta validar el daemon dedicado y las imágenes.
 - `compose.yaml` no expone socket Docker ni endpoint daemon al servicio API. No habilitar `LocalBackend` en producción ni montar automáticamente el socket del host.
 
 ### Endurecimiento de autorización antes de cuotas
@@ -222,8 +224,8 @@ Esta sección prevalece sobre las observaciones históricas anteriores cuando de
 - `POST /workspace/agent/runs` inicia ejecuciones persistidas y `POST /workspace/agent/runs/{run_id}/resume` restaura y continúa ejecuciones por la combinación de ID y proyecto autorizado.
 - Las rutas de listado y detalle siguen filtradas por proyecto. Las decisiones de aprobación se vinculan al hash de acción; aprobar no equivale por sí solo a ejecutar ni a reanudar.
 - Si la restauración detecta una acción que quedó en estado `running`, la ejecución pasa a reconciliación humana y no vuelve a ejecutar esa acción automáticamente.
-- La composición HTTP actual NO inyecta `DockerBackend`. Por tanto, las herramientas de lectura/escritura/Git con aprobación pueden estar disponibles, pero la ejecución de comandos/sandbox no está habilitada desde el runtime HTTP. No se debe anunciar terminal ni ejecución arbitraria como capacidad disponible.
-- La integración Docker continúa bloqueada por la elección y configuración segura del daemon, transferencia de snapshots, permisos, límites, limpieza y pruebas de aislamiento. No montar el socket privilegiado del host ni usar `LocalBackend` como sustituto de aislamiento.
+- La composición HTTP inyecta `DockerBackend` solo con `SANDBOX_DOCKER_ENABLED=true` y configuración válida; por defecto no lo hace. Las herramientas de lectura/escritura/Git con aprobación pueden estar disponibles, pero la ejecución de comandos/sandbox permanece desactivada y sin validación end-to-end. No se debe anunciar terminal ni ejecución arbitraria como capacidad disponible.
+- La activación Docker sigue bloqueada por la elección y configuración segura del daemon, TLS/certificados, CLI en la API, imágenes digest y pruebas reales de aislamiento. La transferencia de snapshots ya usa tar por stdin hacia un tmpfs, sin bind mount. No montar el socket privilegiado del host ni usar `LocalBackend` como sustituto de aislamiento.
 - La autorización de inicio/reanudación debe ocurrir antes del rate limit y de construir el runtime. La CI asociada al HEAD actual debe confirmar las pruebas de regresión antes de considerar este cambio verificado.
 - `AUTH_ENABLED=false` continúa siendo el estado operativo informado; el código de runtime integrado no habilita por sí mismo el acceso público ni autoriza cambiar la configuración del VPS.
 
@@ -265,7 +267,7 @@ Se añadieron pruebas para:
 
 Archivos: `agent/toolset.py` y `tests/test_coding_agent.py`.
 
-GitHub Actions run [42404791578](https://github.com/korzadi/Axion-Atomic/actions/runs/42404791578), asociado al HEAD `e5838f711d2773452d707aee8607cd80cfa5b056`, terminó con **success** en los cinco jobs:
+GitHub Actions run [42404791578](https://github.com/korzadi/Axion-Atomic/actions/runs/42404791578), asociado al HEAD `e5838f711d2775452d707aee8607cd80cfa5b056`, terminó con **success** en los cinco jobs:
 - Python: **665 passed, 9 skipped, 4 warnings**.
 - Studio Browser E2E: success.
 - Build/smoke de imagen: success.
@@ -295,3 +297,56 @@ La primera ejecución detectó un defecto en el fixture de pruebas (solo generab
 GitHub Actions run [42405182522](https://github.com/korzadi/Axion-Atomic/actions/runs/42405182522), HEAD `6a8d8564ed1ac653c79e426e778447394ef8ccdb`: **success**, cinco jobs aprobados. Python: **675 passed, 9 skipped, 4 warnings**; Studio Browser E2E, imagen, PostgreSQL y Qdrant Cloud: success.
 
 Sigue pendiente la integración del sandbox Docker aislado en el runtime HTTP, además de pruebas end-to-end con inferencia real y autenticación pública.
+
+## Endurecimiento del límite HTTP de ejecuciones — 8 de noviembre de 2026
+
+Se corrigió el mapeo de errores de `POST /workspace/agent/runs` y `POST /workspace/agent/runs/{run_id}/resume`:
+
+- `RunStore.get_run` distingue ahora `RunNotFoundError` de otros fallos de almacenamiento.
+- Una ejecución inexistente o de otro proyecto devuelve HTTP 404 sin revelar detalles internos.
+- Una aprobación inexistente, expirada o no canjeable devuelve HTTP 409 en lugar de un error 500 no controlado.
+- Los errores de workspace no disponible siguen devolviendo 503 y los argumentos inválidos 422.
+- Se añadieron pruebas unitarias para los códigos 404/409 y para la nueva excepción del store.
+
+Verificación local: `812 passed, 9 skipped` con `python` disponible mediante un enlace temporal; las 9 omisiones son PostgreSQL. Sin ese enlace, `791 passed, 9 skipped` al excluir las 21 pruebas de sandbox local. El backend Docker ya puede inyectarse solo con configuración explícita y daemon dedicado; la activación real sigue bloqueada y no se modificó infraestructura.
+
+## Reconciliación humana de acciones interrumpidas — 8 de noviembre de 2026
+
+Se añadió `POST /workspace/agent/runs/{run_id}/reconcile` para cerrar el caso que antes quedaba bloqueado en `needs_reconciliation`:
+
+- Exige sesión, CSRF, membresía `owner`/`admin` y rate limit `agent_decision`.
+- Recibe `action_hash` (SHA-256 hexadecimal), `resolution` (`applied` o `failed`) y un motivo obligatorio de al menos 8 caracteres.
+- Solo acepta la reconciliación si la ejecución está en `needs_reconciliation` y la acción concreta sigue en estado `running`.
+- Actualiza la acción y la ejecución en una sola transacción; después deja la ejecución en `awaiting_approval` y no ejecuta ni repite la herramienta.
+- Registra la decisión en la cadena `audit_log` dentro de la misma transacción. Si la cadena cambia o falla la auditoría, no se aplica la reconciliación.
+- `CodingAgent.resume` ahora omite acciones persistidas como `failed`, `rejected` o `expired` aunque una aprobación antigua siga en estado `approved`; nunca las reintenta a ciegas.
+- Axyron Studio muestra controles separados «Marcar aplicada» y «Marcar no aplicada» solo para owner/admin cuando la ejecución requiere reconciliación. La interfaz solicita un motivo y después pide reanudar explícitamente.
+
+Pruebas añadidas: `tests/test_workspace_agent_reconciliation_http.py` y un caso de regresión en `tests/test_coding_agent_persistence.py`. Verificación local: `812 passed, 9 skipped` con `python` disponible; `791 passed, 9 skipped` sin las 21 pruebas de sandbox local. Compilación y sintaxis JS correctas.
+
+## Sandbox Docker preparado para daemon dedicado — 8 de noviembre de 2026
+
+Se eliminó la dependencia de un bind mount local en `DockerBackend`:
+
+- El snapshot se serializa como tar y se transfiere por stdin a `docker run -i`; el contenedor lo extrae en un `tmpfs` privado `/workspace` (`uid`/`gid`/`mode=0700`) antes de ejecutar el comando.
+- Esto permite usar un daemon remoto por `ssh://` o `tcp://` con TLS; no se acepta `unix:///var/run/docker.sock` ni una ruta de socket local.
+- La configuración permanece desactivada por defecto (`SANDBOX_DOCKER_ENABLED=false`). Si se activa, `_agent_runtime` inyecta el backend; una configuración incompleta devuelve 503 y no construye herramientas de ejecución.
+- `SANDBOX_DOCKER_IMAGES` exige imágenes fijadas por digest. Para `tcp://` se exige `SANDBOX_DOCKER_TLS_VERIFY=true` y `SANDBOX_DOCKER_CERT_PATH`; también se admite `ssh://`.
+- La imagen de sandbox debe incluir `sh` y `tar`. La CLI Docker debe estar disponible en la imagen de la API y el daemon debe ser dedicado, no privilegiado en el host. `--pull=never` exige que las imágenes digest estén precargadas en el daemon; no se permite descarga implícita.
+- La auditoría de `SandboxExecutor` redacta secretos del comando registrado, además de la redacción ya aplicada por el logger.
+- Pruebas añadidas: serialización de snapshot sin symlinks, comandos sin bind mount, transferencia por stdin, limpieza del contenedor, configuración fail-closed, TLS obligatorio para TCP y redacción de secretos en auditoría.
+
+**Sigue bloqueado:** no hay daemon dedicado, certificados, imágenes verificadas ni CLI Docker en la imagen actual; no se activó la configuración, no se construyó ninguna imagen y no se ejecutó un E2E real. AGT-04 no está verificada.
+
+## Cancelación de ejecuciones pendientes — 8 de noviembre de 2026
+
+Se añadió `POST /workspace/agent/runs/{run_id}/cancel` para que owner/admin cierren una ejecución que espera aprobación sin aplicar ninguna acción:
+
+- Exige sesión, CSRF, membresía `owner`/`admin` y rate limit `agent_decision`; el motivo es obligatorio (mínimo 8 caracteres útiles).
+- Solo acepta ejecuciones en `awaiting_approval`. Una ejecución `running` no se cancela por esta vía: primero debe terminar o quedar en un estado persistido reconciliable; `needs_reconciliation` se resuelve con `/reconcile`.
+- En una sola transacción bloquea primero las aprobaciones y después las acciones, en orden determinista, para evitar deadlocks con la decisión de aprobación. Si alguna acción está `running`, rechaza la cancelación con 409 para no interrumpir una reanudación en curso. En caso contrario rechaza las aprobaciones pendientes o aprobadas, marca como `expired` las acciones pendientes/aprobadas, cambia la ejecución a `cancelled`, limpia `pending_actions` y registra `agent.run.cancel` en la cadena de auditoría.
+- La migración `022_agent_run_cancellation.sql` amplía el CHECK de `agent_runs.status` con `cancelled`.
+- Reanudar una ejecución cancelada devuelve el estado persistido sin reiniciar el modelo ni ejecutar herramientas. `RunStore.save_run` no puede sobrescribir una ejecución cancelada; si una reanudación concurrente intenta persistir después de la cancelación, la ruta devuelve 409.
+- Axyron Studio muestra «Cancelar ejecución» solo a owner/admin y exige motivo y confirmación.
+
+Pruebas añadidas: `tests/test_workspace_agent_cancellation_http.py` y un caso de regresión en `tests/test_project_agent_runtime.py`. Verificación local: `812 passed, 9 skipped` con `python` disponible; `791 passed, 9 skipped` sin las pruebas de sandbox local. Compilación y sintaxis JS correctas. La migración no se aplicó en ninguna base real y CI sigue sin confirmarse.

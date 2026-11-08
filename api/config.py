@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     billing_input_credit_weight: int = 1
     billing_output_credit_weight: int = 1
     billing_purchased_fallback_allowed: bool = True
+    # Manifiesto del artefacto exacto; sin esto no se permite una inferencia facturable.
+    billing_runtime_model_digest: str | None = None
+    billing_runtime_template_sha256: str | None = None
+    billing_tokenizer_contract: str = "qwen2_byte_fallback"
     auth_cookie_secure: bool = True
     oauth_public_base_url: str | None = None
     google_oauth_client_id: str | None = Field(default=None, validation_alias=AliasChoices("GOOGLE_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_ID"))
@@ -102,6 +106,16 @@ class Settings(BaseSettings):
     ollama_max_waiting: int = 8
     ollama_queue_timeout_seconds: float = 20.0
     ollama_request_timeout_seconds: float = 240.0
+
+    # Sandbox Docker: desactivado por defecto. Requiere un daemon dedicado
+    # accesible por TCP/SSH, imágenes fijadas por digest y CLI Docker en la API.
+    # No se admite el socket Unix local del host.
+    sandbox_docker_enabled: bool = False
+    sandbox_docker_host: str | None = None
+    sandbox_docker_bin: str = "docker"
+    sandbox_docker_images: dict[str, str] = Field(default_factory=dict)
+    sandbox_docker_tls_verify: bool = False
+    sandbox_docker_cert_path: str | None = None
 
     # Pool PostgreSQL acotado para evitar crecimiento ilimitado de conexiones.
     db_pool_size: int = 5

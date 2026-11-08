@@ -91,7 +91,7 @@ def test_reservation_is_idempotent_and_partial_settlement_releases_unused_quota(
         actual_credits=5,
     )
     assert repeated_settlement.idempotent is True
-    assert repeated_settlement.charged_credits is None
+    assert repeated_settlement.charged_credits == 5
 
     with engine.connect() as conn:
         balances = conn.execute(text("""

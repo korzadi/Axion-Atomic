@@ -12,6 +12,10 @@ class RunStoreError(AxionError):
     code = "run_store_error"
 
 
+class RunNotFoundError(RunStoreError):
+    code = "run_not_found"
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -48,12 +52,13 @@ class RunStore:
             raise RunStoreError("La acción pendiente contiene patrones de secretos; no se persistió")
         changed = self.meta.execute(
             "UPDATE agent_runs SET status = ?, final = ?, error = ?, messages = ?, pending_actions = ?, "
-            "steps = ?, parse_failures = ?, updated_at = ? WHERE id = ? AND project_id = ?",
+            "steps = ?, parse_failures = ?, updated_at = ? "
+            "WHERE id = ? AND project_id = ? AND status <> 'cancelled'",
             (run.status, redact(run.final) if run.final else None, redact(run.error) if run.error else None,
              redact(json.dumps(run.messages, ensure_ascii=False)), redact(pending_json), run.steps, run.parse_failures, now, run.id, run.project_id),
         )
         if changed != 1:
-            raise RunStoreError("No se pudo guardar la ejecución o no pertenece al proyecto indicado")
+            raise RunStoreError("No se pudo guardar la ejecución: no pertenece al proyecto o ya fue cancelada")
 
     def get_run(self, run_id: str, project_id: str) -> dict:
         rows = self.meta.query(
@@ -62,7 +67,7 @@ class RunStore:
             (run_id, project_id),
         )
         if not rows:
-            raise RunStoreError("Ejecución inexistente o fuera del proyecto autorizado")
+            raise RunNotFoundError("Ejecución inexistente o fuera del proyecto autorizado")
         row = rows[0]
         return dict(zip(
             ("id", "project_id", "goal", "status", "final", "error", "messages", "pending_actions",
@@ -74,19 +79,35 @@ class RunStore:
 
     def record_action(self, run_id: str, project_id: str, tool: str, args: dict,
                       action_hash: str, proposal_id: str, summary: str) -> dict:
-        self.get_run(run_id, project_id)
+        run = self.get_run(run_id, project_id)
+        if run["status"] == "cancelled":
+            raise RunStoreError("La ejecución fue cancelada; no se registran acciones nuevas")
         args_json = json.dumps(args, sort_keys=True, ensure_ascii=False)
         if find_secrets(args_json):
             raise RunStoreError("La carga útil de la acción contiene patrones de secretos; no se persistió")
         now = self.clock()
+        # El INSERT condicional y el bloqueo de la ejecución evitan que una
+        # cancelación concurrente se cuele entre la lectura y la escritura.
+        lock = " FOR UPDATE" if self.meta.ph != "?" else ""
         self.meta.execute(
+            "WITH locked_run AS (SELECT id FROM agent_runs "
+            "WHERE id = ? AND project_id = ? AND status <> 'cancelled'" + lock + ") "
             "INSERT INTO agent_run_actions (id, run_id, project_id, tool, action_hash, args_json, "
-            "proposal_id, summary, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?) "
+            "proposal_id, summary, state, created_at, updated_at) "
+            "SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ? "
+            "FROM locked_run WHERE 1=1 "
             "ON CONFLICT (project_id, action_hash) DO NOTHING",
-            (uuid.uuid4().hex, run_id, project_id, tool, action_hash,
+            (run_id, project_id, uuid.uuid4().hex, run_id, project_id, tool, action_hash,
              args_json, str(proposal_id), redact(summary), now, now),
         )
+        # La comprobación posterior cubre tanto el conflicto de idempotencia como
+        # una cancelación que haya confirmado después del INSERT.
+        current = self.get_run(run_id, project_id)
+        if current["status"] == "cancelled":
+            raise RunStoreError("La ejecución fue cancelada; no se registran acciones nuevas")
         row = self.get_project_action(project_id, action_hash)
+        if row is None:
+            raise RunStoreError("No se pudo registrar la acción del agente")
         if row["tool"] != tool or row["args_json"] != args_json:
             raise RunStoreError("Conflicto de idempotencia: el hash coincide con otra carga útil")
         return row

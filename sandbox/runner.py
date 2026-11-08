@@ -20,10 +20,12 @@ class ExecResult:
 
 
 def run_bounded(argv: list[str], cwd: str | None, env: dict, timeout_s: float, max_bytes: int,
-                preexec=None, kill_cmd: list[str] | None = None, backend: str = "") -> ExecResult:
+                preexec=None, kill_cmd: list[str] | None = None, backend: str = "",
+                stdin=None) -> ExecResult:
     t0 = time.monotonic()
-    proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, start_new_session=True, preexec_fn=preexec)
+    proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL if stdin is None else stdin,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+                            preexec_fn=preexec)
     bufs = {"out": bytearray(), "err": bytearray()}
     state = {"truncated": False}
 

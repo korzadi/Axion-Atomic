@@ -1,51 +1,69 @@
 # Chat billing cutover — production gates
 
-Status: **shadow metering only; paid billing is not enabled**. This specification does not enable charges or authorize VPS deployment.
+Status: **durable ledger integration implemented; paid billing remains disabled by configuration**. This is not evidence of a production deployment, a real charge, or a completed PostgreSQL/Ollama E2E.
 
 ## Current request path
-`POST /workspace/chat/completions` requires web session and CSRF, checks project membership, calls Ollama with usage metadata, records best-effort shadow usage, and rejects a requested/returned model mismatch. It does not reserve or settle credits.
+`POST /workspace/chat/completions` requires a web session, CSRF, and project membership. When `BILLING_ENFORCEMENT_ENABLED=true` it also:
 
-The legacy `/v1/chat/completions` route uses a shared API key, not a user identity. Never attach user billing to that route until per-user API-key identity and project authorization exist.
+1. Requires `Idempotency-Key` (1–200 characters) before RAG or inference.
+2. Verifies the configured Ollama artifact against the deployment manifest (model digest, template SHA-256, tokenizer architecture).
+3. Builds the effective prompt including server-selected RAG context.
+4. Derives a stable request UUID and a payload fingerprint that covers the effective messages, generation settings, policy version, public model, runtime model, digest, template, and tokenizer.
+5. Reserves credits transactionally, claims exactly one execution, calls Ollama once, validates measured counters and returned model, encrypts the result, and settles idempotently.
+6. Returns `usage_billing.mode="ledger"` only after a confirmed settlement.
+
+With billing disabled, the route remains shadow/free and does not reserve or charge. The legacy `/v1/chat/completions` route uses a shared API key, not a user identity; never attach user billing to it.
+
+## Implemented and unit-tested
+- [x] Pure request identity helpers (`api/billing_request_identity.py`), including an attested fingerprint over the final server-built prompt/RAG context.
+- [x] HTTP `Idempotency-Key` enforcement and stable user-scoped request UUIDs in `workspace_chat`.
+- [x] Runtime attestation (`api/runtime_attestation.py`) for exact model digest, template SHA-256, and tokenizer architecture. It fails closed before retrieval, reservation, or inference.
+- [x] Durable reserve → claim → inference → encrypt → settle orchestration (`api/billing_execution_durable.py`).
+- [x] Encrypted completed-result recovery without re-running inference (`api/billing_recovery.py`).
+- [x] CSRF-protected, permission-gated, audited admin recovery endpoint `POST /admin/billing/executions/recover` (`billing.manage`, `global_admin_audit_events`) with a confirmation-gated control in the admin portal.
+- [x] CSRF-protected, permission-gated admin reconciliation endpoint `POST /admin/billing/reservations/reconcile-no-execution` for `unknown`/`review` reservations, backed by the append-only reconciliation table and global admin audit.
+- [x] Unit tests for identity, attestation, durable states, recovery, authorization, and workspace chat wiring.
 
 ## Mandatory release gates
 
 ### 1. Identity and idempotency
-- Require a strict client idempotency key.
-- Derive a stable request UUID scoped to authenticated user and key.
-- [x] Pure helper hashes canonical request data: model, project, messages, generation settings, and policy version (`api/billing_request_identity.py`).
-- [ ] The HTTP endpoint still does not require or persist `Idempotency-Key`; helper availability alone is not HTTP idempotency.
-- Same key with different payload must conflict, never create another charge.
-- The fingerprint must cover the final server-built prompt/RAG context, not only client messages.
-- Follow `docs/HTTP_CHAT_IDEMPOTENCY_DESIGN.md` for the required request order and failure semantics.
+- Reject missing, oversized, or malformed keys before any side effect.
+- Same key with a different effective payload must return 409, never create another charge.
+- Fingerprint must include the final server-built prompt/RAG context and attested runtime identity.
+- [ ] Prove concurrent duplicate requests and payload mismatches against PostgreSQL.
 
 ### 2. Runtime and budget attestation
-- Map public catalog model to the exact configured Ollama runtime.
-- Pin and verify model digest, template, tokenizer identity, context, and generation limits.
-- Reserve using a verified tokenizer/runtime contract only. If any input is unavailable, reject paid execution or remain explicitly shadow/free. Never bill guessed token counts.
+- [x] Map the public catalog model to the configured Ollama runtime.
+- [x] Verify model digest, template, tokenizer architecture, context, and generation limits before paid execution.
+- [ ] Populate and review real deployment manifest values (`BILLING_RUNTIME_MODEL_DIGEST`, `BILLING_RUNTIME_TEMPLATE_SHA256`, `BILLING_TOKENIZER_CONTRACT`).
+- [ ] Verify the manifest matches the exact production Ollama artifact and restart procedure.
 
 ### 3. Durable execution
-- Reserve transactionally before inference and claim exactly one execution.
-- Never repeat inference after a started, completed, or uncertain claim.
-- Verify requested and returned model, `done=true`, and both non-negative Ollama token counters.
-- Encrypt and persist the response before settlement.
-- On uncertainty, preserve state for reconciliation; do not silently refund, rerun, or charge estimates.
+- [x] Reserve transactionally before inference and claim exactly one execution.
+- [x] Never repeat inference after a started, completed, or uncertain claim.
+- [x] Verify requested/returned model, `done=true`, and both non-negative Ollama token counters.
+- [x] Encrypt and persist the response before settlement.
+- [x] Preserve uncertain state for reconciliation; no silent refund, rerun, or estimate.
+- [ ] Exercise interruption at each state transition and lost commit acknowledgements against PostgreSQL.
 
 ### 4. Settlement and response
-- Settle once, idempotently, using verified counters and a published pricing policy.
-- Over-reservation or ledger invariant failures go to review.
-- Bind result decryption to authenticated user, reservation, and execution IDs.
-- Never log prompts, responses, ciphertext, secrets, or cross-user identifiers.
+- [x] Settle once, idempotently, using verified counters and a published policy version.
+- [x] Over-reservation or ledger invariant failures go to review.
+- [x] Bind result decryption to authenticated user, reservation, and execution IDs.
+- [x] Never log prompts, responses, ciphertext, secrets, or cross-user identifiers.
+- [ ] Validate reconciliation and recovery procedures on a disposable PostgreSQL database.
 
 ### 5. Production key management
-- Replace injectable/test cipher provider with production KMS or managed key provider.
-- Define rotation, version retention, recovery, access policy, and incident response.
-- Verify database backups alone cannot decrypt stored inference results.
+- [ ] Replace `EnvironmentResultKeyProvider` with production KMS or a managed key provider.
+- [ ] Define rotation, version retention, recovery, access policy, and incident response.
+- [ ] Verify database backups alone cannot decrypt stored inference results.
+- [x] Encryption key is validated before credits are reserved.
 
 ### 6. Proof before release
-- Test concurrent duplicate requests, payload mismatch, interruption at each state transition, lost commit acknowledgements, usage mismatch, over-reservation, settlement retries, and cross-user access against PostgreSQL.
-- Run end-to-end against the exact pinned Ollama model/tokenizer/template.
-- Verify backup/restore, ledger reconciliation, alerting, and support procedures.
-- Only after every gate passes, publish prices/quotas and enable paid billing in a separately reviewed configuration change.
+- [ ] Run PostgreSQL concurrency/interruption/recovery tests.
+- [ ] Run E2E against the exact pinned Ollama model/tokenizer/template.
+- [ ] Verify backup/restore, ledger reconciliation, alerting, and support procedures.
+- [ ] Publish prices/quotas and enable paid billing only in a separately reviewed configuration change.
 
 ## Prohibited before release
 - Charging shadow events or estimated tokens.
@@ -55,14 +73,12 @@ The legacy `/v1/chat/completions` route uses a shared API key, not a user identi
 - Crediting screenshots or unverified webhooks.
 - Advertising paid plans or enabling checkout while the catalog is preview-only.
 
-## Known blockers
-- Workspace chat is shadow-only, not connected to durable reservations/settlement.
-- HTTP idempotency is not wired into the route; durable execution recovery and encrypted response replay are not integrated.
-- Runtime digest, tokenizer, and template are not attested by a deployment manifest.
+## Remaining blockers
 - Production KMS and recovery/rotation procedures are not established.
+- Runtime manifest values are not configured or verified against a production deployment.
+- PostgreSQL concurrency, interruption, and restore proofs are still missing.
 - QvaPay Lightning Address order correlation and server-to-server verification remain unconfirmed.
 - Real OAuth credentials/callbacks and production session configuration require validation.
+- Paid billing, checkout, and public prices remain disabled.
 
-**Implementation note:** The current workspace chat path remains shadow-only. Do not describe it as idempotent until the endpoint atomically persists the user/key/fingerprint and connects it to durable execution recovery.
-
-**Release rule:** this checklist is a cutover specification, not evidence that any gate has passed. Production billing remains disabled.
+**Release rule:** this checklist is a cutover specification, not evidence that every gate has passed. Production billing remains disabled until the owner authorizes a separately reviewed change.

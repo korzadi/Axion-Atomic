@@ -7,6 +7,9 @@ from fastapi import HTTPException
 
 from api.schemas import TaskRequest
 from api.workspace_routes import workspace_agent_resume, workspace_agent_start
+from agent.approval_gate import ApprovalError
+from agent.run_store import RunNotFoundError, RunStoreError
+from sandbox.backends import SandboxUnavailable
 
 
 class WorkspaceAgentRuntimeHttpTests(unittest.IsolatedAsyncioTestCase):
@@ -107,6 +110,64 @@ class WorkspaceAgentRuntimeHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.status_code, 403)
         limit.assert_not_called()
         runtime.resume.assert_not_awaited()
+
+    async def test_resume_returns_404_for_missing_or_foreign_run(self):
+        runtime = SimpleNamespace(resume=AsyncMock(side_effect=RunNotFoundError("detalle interno")))
+        with patch("api.workspace_routes._project_role"), patch("api.workspace_routes._enforce_workspace_limit"), patch("api.workspace_routes._agent_runtime", return_value=runtime):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_agent_resume(
+                    "run-missing", project_id="project-a", user={"id": "user-a"}
+                )
+        self.assertEqual(raised.exception.status_code, 404)
+        self.assertNotIn("detalle interno", raised.exception.detail)
+
+    async def test_resume_returns_409_when_run_was_cancelled_concurrently(self):
+        runtime = SimpleNamespace(resume=AsyncMock(side_effect=RunStoreError("cancelada")))
+        with patch("api.workspace_routes._project_role"), patch("api.workspace_routes._enforce_workspace_limit"), patch("api.workspace_routes._agent_runtime", return_value=runtime):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_agent_resume(
+                    "run-1", project_id="project-a", user={"id": "user-a"}
+                )
+        self.assertEqual(raised.exception.status_code, 409)
+        self.assertNotIn("cancelada", raised.exception.detail)
+
+    async def test_start_and_resume_return_503_when_sandbox_is_unavailable(self):
+        for method in ("start", "resume"):
+            with self.subTest(method=method):
+                runtime = SimpleNamespace(**{method: AsyncMock(side_effect=SandboxUnavailable("sin daemon"))})
+                with patch("api.workspace_routes._project_role"), patch("api.workspace_routes._enforce_workspace_limit"), patch("api.workspace_routes._agent_runtime", return_value=runtime):
+                    with self.assertRaises(HTTPException) as raised:
+                        if method == "start":
+                            await workspace_agent_start(
+                                TaskRequest(project_id="project-a", goal="Revisar proyecto"),
+                                user={"id": "user-a"},
+                            )
+                        else:
+                            await workspace_agent_resume(
+                                "run-1", project_id="project-a", user={"id": "user-a"}
+                            )
+                self.assertEqual(raised.exception.status_code, 503)
+                self.assertNotIn("sin daemon", raised.exception.detail)
+
+    async def test_resume_returns_409_for_unusable_approval(self):
+        runtime = SimpleNamespace(resume=AsyncMock(side_effect=ApprovalError("Aprobación inexistente")))
+        with patch("api.workspace_routes._project_role"), patch("api.workspace_routes._enforce_workspace_limit"), patch("api.workspace_routes._agent_runtime", return_value=runtime):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_agent_resume(
+                    "run-1", project_id="project-a", user={"id": "user-a"}
+                )
+        self.assertEqual(raised.exception.status_code, 409)
+        self.assertIn("Aprobación", raised.exception.detail)
+
+    async def test_start_returns_409_for_unusable_approval(self):
+        runtime = SimpleNamespace(start=AsyncMock(side_effect=ApprovalError("Aprobación no disponible")))
+        with patch("api.workspace_routes._project_role"), patch("api.workspace_routes._enforce_workspace_limit"), patch("api.workspace_routes._agent_runtime", return_value=runtime):
+            with self.assertRaises(HTTPException) as raised:
+                await workspace_agent_start(
+                    TaskRequest(project_id="project-a", goal="Revisar proyecto"),
+                    user={"id": "user-a"},
+                )
+        self.assertEqual(raised.exception.status_code, 409)
 
     async def test_start_and_resume_routes_require_csrf_dependency(self):
         import inspect

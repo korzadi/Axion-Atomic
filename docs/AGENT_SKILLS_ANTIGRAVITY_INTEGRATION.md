@@ -69,5 +69,5 @@ Las skills son guías de procedimiento, no permisos. No pueden anular las instru
 - El repositorio contiene 20 manifiestos `SKILL.md` versionados. El CI del HEAD debe confirmar la prueba de descubrimiento desde un workspace aislado.
 - El pack upstream de Addy Osmani de 25 skills está identificado y documentado, pero **no está copiado ni instalado automáticamente dentro de este repositorio**; las 20 skills locales son un conjunto propio de AXYRON. La instalación requiere que el operador decida qué workspace debe recibirlo.
 - La compatibilidad de formato con Antigravity no significa que AXYRON ejecute Antigravity, use su modelo, comparta credenciales o controle su IDE.
-- El runtime HTTP de AXYRON sigue sin tener conectado el backend Docker aislado; estas skills no habilitan terminal ni ejecución arbitraria.
+- El runtime HTTP solo inyecta el backend Docker aislado con configuración explícita y un daemon dedicado; por defecto sigue desactivado, y estas skills no habilitan terminal ni ejecución arbitraria.
 - No declarar skills instaladas hasta que existan los archivos y las pruebas de descubrimiento confirmen su presencia.

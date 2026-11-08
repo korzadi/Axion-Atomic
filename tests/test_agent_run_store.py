@@ -3,7 +3,7 @@ import sqlite3
 import unittest
 
 from rag.meta import MetaStore
-from agent.run_store import RunStore, RunStoreError
+from agent.run_store import RunNotFoundError, RunStore, RunStoreError
 
 
 class RunStoreTests(unittest.TestCase):
@@ -41,6 +41,62 @@ class RunStoreTests(unittest.TestCase):
         self.assertEqual(saved["messages"], run.messages)
         with self.assertRaises(RunStoreError):
             self.store.get_run("r1", "otro-proyecto")
+        with self.assertRaises(RunNotFoundError):
+            self.store.get_run("inexistente", "p1")
+
+    def test_cancelled_run_cannot_be_overwritten_by_a_late_snapshot(self):
+        class Run:
+            id, project_id, goal = "r-cancel", "p1", "Cancelar"
+            status, final, error = "awaiting_approval", None, None
+            messages, pending, steps, parse_failures = [], [], 0, 0
+        run = Run()
+        self.store.create_run(run)
+        self.store.meta.execute(
+            "UPDATE agent_runs SET status='cancelled' WHERE id='r-cancel'"
+        )
+        run.status = "running"
+        with self.assertRaisesRegex(RunStoreError, "cancelada"):
+            self.store.save_run(run)
+        self.assertEqual(self.store.get_run("r-cancel", "p1")["status"], "cancelled")
+
+    def test_cancelled_run_cannot_record_new_actions(self):
+        class Run:
+            id, project_id, goal = "r-cancel-action", "p1", "Cancelar"
+            status, final, error = "awaiting_approval", None, None
+            messages, pending, steps, parse_failures = [], [], 0, 0
+        self.store.create_run(Run())
+        self.store.meta.execute(
+            "UPDATE agent_runs SET status='cancelled' WHERE id='r-cancel-action'"
+        )
+        with self.assertRaisesRegex(RunStoreError, "cancelada"):
+            self.store.record_action("r-cancel-action", "p1", "write_file",
+                                     {"path": "a.py"}, "hash-cancel", "approval", "crear")
+        self.assertIsNone(self.store.get_project_action("p1", "hash-cancel"))
+
+    def test_cancellation_between_check_and_insert_is_atomic(self):
+        class Run:
+            id, project_id, goal = "r-cancel-race", "p1", "Carrera"
+            status, final, error = "awaiting_approval", None, None
+            messages, pending, steps, parse_failures = [], [], 0, 0
+        self.store.create_run(Run())
+        original = self.store.get_run
+        calls = {"n": 0}
+
+        def stale_read(run_id, project_id):
+            row = original(run_id, project_id)
+            calls["n"] += 1
+            if calls["n"] == 1:
+                self.store.meta.execute(
+                    "UPDATE agent_runs SET status='cancelled' WHERE id=:i",
+                    {"i": run_id},
+                )
+            return row
+
+        self.store.get_run = stale_read
+        with self.assertRaisesRegex(RunStoreError, "cancelada"):
+            self.store.record_action("r-cancel-race", "p1", "write_file",
+                                     {"path": "a.py"}, "hash-race", "approval", "crear")
+        self.assertIsNone(self.store.get_project_action("p1", "hash-race"))
 
     def test_action_is_idempotent(self):
         class Run:

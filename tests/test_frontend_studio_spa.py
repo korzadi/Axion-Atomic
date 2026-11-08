@@ -97,12 +97,23 @@ def test_spa_has_no_fake_admin_or_commercial_mutations():
     assert "/admin/users" not in source
     assert "/billing/checkout" not in source
     assert "payment_intent" not in source
-    assert 'const canDecide=["owner","admin"]' in source
+    assert 'canDecide=["owner","admin"].includes(role)' in source
+    assert 'canEdit=["owner","admin","editor"].includes(role)' in source
+    assert 'x.status==="awaiting_approval"&&canEdit' in source
     assert "Solo propietario o administrador" in source
     assert "data-resume-run" in source
     assert "/resume?project_id=" in source
     assert "Continuar ejecución" in source
     assert "acciones que ya hayan sido aprobadas" in source
+    assert "data-reconcile-run" in source
+    assert "/reconcile?project_id=" in source
+    assert "Marcar aplicada" in source
+    assert "Marcar no aplicada" in source
+    assert "sin ejecutarla" in source
+    assert "data-cancel-run" in source
+    assert "/cancel?project_id=" in source
+    assert "Cancelar ejecución" in source
+    assert "invalidar" in source
 
 
 def test_admin_portal_is_separate_and_host_routed():
@@ -115,6 +126,10 @@ def test_admin_portal_is_separate_and_host_routed():
     assert 'src="/admin.js"' in portal
     assert '/admin/access/me' in admin_js
     assert '["admin"' not in studio
+    assert "billing.manage" in admin_js
+    assert '/admin/billing/executions/recover?limit=25&reason=' in admin_js
+    assert '/admin/billing/reservations/reconcile-no-execution' in admin_js
+    assert "de solo lectura" not in admin_js
 
 
 def test_admin_portal_preserves_logout_for_authenticated_non_admin():

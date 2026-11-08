@@ -12,7 +12,7 @@ import hashlib
 
 from api.auth import current_user, authorize_project, require_csrf, COOKIE_NAME, CSRF_COOKIE
 from api.config import settings
-from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest
+from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest, AgentReconcileRequest, AgentCancelRequest
 from api.ollama import chat_with_usage
 from api.billing_budget import (
     ContextBudgetExceeded,
@@ -31,13 +31,24 @@ from api.billing_execution_envelope import (
     serialize_billing_execution_result,
 )
 from api.billing_reservations import IdempotencyConflict
-from api.billing_request_identity import InvalidIdempotencyKey, request_payload_sha256, stable_request_id
+from api.billing_request_identity import (
+    InvalidIdempotencyKey,
+    attested_request_payload_sha256,
+    stable_request_id,
+)
+from api.runtime_attestation import RuntimeAttestationError, attest_runtime
+from api.sandbox_runtime import configured_sandbox_backend
 from api.usage_events import persist_shadow_usage_event
 from rag.service import EmbeddingServiceUnavailable, KnowledgeStoreUnavailable, SensitiveContentError, delete_source, ingest_text, list_sources, replace_source, retrieve
 from rag.document_loader import DocumentLoadError, extract_document
+from agent.approval_gate import ApprovalError
 from agent.planner import create_plan
 from agent.approvals import create_approval
 from agent.project_runtime import ProjectAgentRuntime
+from agent.run_store import RunNotFoundError, RunStoreError
+from agent.secrets import redact
+from sandbox.backends import SandboxUnavailable
+from audit.logger import MAX_JSON, _hash, clean
 from api.ollama import chat
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
@@ -103,7 +114,12 @@ def _enforce_workspace_limit(user_id: str, project_id: str, operation: str, *,
 
 def _agent_runtime():
     """Crea el runtime persistente con herramientas confinadas al workspace autorizado."""
-    return ProjectAgentRuntime(engine=engine, chat=chat, workspace_root=settings.workspace_root)
+    return ProjectAgentRuntime(
+        engine=engine,
+        chat=chat,
+        workspace_root=settings.workspace_root,
+        backend=configured_sandbox_backend(settings),
+    )
 
 
 def _agent_run_payload(run):
@@ -195,6 +211,167 @@ def _decide_action_approval(approval_id: str, project_id: str, user_id: str, sta
         if changed != 1:
             raise RuntimeError("La aprobación no está vinculada a una acción pendiente")
     return True
+
+
+def _append_agent_audit(conn, actor_user_id: str, project_id: str, event: str, data: dict) -> None:
+    """Añade un evento del agente a la cadena auditada en la misma transacción."""
+    payload = json.dumps(clean(data), sort_keys=True, ensure_ascii=False)
+    if len(payload) > MAX_JSON:
+        payload = json.dumps({"truncated": True, "preview": payload[:2000]}, ensure_ascii=False)
+    head = conn.execute(
+        text("SELECT seq, last_hash FROM audit_chain_head WHERE id = 1 FOR UPDATE")
+    ).first()
+    if head is None:
+        raise RuntimeError("Cadena de auditoría no inicializada")
+    seq, last_hash = int(head[0]) + 1, head[1]
+    ts = datetime.now(timezone.utc).isoformat()
+    digest = _hash(last_hash, seq, ts, project_id, actor_user_id, event, payload)
+    changed = conn.execute(
+        text("UPDATE audit_chain_head SET last_hash=:digest, seq=:seq "
+             "WHERE id=1 AND seq=:previous_seq"),
+        {"digest": digest, "seq": seq, "previous_seq": seq - 1},
+    ).rowcount
+    if changed != 1:
+        raise RuntimeError("La cadena de auditoría cambió durante la operación")
+    conn.execute(
+        text("INSERT INTO audit_log (seq, ts, project_id, actor, event, data, prev_hash, hash) "
+             "VALUES (:seq, :ts, :project_id, :actor, :event, :data, :prev_hash, :hash)"),
+        {"seq": seq, "ts": ts, "project_id": project_id, "actor": actor_user_id,
+         "event": event, "data": payload, "prev_hash": last_hash, "hash": digest},
+    )
+
+
+def _reconcile_agent_action(run_id: str, project_id: str, action_hash: str,
+                            resolution: str, note: str, actor_user_id: str) -> str:
+    """Resuelve una acción interrumpida sin ejecutarla ni repetirla.
+
+    Devuelve un código estable para que la ruta traduzca el resultado a HTTP.
+    La actualización condicional impide reconciliar dos veces la misma acción.
+    """
+    if resolution not in ("applied", "failed"):
+        raise ValueError("Resolución de reconciliación inválida")
+    safe_note = redact(note)
+    with engine.begin() as conn:
+        run = conn.execute(
+            text("SELECT status FROM agent_runs WHERE id=:run_id AND project_id=:project_id FOR UPDATE"),
+            {"run_id": run_id, "project_id": project_id},
+        ).first()
+        if run is None:
+            return "run_not_found"
+        if run[0] != "needs_reconciliation":
+            return "not_reconcilable"
+        action = conn.execute(
+            text("SELECT state FROM agent_run_actions "
+                 "WHERE run_id=:run_id AND project_id=:project_id AND action_hash=:action_hash FOR UPDATE"),
+            {"run_id": run_id, "project_id": project_id, "action_hash": action_hash},
+        ).first()
+        if action is None:
+            return "action_not_found"
+        if action[0] != "running":
+            return "action_not_running"
+        changed = conn.execute(
+            text("UPDATE agent_run_actions SET state=:resolution, result=:note, updated_at=now() "
+                 "WHERE run_id=:run_id AND project_id=:project_id AND action_hash=:action_hash "
+                 "AND state='running'"),
+            {"resolution": resolution, "note": safe_note, "run_id": run_id,
+             "project_id": project_id, "action_hash": action_hash},
+        ).rowcount
+        if changed != 1:
+            raise RunStoreError("La acción cambió durante la reconciliación")
+        changed = conn.execute(
+            text("UPDATE agent_runs SET status='awaiting_approval', error=NULL, updated_at=now() "
+                 "WHERE id=:run_id AND project_id=:project_id AND status='needs_reconciliation'"),
+            {"run_id": run_id, "project_id": project_id},
+        ).rowcount
+        if changed != 1:
+            raise RunStoreError("La ejecución cambió durante la reconciliación")
+        _append_agent_audit(conn, actor_user_id, project_id, "agent.action.reconcile", {
+            "run_id": run_id,
+            "action_hash": action_hash,
+            "resolution": resolution,
+            "note": safe_note,
+        })
+    return "ok"
+
+
+def _cancel_agent_run(run_id: str, project_id: str, note: str, actor_user_id: str) -> str:
+    """Cancela una ejecución que espera aprobación sin aplicar ninguna acción pendiente.
+
+    Las aprobaciones y acciones pendientes quedan invalidadas en la misma
+    transacción. Una ejecución en vuelo no se cancela por esta vía: primero debe
+    terminar o quedar en un estado persistido reconciliable.
+    """
+    safe_note = redact(note)
+    with engine.begin() as conn:
+        run = conn.execute(
+            text("SELECT status, pending_actions FROM agent_runs "
+                 "WHERE id=:run_id AND project_id=:project_id FOR UPDATE"),
+            {"run_id": run_id, "project_id": project_id},
+        ).first()
+        if run is None:
+            return "run_not_found"
+        if run[0] != "awaiting_approval":
+            return "not_cancellable"
+        try:
+            pending = json.loads(run[1] or "[]")
+        except (TypeError, ValueError):
+            return "invalid_state"
+        if not isinstance(pending, list):
+            return "invalid_state"
+        proposal_ids = []
+        for item in pending:
+            if isinstance(item, dict) and item.get("proposal_id"):
+                proposal_ids.append(str(item["proposal_id"]))
+        proposal_ids = sorted(dict.fromkeys(proposal_ids))
+        # El orden de bloqueo debe coincidir con _decide_action_approval:
+        # primero aprobaciones, después acciones. Así se evita un deadlock.
+        for proposal_id in proposal_ids:
+            conn.execute(
+                text("SELECT id FROM action_approvals "
+                     "WHERE id=:proposal_id AND project_id=:project_id FOR UPDATE"),
+                {"proposal_id": proposal_id, "project_id": project_id},
+            )
+        # Bloquear las acciones evita cancelar mientras un resume está reclamando
+        # o aplicando una acción. Si alguna ya está en vuelo, no se cancela.
+        locked_actions = conn.execute(
+            text("SELECT state FROM agent_run_actions "
+                 "WHERE run_id=:run_id AND project_id=:project_id "
+                 "AND state IN ('pending','approved','running') FOR UPDATE"),
+            {"run_id": run_id, "project_id": project_id},
+        ).all()
+        if any(row[0] == "running" for row in locked_actions):
+            return "not_cancellable"
+        for proposal_id in proposal_ids:
+            conn.execute(
+                text("UPDATE action_approvals SET state='rejected', reviewer=:reviewer, "
+                     "note=:note, decided_at=now() "
+                     "WHERE id=:proposal_id AND project_id=:project_id "
+                     "AND state IN ('pending','approved')"),
+                {"reviewer": actor_user_id, "note": safe_note,
+                 "proposal_id": proposal_id, "project_id": project_id},
+            )
+        invalidated_actions = conn.execute(
+            text("UPDATE agent_run_actions SET state='expired', result=:note, updated_at=now() "
+                 "WHERE run_id=:run_id AND project_id=:project_id "
+                 "AND state IN ('pending','approved')"),
+            {"note": safe_note, "run_id": run_id, "project_id": project_id},
+        ).rowcount
+        changed = conn.execute(
+            text("UPDATE agent_runs SET status='cancelled', error=:error, "
+                 "pending_actions='[]', updated_at=now() "
+                 "WHERE id=:run_id AND project_id=:project_id AND status='awaiting_approval'"),
+            {"error": f"Cancelada por el usuario: {safe_note}", "run_id": run_id,
+             "project_id": project_id},
+        ).rowcount
+        if changed != 1:
+            # No confirmar invalidaciones parciales si la ejecución cambió de estado.
+            raise RunStoreError("La ejecución cambió durante la cancelación")
+        _append_agent_audit(conn, actor_user_id, project_id, "agent.run.cancel", {
+            "run_id": run_id,
+            "note": safe_note,
+            "invalidated_actions": int(invalidated_actions or 0),
+        })
+    return "ok"
 
 
 def _get_chat_history(user_id: str, project_id: str):
@@ -300,6 +477,39 @@ async def workspace_chat(
         user_limit=20, project_limit=60, window=timedelta(minutes=1),
     )
     request_id = str(uuid.uuid4())
+    billing_identity = None
+    idempotency_key = ""
+    if settings.billing_enforcement_enabled:
+        # Validar la identidad idempotente antes de recuperar RAG o llamar a Ollama.
+        idempotency_key = idempotency_key_header.strip() if isinstance(idempotency_key_header, str) else ""
+        if not idempotency_key or len(idempotency_key) > 200:
+            raise HTTPException(
+                status_code=400,
+                detail="La facturación requiere el encabezado Idempotency-Key (1-200 caracteres).",
+            )
+        try:
+            # Valida el alfabeto permitido antes de cualquier trabajo costoso.
+            request_id = stable_request_id(
+                user_id=str(user["id"]),
+                idempotency_key=idempotency_key,
+            )
+        except InvalidIdempotencyKey:
+            raise HTTPException(
+                status_code=400,
+                detail="La clave de idempotencia no cumple el formato permitido.",
+            ) from None
+        try:
+            billing_identity = await attest_runtime(settings)
+        except RuntimeAttestationError:
+            raise HTTPException(
+                status_code=503,
+                detail="El runtime de inferencia no coincide con el manifiesto verificado; no se ejecutó ni cobró.",
+            ) from None
+        except Exception:
+            raise HTTPException(
+                status_code=503,
+                detail="No se pudo verificar la identidad del runtime de inferencia.",
+            ) from None
     user_text = "\n".join(m.content for m in req.messages if m.role == "user")[-12000:]
     try:
         context = await retrieve(user_text, project_id=req.project_id, limit=5)
@@ -309,6 +519,10 @@ async def workspace_chat(
     inference_messages = [{"role": "system", "content": system}] + [
         m.model_dump() for m in req.messages
     ]
+    runtime_model = billing_identity.runtime_model if billing_identity is not None else settings.chat_model
+    tokenizer_contract = (
+        billing_identity.tokenizer_contract if billing_identity is not None else SUPPORTED_TOKENIZER_CONTRACT
+    )
     try:
         # Rechaza prompts que no caben antes de consumir CPU/RAM en Ollama.
         # La cota incluye system prompt, historial, RAG, framing y salida máxima.
@@ -316,9 +530,9 @@ async def workspace_chat(
             inference_messages,
             req.max_tokens,
             settings.num_ctx,
-            runtime_model=settings.chat_model,
-            expected_runtime_model=settings.chat_model,
-            tokenizer_contract=SUPPORTED_TOKENIZER_CONTRACT,
+            runtime_model=runtime_model,
+            expected_runtime_model=runtime_model,
+            tokenizer_contract=tokenizer_contract,
             input_weight=settings.billing_input_credit_weight,
             output_weight=settings.billing_output_credit_weight,
         )
@@ -334,23 +548,17 @@ async def workspace_chat(
         ) from None
     billing_result = None
     if settings.billing_enforcement_enabled:
-        idempotency_key = idempotency_key_header.strip() if isinstance(idempotency_key_header, str) else ""
-        if not idempotency_key or len(idempotency_key) > 200:
-            raise HTTPException(
-                status_code=400,
-                detail="La facturación requiere el encabezado Idempotency-Key (1-200 caracteres).",
-            )
         # Identidad estable y fingerprint de la inferencia EFECTIVA: incluye
-        # system prompt y contexto RAG añadidos por el servidor, no solo el texto cliente.
+        # system prompt, contexto RAG y el artefacto exacto atestado.
         try:
-            request_id = stable_request_id(
-                user_id=str(user["id"]),
-                idempotency_key=idempotency_key,
-            )
-            payload_sha256 = request_payload_sha256(
+            payload_sha256 = attested_request_payload_sha256(
                 project_id=req.project_id,
-                model=settings.chat_model,
-                messages=inference_messages,
+                public_model=req.model,
+                runtime_model=billing_identity.runtime_model,
+                model_digest=billing_identity.model_digest,
+                template_sha256=billing_identity.template_sha256,
+                tokenizer_id=billing_identity.tokenizer_contract,
+                effective_messages=inference_messages,
                 temperature=req.temperature,
                 max_tokens=req.max_tokens,
                 policy_version=budget.policy_version,
@@ -383,13 +591,13 @@ async def workspace_chat(
                 idempotency_key=idempotency_key,
                 payload_sha256=payload_sha256,
                 budget=budget,
-                expected_runtime_model=settings.chat_model,
+                expected_runtime_model=billing_identity.runtime_model,
                 inference_call=_run_metered_inference,
                 reservation_expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
                 cipher=cipher,
                 serialize_result=lambda value: serialize_billing_execution_result(
                     value,
-                    expected_model=settings.chat_model,
+                    expected_model=billing_identity.runtime_model,
                     policy_version=budget.policy_version,
                     input_weight=budget.input_weight,
                     output_weight=budget.output_weight,
@@ -452,16 +660,16 @@ async def workspace_chat(
             "request_id": request_id,
             "user_id": str(user["id"]),
             "project_id": req.project_id,
-            "requested_model": result.requested_model,
-            "returned_model": result.returned_model,
-            "prompt_tokens": result.prompt_eval_count,
-            "output_tokens": result.eval_count,
-            "usage_source": result.usage_source,
-            "total_duration_ns": result.total_duration_ns,
-            "load_duration_ns": result.load_duration_ns,
-            "prompt_eval_duration_ns": result.prompt_eval_duration_ns,
-            "eval_duration_ns": result.eval_duration_ns,
-            "done": result.done,
+            "requested_model": getattr(result, "requested_model", None),
+            "returned_model": getattr(result, "returned_model", None),
+            "prompt_tokens": getattr(result, "prompt_eval_count", None),
+            "output_tokens": getattr(result, "eval_count", None),
+            "usage_source": getattr(result, "usage_source", None),
+            "total_duration_ns": getattr(result, "total_duration_ns", None),
+            "load_duration_ns": getattr(result, "load_duration_ns", None),
+            "prompt_eval_duration_ns": getattr(result, "prompt_eval_duration_ns", None),
+            "eval_duration_ns": getattr(result, "eval_duration_ns", None),
+            "done": getattr(result, "done", None),
         }, separators=(",", ":"), sort_keys=True))
     except Exception:
         # La telemetría shadow nunca debe convertir una inferencia exitosa en error.
@@ -472,7 +680,7 @@ async def workspace_chat(
             pass
 
     # Fail closed: nunca devolver como ATOMIC CODE una respuesta de otro modelo.
-    if result.requested_model != settings.chat_model or result.returned_model != settings.chat_model:
+    if result.requested_model != runtime_model or result.returned_model != runtime_model:
         raise HTTPException(status_code=503, detail="El modelo ejecutado no coincide con el modelo autorizado")
     if result.done is not True:
         raise HTTPException(status_code=503, detail="La inferencia no terminó correctamente")
@@ -680,6 +888,10 @@ async def workspace_agent_start(req: TaskRequest, user=Depends(_csrf_user)):
         run = await _agent_runtime().start(user, req.project_id, req.goal)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
+    except ApprovalError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except SandboxUnavailable:
+        raise HTTPException(status_code=503, detail="El sandbox del agente no está disponible") from None
     except OSError:
         raise HTTPException(status_code=503, detail="El workspace del proyecto no está disponible de forma segura") from None
     return _agent_run_payload(run)
@@ -703,9 +915,106 @@ async def workspace_agent_resume(
         run = await _agent_runtime().resume(user, project_id, run_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
+    except RunNotFoundError:
+        raise HTTPException(status_code=404, detail="Ejecución inexistente o fuera del proyecto autorizado") from None
+    except RunStoreError:
+        raise HTTPException(status_code=409, detail="La ejecución cambió de estado; vuelve a consultarla") from None
+    except ApprovalError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except SandboxUnavailable:
+        raise HTTPException(status_code=503, detail="El sandbox del agente no está disponible") from None
     except OSError:
         raise HTTPException(status_code=503, detail="El workspace del proyecto no está disponible de forma segura") from None
     return _agent_run_payload(run)
+
+
+@router.post("/agent/runs/{run_id}/reconcile")
+async def workspace_reconcile_agent_run(
+    run_id: str,
+    req: AgentReconcileRequest,
+    project_id: str = Query(min_length=1, max_length=200),
+    user=Depends(_csrf_user),
+):
+    """Resuelve una acción interrumpida con confirmación humana; no la ejecuta."""
+    await run_in_threadpool(_project_role, user, project_id, ("owner", "admin"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], project_id, "agent_decision",
+        user_limit=20, project_limit=40, window=timedelta(minutes=1),
+    )
+    try:
+        outcome = await run_in_threadpool(
+            _reconcile_agent_action,
+            run_id, project_id, req.action_hash, req.resolution, req.note, user["id"],
+        )
+    except RunStoreError:
+        raise HTTPException(
+            status_code=409,
+            detail="La acción cambió durante la reconciliación; vuelve a consultarla",
+        ) from None
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="La reconciliación no pudo completarse de forma atómica",
+        ) from None
+    if outcome == "run_not_found":
+        raise HTTPException(status_code=404, detail="Ejecución inexistente o fuera del proyecto autorizado")
+    if outcome == "action_not_found":
+        raise HTTPException(status_code=404, detail="Acción inexistente para esta ejecución")
+    if outcome == "not_reconcilable":
+        raise HTTPException(status_code=409, detail="La ejecución no requiere reconciliación")
+    if outcome == "action_not_running":
+        raise HTTPException(status_code=409, detail="La acción no está en un estado reconciliable")
+    return {
+        "run_id": run_id,
+        "project_id": project_id,
+        "action_hash": req.action_hash,
+        "resolution": req.resolution,
+        "status": "awaiting_approval",
+        "next_action": "resume",
+        "audited": True,
+    }
+
+
+@router.post("/agent/runs/{run_id}/cancel")
+async def workspace_cancel_agent_run(
+    run_id: str,
+    req: AgentCancelRequest,
+    project_id: str = Query(min_length=1, max_length=200),
+    user=Depends(_csrf_user),
+):
+    """Cancela una ejecución pendiente e invalida sus aprobaciones sin ejecutarlas."""
+    await run_in_threadpool(_project_role, user, project_id, ("owner", "admin"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], project_id, "agent_decision",
+        user_limit=20, project_limit=40, window=timedelta(minutes=1),
+    )
+    try:
+        outcome = await run_in_threadpool(
+            _cancel_agent_run, run_id, project_id, req.note, user["id"],
+        )
+    except RunStoreError:
+        raise HTTPException(
+            status_code=409,
+            detail="La ejecución cambió durante la cancelación; vuelve a consultarla",
+        ) from None
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="La cancelación no pudo completarse de forma atómica",
+        ) from None
+    if outcome == "run_not_found":
+        raise HTTPException(status_code=404, detail="Ejecución inexistente o fuera del proyecto autorizado")
+    if outcome == "not_cancellable":
+        raise HTTPException(status_code=409, detail="La ejecución no se puede cancelar en su estado actual")
+    if outcome == "invalid_state":
+        raise HTTPException(status_code=409, detail="La ejecución cambió durante la cancelación; vuelve a consultarla")
+    return {
+        "run_id": run_id,
+        "project_id": project_id,
+        "status": "cancelled",
+        "next_action": None,
+        "audited": True,
+    }
 
 
 @router.get("/agent/runs")

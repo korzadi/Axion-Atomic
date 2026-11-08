@@ -1,7 +1,7 @@
 import unittest
 from unittest import mock
 
-from sandbox.backends import DockerBackend, LocalBackend, ResourceLimits, SandboxUnavailable, docker_argv
+from sandbox.backends import DockerBackend, LocalBackend, ResourceLimits, SandboxUnavailable, _snapshot_tar, docker_argv
 from sandbox.policy import classify
 
 AUTO = ["python -m pytest -q", "pytest tests/", "python -m unittest discover", "python script.py", "python -c 'print(1)'", "go test ./...",
@@ -45,12 +45,22 @@ class DockerArgvTests(unittest.TestCase):
             self.assertIn(flag, a)
         self.assertEqual(a[a.index("--network") + 1], "none"); self.assertEqual(a[a.index("--cap-drop") + 1], "ALL")
         self.assertEqual(a[a.index("--user") + 1], "1000:1000"); self.assertEqual(a[a.index("--memory") + 1], a[a.index("--memory-swap") + 1])
-        self.assertEqual(a[a.index("registry.example/python@sha256:" + "a" * 64) + 1:], ["python", "-m", "pytest"])
+        self.assertEqual(a[-3:], ["python", "-m", "pytest"])
+        self.assertEqual(a[a.index("registry.example/python@sha256:" + "a" * 64) + 1:a.index("registry.example/python@sha256:" + "a" * 64) + 4],
+                         ["sh", "-c", a[a.index("registry.example/python@sha256:" + "a" * 64) + 3]])
+        self.assertIn("-i", a)
         self.assertNotIn("--privileged", a); self.assertFalse(any("docker.sock" in x for x in a))
 
-    def test_only_snapshot_is_mounted(self):
-        a = self.args(); mounts = [a[i + 1] for i, x in enumerate(a) if x in ("--mount", "-v")]
-        self.assertEqual(mounts, ["type=bind,src=/tmp/axion-sbx-abc,dst=/workspace"])
+    def test_snapshot_is_streamed_without_bind_mount(self):
+        a = self.args()
+        self.assertNotIn("--mount", a)
+        self.assertNotIn("-v", a)
+        workspaces = [a[i + 1] for i, x in enumerate(a) if x == "--tmpfs" and a[i + 1].startswith("/workspace:")]
+        self.assertEqual(len(workspaces), 1)
+        self.assertIn("uid=1000", workspaces[0])
+        self.assertIn("gid=1000", workspaces[0])
+        self.assertIn("mode=0700", workspaces[0])
+        self.assertIn("size=256m", workspaces[0])
 
     def test_docker_argv_rejects_mutable_image_tags(self):
         for image in ("python:3.12-slim", "registry.example/image:latest", "registry.example/image"):
@@ -72,6 +82,67 @@ class DockerArgvTests(unittest.TestCase):
             DockerBackend({"default": "python:3.12-slim"})
         with self.assertRaisesRegex(ValueError, "digest SHA-256"):
             DockerBackend({"default": "registry.example/image:latest"})
+
+    def test_snapshot_tar_includes_regular_files_and_skips_symlinks(self):
+        import io
+        import os
+        import tarfile
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as root:
+            os.makedirs(os.path.join(root, "src"))
+            with open(os.path.join(root, "src", "a.py"), "w", encoding="utf-8") as fh:
+                fh.write("print('ok')\n")
+            os.symlink("src/a.py", os.path.join(root, "link.py"))
+            archive = io.BytesIO()
+            _snapshot_tar(root, archive)
+            archive.seek(0)
+            with tarfile.open(fileobj=archive, mode="r") as tar:
+                names = tar.getnames()
+                contents = tar.extractfile("src/a.py").read()
+
+        self.assertEqual(names, ["src/a.py"])
+        self.assertEqual(contents, b"print('ok')\n")
+
+    def test_backend_streams_tar_and_cleans_container(self):
+        from sandbox.runner import ExecResult
+        import io
+        import os
+        import tarfile
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as root:
+            with open(os.path.join(root, "a.txt"), "w", encoding="utf-8") as fh:
+                fh.write("hola")
+            captured = {}
+
+            def fake_run(cmd, cwd, env, timeout, max_bytes, **kwargs):
+                captured["cmd"] = cmd
+                captured["env"] = env
+                captured["stdin"] = kwargs["stdin"].read()
+                return ExecResult(0, "", "", False, False, 0.1, "docker")
+
+            b = DockerBackend(
+                {"default": "registry.example/x@sha256:" + "a" * 64},
+                docker_host="tcp://sandbox:2376",
+                docker_tls_verify=True,
+                docker_cert_path="/run/secrets/docker-ca",
+            )
+            with mock.patch("os.getuid", return_value=1000), mock.patch("os.getgid", return_value=1000), \
+                 mock.patch("sandbox.backends.run_bounded", side_effect=fake_run), \
+                 mock.patch("sandbox.backends.subprocess.run") as cleanup:
+                result = b.run(["python", "-m", "pytest"], root, ResourceLimits(), False)
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(captured["cmd"][-3:], ["python", "-m", "pytest"])
+        self.assertNotIn("--mount", captured["cmd"])
+        self.assertIn("--pull=never", captured["cmd"])
+        self.assertEqual(captured["env"]["DOCKER_TLS_VERIFY"], "1")
+        self.assertEqual(captured["env"]["DOCKER_CERT_PATH"], "/run/secrets/docker-ca")
+        with tarfile.open(fileobj=io.BytesIO(captured["stdin"]), mode="r") as tar:
+            self.assertEqual(tar.extractfile("a.txt").read(), b"hola")
+        cleanup.assert_called_once()
+        self.assertIn("-f", cleanup.call_args.args[0])
 
     def test_docker_missing_is_reported_not_crashing(self):
         b = DockerBackend({"default": "registry.example/x@sha256:" + "a" * 64}, docker_bin="docker-no-existe")

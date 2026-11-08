@@ -138,6 +138,69 @@ class CodingAgentPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(terminal.status, "done")
         self.assertEqual(applied, ["src/file.py"])
 
+    async def test_reconciled_failed_action_is_not_retried_even_if_approval_is_approved(self):
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        conn.execute("CREATE TABLE projects (id TEXT PRIMARY KEY)")
+        conn.execute("INSERT INTO projects(id) VALUES ('p1')")
+        conn.execute("""CREATE TABLE agent_runs (
+            id TEXT PRIMARY KEY, project_id TEXT NOT NULL, goal TEXT NOT NULL, status TEXT NOT NULL,
+            final TEXT, error TEXT, messages TEXT NOT NULL, pending_actions TEXT NOT NULL,
+            steps INTEGER NOT NULL, parse_failures INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        )""")
+        conn.execute("""CREATE TABLE agent_run_actions (
+            id TEXT PRIMARY KEY, run_id TEXT NOT NULL, project_id TEXT NOT NULL, tool TEXT NOT NULL,
+            action_hash TEXT NOT NULL, args_json TEXT NOT NULL, proposal_id TEXT, summary TEXT NOT NULL,
+            state TEXT NOT NULL, result TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            UNIQUE(project_id, action_hash)
+        )""")
+        conn.commit()
+
+        from agent.coding_agent import AgentRun, PendingAction
+
+        applied = []
+        gate = InMemoryApprovalGate()
+        proposal = ActionProposal("p1", "change", "Cambiar archivo", "Corregir defecto",
+                                  ("src/file.py",), "diff", (), "archivo corregido", "fingerprint-failed")
+        pid = gate.request(proposal)
+        gate.decide(pid, True, "reviewer")
+        tool = Tool("change", "cambio controlado", {"path": ("str", True)},
+                    propose=lambda args: (proposal, lambda approval: applied.append(args["path"]) or "ok"))
+        store = RunStore(MetaStore(conn))
+        run = AgentRun(
+            goal="Aplicar un cambio",
+            messages=[{"role": "user", "content": "Aplicar un cambio"}],
+            id="failed-run",
+            project_id="p1",
+            status="awaiting_approval",
+            pending=[PendingAction(pid, "change", {"path": "src/file.py"},
+                                   proposal.action_hash, "Actualizar archivo", "failed-run")],
+        )
+        store.create_run(run)
+        store.record_action(
+            "failed-run", "p1", "change", {"path": "src/file.py"},
+            proposal.action_hash, str(pid), "Actualizar archivo",
+        )
+        self.assertTrue(store.transition_action(
+            "failed-run", proposal.action_hash, ("pending",), "failed"
+        ))
+        store.save_run(run)
+
+        calls = []
+
+        async def chat(messages):
+            calls.append(messages)
+            return '{"final":"La acción falló y no se repitió"}'
+
+        agent = CodingAgent(chat, {"change": tool}, gate, run_store=store)
+        restored = agent.restore("failed-run", "p1")
+        completed = await agent.resume(restored)
+
+        self.assertEqual(completed.status, "done")
+        self.assertEqual(applied, [])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(store.get_project_action("p1", proposal.action_hash)["state"], "failed")
+
     async def test_restore_marks_interrupted_running_action_for_reconciliation(self):
         conn = sqlite3.connect(":memory:")
         self.addCleanup(conn.close)

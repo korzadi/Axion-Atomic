@@ -54,9 +54,10 @@ class AuthReadinessTests(unittest.TestCase):
             report = auth_readiness()
         self.assertEqual(report["status"], "blocked")
         self.assertEqual(report["billing"]["mode"], "ledger")
+        self.assertEqual(report["billing"]["chat_execution"], "integrated")
         self.assertEqual(report["billing"]["result_encryption_key"], "missing")
 
-    def test_readiness_blocks_ledger_mode_until_chat_uses_durable_billing(self):
+    def test_readiness_blocks_ledger_mode_until_runtime_attestation_is_configured(self):
         settings = SimpleNamespace(
             auth_enabled=True,
             auth_cookie_secure=True,
@@ -72,7 +73,28 @@ class AuthReadinessTests(unittest.TestCase):
             report = auth_readiness()
         self.assertEqual(report["status"], "blocked")
         self.assertEqual(report["billing"]["mode"], "ledger")
-        self.assertEqual(report["billing"]["chat_execution"], "not_integrated")
+        self.assertEqual(report["billing"]["chat_execution"], "integrated")
+        self.assertEqual(report["billing"]["runtime_attestation"], "missing")
+
+    def test_readiness_allows_ledger_mode_with_key_and_runtime_manifest(self):
+        settings = SimpleNamespace(
+            auth_enabled=True,
+            auth_cookie_secure=True,
+            oauth_public_base_url="https://axyronatomic.com",
+            billing_enforcement_enabled=True,
+            billing_runtime_model_digest="sha256:" + "b" * 64,
+            billing_runtime_template_sha256="a" * 64,
+            billing_tokenizer_contract="qwen2_byte_fallback",
+        )
+        with (
+            patch("api.readiness.settings", settings),
+            patch("api.readiness.email_delivery_configured", return_value=True),
+            patch("api.readiness.EnvironmentMfaKeyProvider.active_key", return_value=("mfa-v1", b"x" * 32)),
+            patch("api.readiness.EnvironmentResultKeyProvider.active_key", return_value=("result-v1", b"y" * 32)),
+        ):
+            report = auth_readiness()
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["billing"]["runtime_attestation"], "configured")
 
     def test_readiness_never_exposes_mfa_key_material(self):
         settings = SimpleNamespace(

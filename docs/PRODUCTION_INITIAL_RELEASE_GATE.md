@@ -102,12 +102,12 @@ Se añadieron `api/billing_result_codec.py` y `api/billing_request_fingerprint.p
 
 ### Preflight unificado fail-closed
 
-Se añadió `api/billing_preflight.py` para agrupar el cálculo de presupuesto y la huella SHA-256 de la solicitud. Recibe explícitamente los mensajes finales completos (incluidos system/historial/RAG), modelo público/runtime, parámetros de generación y ventana de contexto. Rechaza la preparación facturable salvo que `tokenizer_verified is True`; también rechaza runtime/modelo público no autorizado. Es una función pura: no reserva saldo, no llama a Ollama y no está conectada a HTTP. La verificación real del tokenizer/Modelfile/template sigue pendiente, por lo que esta puerta no se puede habilitar todavía.
+Se añadió `api/billing_preflight.py` para agrupar el cálculo de presupuesto y la huella SHA-256 de la solicitud. Recibe explícitamente los mensajes finales completos (incluidos system/historial/RAG), modelo público/runtime, parámetros de generación y ventana de contexto. Rechaza la preparación facturable salvo que `tokenizer_verified is True`; también rechaza runtime/modelo público no autorizado. Es una función pura. El endpoint de chat ya usa preflight y orquestación durable cuando la facturación está activada, pero la verificación real del tokenizer/Modelfile/template sigue pendiente; la puerta permanece desactivada.
 
 
 ### Identidad estable para reintentos HTTP
 
-Se añadió `api/billing_request_identity.py`. Genera un UUID determinista por combinación usuario + `Idempotency-Key`, valida longitud (1–200) y caracteres imprimibles ASCII, y evita que un reintento HTTP cree un `request_id` diferente. El helper no reserva créditos ni está conectado al endpoint. La futura ruta deberá exigir la cabecera, validar sesión/CSRF/rol de proyecto antes de invocarlo y pasar la misma clave al servicio transaccional de reservas.
+Se añadió `api/billing_request_identity.py`. Genera un UUID determinista por combinación usuario + `Idempotency-Key`, valida longitud (1–200) y caracteres imprimibles ASCII, y evita que un reintento HTTP cree un `request_id` diferente. El endpoint ya exige la cabecera, valida sesión/CSRF/rol de proyecto antes de invocarla y pasa la misma clave al servicio transaccional. La ruta legada `/v1` sigue fuera de la facturación multiusuario.
 
 
 ### Corrección de cookie de sesión — 7 de noviembre de 2026

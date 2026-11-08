@@ -1,6 +1,6 @@
 # Matriz de aceptación — AXYRON ATOMIC V1.0
 
-Fecha: 7 de noviembre de 2026. Rama: `main`. Snapshot de auditoría inicial: `770c086d624dfb56d9179488db5585a169666948`. Revisiones incrementales posteriores se registran al final de este documento.
+Fecha: 8 de noviembre de 2026. Rama: `main`. Snapshot de auditoría inicial: `770c086d624dfb56d9179488db5585a169666948`. Revisiones incrementales posteriores se registran al final de este documento.
 
 ## Método de medición
 
@@ -21,8 +21,9 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | STU-04 | UX | Responsive, teclado, lector de pantalla y WCAG | SPA y browser tests | Auditoría pendiente |
 | AGT-01 | Agente | Inicio, listado, detalle y reanudación persistentes | `ProjectAgentRuntime`, `/workspace/agent/runs*` | Implementada; CI HEAD pendiente |
 | AGT-02 | Agente | Aprobación ligada al hash y revisor autenticado | `DbApprovalGate`, `action_approvals` | Implementada; CI HEAD pendiente |
-| AGT-03 | Agente | Acciones interrumpidas requieren reconciliación | `needs_reconciliation`, tests de persistencia | Implementada; CI HEAD pendiente |
-| AGT-04 | Sandbox | Shell aislado con daemon dedicado y límites | Runtime HTTP no inyecta `DockerBackend` | Bloqueada; no montar socket Docker del host |
+| AGT-03 | Agente | Acciones interrumpidas requieren reconciliación | `needs_reconciliation`, `/runs/{run_id}/reconcile`, tests de persistencia | Implementada; CI HEAD pendiente |
+| AGT-04 | Sandbox | Shell aislado con daemon dedicado y límites | `DockerBackend` sin bind mount, transferencia tar por stdin, configuración `SANDBOX_DOCKER_*` fail-closed | Parcial; activación bloqueada hasta daemon/TLS/CLI, imágenes digest y E2E real |
+| AGT-05 | Agente | Cancelación explícita de ejecuciones pendientes | `/workspace/agent/runs/{run_id}/cancel`, migración 022, pruebas HTTP/transacción | Implementada; CI HEAD pendiente |
 | AI-01 | IA | Ollama y modelo configurado accesibles desde API | Health VPS 6/6 | Verificada en VPS en ese momento |
 | AI-02 | IA | Embeddings y Qdrant con datos aislados reales | Health VPS y tests históricos | Parcial; falta E2E con datos desechables |
 | SEC-01 | Seguridad | Registro, verificación, login, sesión, CSRF y logout E2E | `api/auth_routes.py`, `api/auth.py` | Bloqueada para producción; AUTH desactivada |
@@ -31,14 +32,14 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | SEC-04 | Seguridad | Matriz HTTP de roles por endpoint | `authorize_project`, workspace tests | Parcial |
 | DB-01 | Datos | Migraciones reproducibles en DB aislada | Migraciones y job PostgreSQL | CI histórica; HEAD pendiente |
 | DB-02 | Datos | Restauración real de backup en entorno aislado | Backup pre-migration documentado | Pendiente |
-| BILL-01 | Facturación | Medición tokens en shadow mode | `inference_usage_events` | Parcial; no cobra |
-| BILL-02 | Facturación | Reservas, ledger, reversos e idempotencia conectados a inferencia | Roadmap y módulos económicos | Bloqueada |
+| BILL-01 | Facturación | Medición tokens en shadow mode | `inference_usage_events` | Implementada; no cobra con facturación desactivada |
+| BILL-02 | Facturación | Reservas, ledger, reversos e idempotencia conectados a inferencia | `workspace_chat`, ejecución durable, atestación, recuperación administrativa | Implementada y probada con dobles; E2E PostgreSQL/Ollama pendiente |
 | PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada por propietario; integración técnica por validar | Bloqueada |
-| ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | Portal/API principalmente informativos/lectura | Parcial |
+| ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación y conciliación auditadas, con CSRF, permisos y controles en el portal | Parcial; E2E browser de la recuperación pendiente |
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh` actualizado | Código publicado; CI pendiente |
 | OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución VPS pendiente |
 | OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador y documentación | Pendiente |
-| QA-01 | QA | Suite Python aprobada en HEAD evaluado | GitHub Actions | No confirmada para HEAD actual |
+| QA-01 | QA | Suite Python aprobada en HEAD evaluado | Ejecución local con venv y dobles | Parcial; 812 pasan y 9 se omiten con `python` disponible; sin ese binario, 791 pasan al excluir 21 pruebas de sandbox local; CI del HEAD pendiente |
 | QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions | No confirmada para HEAD actual |
 | DOC-01 | Docs | README, AGENTS, instalación, seguridad y usuario alineados | Documentación del repo | Parcial |
 | REL-01 | Lanzamiento | Todas las puertas críticas aprobadas | Esta matriz | Bloqueada |
@@ -47,7 +48,7 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 
 `docs/AGENT_RUNTIME_API_STATUS.md` registra ejecuciones exitosas para commits anteriores:
 - `e045d10158163be198128bba2708c598d00da410`: 664 passed, 9 skipped, 4 warnings; browser, imagen, PostgreSQL y Qdrant correctos.
-- `e5838f711d2773452d707aee8607cd80cfa5b056`: 665 passed, 9 skipped, 4 warnings; cinco jobs correctos.
+- `e5838f711d2775452d707aee8607cd80cfa5b056`: 665 passed, 9 skipped, 4 warnings; cinco jobs correctos.
 - `6a8d8564ed1ac653c79e426e778447394ef8ccdb`: 675 passed, 9 skipped, 4 warnings; cinco jobs correctos.
 
 Son resultados de esos SHA, no del HEAD actual. La consulta de estados y runs asociadas al HEAD `770c086d624dfb56d9179488db5585a169666948` no devolvió resultados verificables. **CI actual: no confirmada.**
@@ -105,3 +106,16 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Se amplió `tests/test_workspace_authorization.py` para cubrir lectura por los cuatro roles, denegación de escritura al viewer, denegación de decisiones al editor y respuesta indistinguible para no miembros/proyectos ajenos.
 - Commit de pruebas: `f3bf94101c90bff350bf1fd9d339bbf3d08114e3`.
 - Limitación: son pruebas unitarias de la política de autorización, no una matriz HTTP E2E contra PostgreSQL ni una prueba multiusuario real. La autorización de producción continúa sin habilitarse; CI del nuevo HEAD debe confirmarse antes de marcar SEC-04 como verificada.
+
+## Revisión incremental de facturación durable (8 de noviembre de 2026)
+
+- Se confirmó que `workspace_chat` ya invoca la orquestación durable cuando `BILLING_ENFORCEMENT_ENABLED=true`; la documentación previa que la describía como shadow-only estaba desactualizada.
+- Se añadió `api/runtime_attestation.py`: verifica digest del modelo, SHA-256 de la plantilla y arquitectura del tokenizer contra `/api/tags` y `/api/show` antes de recuperar RAG, reservar créditos o invocar Ollama. Falla cerrado y cachea la identidad verificada durante 300 s.
+- Se endureció `workspace_chat`: `Idempotency-Key` obligatoria en modo ledger, fingerprint sobre el prompt efectivo con RAG y el artefacto atestado, y clave de cifrado validada antes de reservar.
+- Se añadieron `POST /admin/billing/executions/recover` y `POST /admin/billing/reservations/reconcile-no-execution`, protegidos por `billing.manage`, CSRF y auditoría append-only. El primero reintenta liquidar resultados cifrados completados sin repetir inferencia; el segundo libera reservas `unknown`/`review` solo con confirmación humana de no ejecución.
+- Se actualizaron `CHAT_BILLING_CUTOVER_CHECKLIST.md` y `HTTP_CHAT_IDEMPOTENCY_DESIGN.md` para reflejar el estado real.
+- Se endureció el límite HTTP del agente: ejecuciones inexistentes o de otro proyecto devuelven 404 (`RunNotFoundError`) y aprobaciones no canjeables devuelven 409, sin exponer detalles internos.
+- Se añadió `POST /workspace/agent/runs/{run_id}/reconcile`: owner/admin resuelve una acción `running` interrumpida como aplicada o fallida con motivo obligatorio, auditoría en la misma transacción y reanudación explícita posterior. El runtime no reejecuta la acción.
+- Se añadió `POST /workspace/agent/runs/{run_id}/cancel` para owner/admin: solo cancela ejecuciones en `awaiting_approval`, invalida aprobaciones pendientes o aprobadas y acciones pendientes, limpia la cola y audita la operación en la misma transacción. La migración 022 habilita el estado `cancelled`.
+- Verificación local: 812 pruebas pasan y 9 se omiten (las 9 son PostgreSQL) usando un enlace temporal no versionado `python` -> `python3`. Sin ese enlace, 791 pasan al excluir las 21 pruebas de `test_sandbox_exec.py`/`test_agent_sandbox.py`, que requieren el binario `python`; no son defectos de la lógica modificada.
+- No se ejecutaron pruebas PostgreSQL reales ni E2E contra Ollama; CI del HEAD actual sigue sin confirmarse. La facturación de pago y el checkout permanecen desactivados.

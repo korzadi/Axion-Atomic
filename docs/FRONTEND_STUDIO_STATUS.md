@@ -30,7 +30,7 @@
 - **Agentes / aprobaciones:** consulta historial y detalle de ejecuciones y permite registrar decisiones de aprobación según rol de proyecto. Aprobar no ejecuta ni reanuda herramientas; la integración end-to-end del runtime sigue pendiente.
 - **Modelos:** consulta `GET /billing/catalog`. El catálogo actual es informativo y no habilita checkout ni facturación.
 - **Pagos:** consulta órdenes propias e historial mediante `GET /billing/orders` y `GET /billing/orders/{id}`. No crea órdenes, confirma pagos ni acredita créditos.
-- **Administración:** consulta permisos globales con `GET /admin/access/me`; no concede roles ni permite mutaciones.
+- **Administración:** consulta permisos globales con `GET /admin/access/me` y, con `billing.manage`, permite recuperar liquidaciones completadas mediante una acción confirmada y auditada. No concede roles.
 
 ### Módulos todavía informativos o incompletos
 
@@ -38,15 +38,15 @@
 - Atomic Vision y Atomic Reasoning: no se deben presentar como servicios disponibles sin verificación de sus runtimes.
 - Conocimiento: interfaz conectada para indexar texto y cargar PDF/DOCX/TXT/Markdown (máximo 5 MB y 100000 caracteres extraídos), listar fuentes por proyecto, reindexar fuentes administrables y eliminarlas. La carga usa CSRF, valida rol y limita solicitudes; la recuperación RAG del chat queda filtrada por proyecto. No hay OCR: los PDF escaneados sin texto extraíble se rechazan. Hay pruebas de navegador para los flujos de interfaz (login, carga, refresco y permisos), pero sus endpoints se simulan en el navegador. También hay una prueba de integración que ejecuta la ruta de carga, la extracción TXT real y el ciclo de indexación/listado/recuperación sobre un doble de prueba del protocolo Qdrant; embeddings se sustituyen por un vector determinista. Las pruebas no arrancan un servidor ni almacenan datos localmente. La configuración de ejecución usa Qdrant Cloud mediante URL HTTPS y API key; la conexión real debe verificarse con credenciales del clúster del operador.
 - Atomic Code como módulo independiente: el modelo se utiliza desde Chat IA; faltan controles y experiencia especializada de programación dentro del workspace.
-- Administración: la API disponible es de solo lectura; faltan operaciones administrativas seguras, auditadas y probadas.
-- Agente ejecutor: inicio y reanudación HTTP persistentes están implementados; la recuperación de acciones interrumpidas requiere reconciliación humana y no se repite automáticamente. El sandbox Docker y la ejecución de comandos siguen pendientes.
+- Administración: además de consulta, existe recuperación auditada de liquidaciones completadas con CSRF y `billing.manage`; la gestión de usuarios/roles sigue pendiente.
+- Agente ejecutor: inicio, reanudación y cancelación HTTP persistentes están implementados. Owner/admin puede cancelar ejecuciones en `awaiting_approval` con motivo y auditoría; las acciones pendientes quedan invalidadas y no se ejecutan. Las acciones interrumpidas quedan en `needs_reconciliation` y se reconcilian explícitamente como aplicadas o fallidas. El backend Docker está preparado para un daemon dedicado sin socket local, pero permanece desactivado; el sandbox real y la ejecución de comandos siguen sin validación end-to-end.
 
 ## Límites de producción
 
 - No se ha validado OAuth con credenciales reales ni se ha probado el ciclo completo de correo en un dominio de producción.
 - No se ha habilitado autenticación en el VPS.
 - El chat no soporta streaming y no debe confundirse con un agente que ejecuta código o modifica archivos.
-- El sistema de facturación permanece en modo no conectado al endpoint real de chat; no se deben activar cobros hasta completar idempotencia HTTP, proveedor KMS real, attestation verificable del runtime y pruebas end-to-end.
+- El chat tiene facturación durable integrada pero desactivada; no se deben activar cobros hasta completar PostgreSQL real, proveedor KMS, manifiesto de runtime verificado y pruebas end-to-end.
 - QvaPay requiere confirmar el mecanismo de referencia de orden y verificación server-to-server/webhook firmado antes de aceptar pagos reales.
 - La imagen Docker y el despliegue en VPS requieren una validación separada y aprobación expresa del operador.
 
@@ -105,7 +105,7 @@ Se incorporó una primera estructura SPA ligera dentro de la aplicación FastAPI
 - Modelos consulta el catálogo público; los modelos no disponibles se etiquetan como próximas actualizaciones.
 - Consumo consulta métricas reales por proyecto.
 - Facturación consulta catálogo y órdenes propias; checkout permanece deshabilitado si así lo informa el backend.
-- Cuenta muestra sesión y MFA; Administración muestra permisos de solo lectura y no inventa mutaciones.
+- Cuenta muestra sesión y MFA; Administración muestra permisos reales y solo habilita la recuperación auditada que el backend autoriza.
 
 ### Validación añadida
 

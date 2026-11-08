@@ -71,6 +71,7 @@ class ProjectAgentRuntime:
 
         Las acciones que estaban en estado running se convierten en
         needs_reconciliation por CodingAgent.restore y nunca se reejecutan.
+        Una ejecución cancelada se devuelve tal cual, sin reiniciar el modelo.
         """
         if not isinstance(run_id, str) or not run_id.strip():
             raise ValueError("run_id es obligatorio")

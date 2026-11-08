@@ -87,6 +87,32 @@ class ApprovalRequest(BaseModel):
     note: str = Field("", max_length=2000)
 
 
+class AgentReconcileRequest(BaseModel):
+    action_hash: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+    resolution: Literal["applied", "failed"]
+    note: str = Field(min_length=8, max_length=2000)
+
+    @field_validator("note")
+    @classmethod
+    def note_must_be_useful(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 8:
+            raise ValueError("El motivo de reconciliación debe tener al menos 8 caracteres útiles")
+        return value
+
+
+class AgentCancelRequest(BaseModel):
+    note: str = Field(min_length=8, max_length=2000)
+
+    @field_validator("note")
+    @classmethod
+    def note_must_be_useful(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 8:
+            raise ValueError("El motivo de cancelación debe tener al menos 8 caracteres útiles")
+        return value
+
+
 class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=320)
     password: str = Field(min_length=12, max_length=1024)

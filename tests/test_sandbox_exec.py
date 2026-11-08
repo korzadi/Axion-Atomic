@@ -123,6 +123,11 @@ class ExecTests(Base):
         (e,) = self.events
         self.assertEqual((e["type"], e["command"], e["exit_code"], e["backend"]), ("sandbox_run", "python script.py", 1, "local"))
 
+    async def test_audit_redacts_secrets_from_command(self):
+        self.ex._execute(["echo", FAKE_AWS], False, None)
+        (e,) = self.events
+        self.assertNotIn(FAKE_AWS, e["command"])
+
     async def test_traceback_and_compiler_diagnostics_in_output(self):
         out = render_result(await self.ex.run_auto("python script.py"))
         self.assertIn("diagnósticos", out); self.assertIn("script.py:2", out); self.assertIn("ValueError", out)
