@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest.mock import patch
 
@@ -118,7 +119,14 @@ class ApiHealthTests(unittest.IsolatedAsyncioTestCase):
         ):
             response = await main.health_readiness()
         self.assertEqual(response.status_code, 503)
-        self.assertEqual(response.body, b'{"status":"blocked","checks":{"authentication_enabled":true},"dependencies":{"database":"ok","ollama":"ok","chat_model":"unavailable","embedding_model":"ok","qdrant":"ok"},"optional":{}}')
+        payload = json.loads(response.body)
+        self.assertEqual(payload["status"], "blocked")
+        self.assertEqual(payload["checks"], auth_report["checks"])
+        self.assertEqual(payload["dependencies"], {
+            "database": "ok", "ollama": "ok", "chat_model": "unavailable",
+            "embedding_model": "ok", "qdrant": "ok",
+        })
+        self.assertEqual(payload["optional"], {})
 
     async def test_readiness_endpoint_allows_optional_redis_degradation(self):
         dependency_health = {"status": "degraded", "checks": {
