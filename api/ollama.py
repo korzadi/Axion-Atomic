@@ -6,6 +6,7 @@ import httpx
 from api.config import settings
 from api.capacity import BoundedInferenceGate
 from api.rcache import get_embedding, set_embedding
+from rag.embedding_identity import EmbeddingIdentity, same_model
 from rag.vector_contract import validate_embedding_vector
 
 # Un solo turno pesado a la vez protege la RAM/CPU del VPS inicial.
@@ -51,9 +52,6 @@ def parse_chat_response(data: dict[str, Any], requested_model: str) -> Inference
     returned_model = data.get("model")
     if not isinstance(returned_model, str) or not returned_model:
         returned_model = None
-    # Ollama puede devolver la etiqueta explícita :latest aunque la solicitud
-    # use el alias sin etiqueta. Normalizamos solo esa equivalencia exacta;
-    # cualquier otro modelo conserva su identidad y será rechazado.
     if returned_model == f"{requested_model}:latest" and ":" not in requested_model:
         returned_model = requested_model
     elif requested_model == f"{returned_model}:latest" and ":" not in returned_model:
@@ -103,25 +101,30 @@ async def chat(messages, temperature=0.2, max_tokens=2048):
 
 
 async def embed(value: str):
-    cached = await get_embedding(settings.embed_model, settings.embed_dimension, value)
+    identity = EmbeddingIdentity(settings.embed_model, settings.embed_dimension)
+    # La clave usa identidad canónica: aliases sin etiqueta y :latest comparten
+    # espacio de caché, mientras modelos/dimensiones diferentes nunca colisionan.
+    cached = await get_embedding(identity.model, identity.dimension, value)
     if cached is not None:
-        # También se valida la caché: entradas históricas o corruptas no deben
-        # eludir el contrato compartido antes de llegar a Qdrant.
-        return validate_embedding_vector(cached, settings.embed_dimension)
+        return validate_embedding_vector(cached, identity.dimension)
     async with ollama_gate.slot():
         async with httpx.AsyncClient(timeout=settings.ollama_request_timeout_seconds) as client:
             response = await client.post(
                 settings.ollama_base_url.rstrip("/") + "/api/embeddings",
-                json={"model": settings.embed_model, "prompt": value},
+                json={"model": settings.embed_model.strip(), "prompt": value},
             )
             response.raise_for_status()
-            vector = response.json()["embedding"]
-    try:
-        vector = validate_embedding_vector(vector, settings.embed_dimension)
-    except ValueError:
-        # No cachear vectores malformados ni permitir que lleguen a Qdrant.
-        raise
-    await set_embedding(settings.embed_model, settings.embed_dimension, value, vector)
+            payload = response.json()
+            if not isinstance(payload, dict) or "embedding" not in payload:
+                raise ValueError("Respuesta de Ollama sin embedding válido")
+            returned_model = payload.get("model")
+            if returned_model is not None and (
+                not isinstance(returned_model, str) or not same_model(returned_model, identity.model)
+            ):
+                raise ValueError("Ollama devolvió un modelo de embeddings distinto al solicitado")
+            vector = payload["embedding"]
+    vector = validate_embedding_vector(vector, identity.dimension)
+    await set_embedding(identity.model, identity.dimension, value, vector)
     return vector
 
 
@@ -139,8 +142,6 @@ async def configured_chat_model_available() -> bool:
         if isinstance(item, dict) and isinstance(item.get("name"), str)
     }
     configured = settings.chat_model.strip()
-    # Ollama devuelve normalmente la etiqueta explícita :latest aunque la
-    # configuración solicite el alias sin etiqueta.
     if ":" not in configured:
         return configured in names or f"{configured}:latest" in names
     return configured in names
