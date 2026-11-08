@@ -450,11 +450,18 @@ async def admin_billing_overview(
             FROM inference_usage_events
             GROUP BY requested_model ORDER BY requested_model
         """)).mappings().all()
+        invoices = conn.execute(text("""
+            SELECT i.status, count(*) AS count, coalesce(sum(i.sats), 0) AS sats,
+                   count(*) FILTER (WHERE i.status = 'created' AND o.expires_at <= now()) AS overdue_open
+            FROM payment_invoices i JOIN payment_orders o ON o.id = i.order_id
+            GROUP BY i.status ORDER BY i.status
+        """)).mappings().all()
     return {
         "reservations": [dict(row) for row in reservations],
         "ledger": [dict(row) for row in ledger],
         "executions": [dict(row) for row in executions],
         "usage": [dict(row) for row in usage],
+        "invoices": [dict(row) for row in invoices],
     }
 
 @router.get("/billing/executions")

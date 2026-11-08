@@ -136,7 +136,11 @@ def test_admin_billing_overview_reads_persisted_aggregates():
                 {"requested_model": "atomic-code:16k-8k", "count": 3,
                  "prompt_tokens": 900, "output_tokens": 300, "unavailable": 0}
             ]
-            context.execute.side_effect = [reservations, ledger, executions, usage]
+            invoices = MagicMock()
+            invoices.mappings.return_value.all.return_value = [
+                {"status": "created", "count": 2, "sats": 42000, "overdue_open": 1}
+            ]
+            context.execute.side_effect = [reservations, ledger, executions, usage, invoices]
             response = client.get("/admin/billing/overview")
         assert response.status_code == 200
         body = response.json()
@@ -145,6 +149,9 @@ def test_admin_billing_overview_reads_persisted_aggregates():
         assert body["executions"][0]["count"] == 3
         assert body["usage"][0]["prompt_tokens"] == 900
         assert body["usage"][0]["unavailable"] == 0
+        assert body["invoices"][0]["status"] == "created"
+        assert body["invoices"][0]["sats"] == 42000
+        assert body["invoices"][0]["overdue_open"] == 1
     finally:
         patcher.stop()
         app.dependency_overrides.clear()
@@ -174,6 +181,7 @@ def test_admin_billing_overview_reads_persisted_aggregates():
                 [{"state": "completed", "count": 1, "requires_review": 0, "recovery_due": 0}],
                 [{"requested_model": "atomic-code:16k-8k", "count": 1,
                   "prompt_tokens": 10, "output_tokens": 5, "unavailable": 0}],
+                [{"status": "created", "count": 1, "sats": 1000, "overdue_open": 0}],
             ):
                 result = MagicMock()
                 result.mappings.return_value.all.return_value = row
@@ -186,6 +194,7 @@ def test_admin_billing_overview_reads_persisted_aggregates():
         assert body["ledger"][0]["event_type"] == "consume"
         assert body["executions"][0]["state"] == "completed"
         assert body["usage"][0]["requested_model"] == "atomic-code:16k-8k"
+        assert body["invoices"][0]["count"] == 1
     finally:
         patcher.stop()
         app.dependency_overrides.clear()
