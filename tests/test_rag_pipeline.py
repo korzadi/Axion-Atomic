@@ -173,6 +173,23 @@ class IndexerTests(PipelineBase):
         self.assertTrue(old_page_ids.isdisjoint(store.points))
         self.assertGreater(report.orphaned_removed, 0)
 
+    async def test_remove_project_sql_failure_preserves_vector_data(self):
+        await self.idx.index_project(self.ws)
+
+        class FailingMeta:
+            def __init__(self, delegate):
+                self.delegate = delegate
+
+            def delete_project_index(self, project_id):
+                raise RuntimeError("database unavailable")
+
+        indexer = RepoIndexer(self.emb, self.store, FailingMeta(self.meta))
+        before = set(self.store.points)
+        with self.assertRaisesRegex(RuntimeError, "database unavailable"):
+            await indexer.remove_project("p1")
+        self.assertEqual(set(self.store.points), before)
+        self.assertGreater(self.meta.stats("p1")["chunks"], 0)
+
     async def test_remove_project_metadata_first_and_reconcile_vector_failure(self):
         await self.idx.index_project(self.ws)
 
