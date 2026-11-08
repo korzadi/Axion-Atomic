@@ -39,3 +39,44 @@ def test_database_pool_response_does_not_expose_driver_or_pool_details():
     body = response.body.decode("utf-8")
     assert "internal pool connection details" not in body
     assert "TimeoutError" not in body
+
+
+class CapacityHttpRouteTests:
+    async def _assert_registered_handler_response(self, exception, expected_retry_after, forbidden_text):
+        from fastapi import FastAPI
+        import httpx
+        from api.main import app
+
+        route_name = f"capacity-regression-{type(exception).__name__}"
+        path = f"/__test/{route_name}"
+
+        async def raise_capacity_error():
+            raise exception
+
+        app.add_api_route(path, raise_capacity_error, methods=["GET"], name=route_name)
+        try:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.get(path)
+        finally:
+            app.router.routes = [
+                route for route in app.router.routes if getattr(route, "name", None) != route_name
+            ]
+
+        assert response.status_code == 503
+        assert response.headers["retry-after"] == expected_retry_after
+        assert forbidden_text not in response.text
+        assert "detail" in response.json()
+
+    async def test_capacity_exception_handler_is_exercised_through_http(self):
+        await self._assert_registered_handler_response(
+            CapacityExceeded(7), "7", "CapacityExceeded"
+        )
+
+    async def test_database_pool_handler_is_exercised_through_http(self):
+        await self._assert_registered_handler_response(
+            SQLAlchemyPoolTimeout("private driver pool diagnostic"), "3",
+            "private driver pool diagnostic",
+        )
