@@ -187,3 +187,46 @@ def test_admin_billing_overview_denies_role_without_billing_permission():
     finally:
         patcher.stop()
         app.dependency_overrides.clear()
+
+def test_admin_billing_executions_returns_paginated_persisted_details():
+    client, patcher = _client_with_role("billing_readonly")
+    try:
+        with patch("api.admin_routes.engine.connect") as connect:
+            context = MagicMock()
+            context.__enter__.return_value = context
+            connect.return_value = context
+            count_result = MagicMock()
+            count_result.scalar_one.return_value = 1
+            rows_result = MagicMock()
+            rows_result.mappings.return_value.all.return_value = [{
+                "id": "exec-1", "user_id": "user-1", "reservation_id": "res-1",
+                "state": "completed", "reservation_state": "settled",
+                "requested_credits": 25, "recovery_attempts": 1,
+                "recovery_next_attempt_at": None, "recovery_last_attempt_at": None,
+                "recovery_last_error_code": None, "recovery_requires_review": False,
+                "recovery_settled_at": "2026-11-07T12:00:00Z",
+                "created_at": "2026-11-07T11:00:00Z",
+                "updated_at": "2026-11-07T12:00:00Z",
+                "completed_at": "2026-11-07T11:30:00Z",
+            }]
+            context.execute.side_effect = [count_result, rows_result]
+            response = client.get("/admin/billing/executions?limit=10&offset=0")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["pagination"]["total"] == 1
+        assert body["executions"][0]["requested_credits"] == 25
+        assert body["executions"][0]["recovery_attempts"] == 1
+        assert "result_ciphertext" not in body["executions"][0]
+    finally:
+        patcher.stop()
+        app.dependency_overrides.clear()
+
+
+def test_admin_billing_executions_requires_billing_read_permission():
+    client, patcher = _client_with_role("unknown_role")
+    try:
+        assert client.get("/admin/billing/executions").status_code == 404
+        assert client.get("/admin/billing/executions?limit=500").status_code == 422
+    finally:
+        patcher.stop()
+        app.dependency_overrides.clear()
