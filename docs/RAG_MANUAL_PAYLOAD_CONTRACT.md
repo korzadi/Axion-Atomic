@@ -17,3 +17,7 @@ La ruta sintética es un identificador de origen vectorial, no una ruta del file
 ## Alcance y límites
 
 Este cambio alinea el contrato de payload; no unifica aún las estrategias de fragmentación, embedding ni recuperación. El indexador de repositorios mantiene sus metadatos canónicos SQL y su recuperación híbrida. Studio mantiene el flujo manual Qdrant existente. No se migra, elimina ni reescribe ningún punto histórico.
+
+## Validación previa al bloqueo
+
+La validación de `source_id` opcional se realiza ahora antes de adquirir el lock por proyecto. Así, tanto la ingestión con ID proporcionado como la sustitución rechazan UUID inválidos sin reservar la conexión PostgreSQL ni esperar por la sección crítica. La regresión adicional verifica también que la sustitución emite el mismo `path` sintético que la ingestión.
