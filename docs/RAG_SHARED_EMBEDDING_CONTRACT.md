@@ -31,11 +31,18 @@ El indexador de repositorios expone la identidad configurada en `OllamaEmbedder.
 
 Cuando la respuesta de `/api/embed` o `/api/embeddings` incluye un campo `model`, el transporte/adaptador comprueba que coincide con el modelo solicitado. Una discrepancia se rechaza antes de entregar o cachear el vector. Si el servidor no incluye ese campo, la comprobación de identidad de runtime no es posible en esa respuesta y se conserva la validación de dimensión/tipo/finitez.
 
+## Composición segura del indexador
+
+`RepoIndexer` valida el contrato en su constructor, antes de indexar o escribir: si el almacén declara una dimensión, debe coincidir con la del embedder. `QdrantStore` e `InMemoryVectorStore` aceptan opcionalmente `embedding_identity`; cuando se declara, el indexador exige una identidad válida y exactamente compatible (modelo canónico + dimensión). La identidad sigue siendo opcional para no romper adaptadores y pruebas existentes que no declaran metadatos de modelo.
+
+Esto hace efectiva la comprobación en el punto de composición del pipeline de repositorios. No equivale todavía a una fábrica única entre Studio y RepoIndexer: la ruta manual no construye `RepoIndexer` y debe recibir la misma identidad al crear su store compartido. No se presume paridad automática cuando no se declara identidad.
+
 ## Regresión
 
 - `tests/test_rag_vector_contract.py`: dimensión, cardinalidad, tipos, valores no finitos y normalización.
 - `tests/test_api_embedding_contract.py`: vectores/caché inválidos, rechazo de modelo remoto distinto y clave canónica.
 - `tests/test_rag_embedding_identity.py`: alias, tags, dimensiones, compatibilidad y respuesta del transporte de repositorios.
+- `tests/test_rag_embedding_composition.py`: validación de dimensión e identidad en el constructor de `RepoIndexer`, incluida la compatibilidad heredada de stores sin identidad declarada.
 - `tests/test_rag_store_http.py`: regresiones HTTP del indexador y Qdrant.
 
 ## Compatibilidad y límites
