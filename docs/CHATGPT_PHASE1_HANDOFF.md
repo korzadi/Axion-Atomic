@@ -76,3 +76,42 @@ Antes de proponer integración:
 ## Estado
 
 La Fase 1 no se declara completada. Las dependencias externas (SMTP, OAuth HTTPS definitivo, cookies/proxy, MFA y aceptación funcional en staging) siguen requiriendo autorización y pruebas del propietario. Este documento es un contrato de handoff, no una autorización para desplegar ni integrar.
+
+## Continuidad Fase 1 — aislamiento del historial de chat en PostgreSQL (2026-11-08)
+
+**HEAD de trabajo:** `feaa9c76aa86ab4d78b40b86d6f54bbba80a97cb` (workflow; documentación de esta entrega pendiente).
+
+### Brecha concreta
+El historial ya estaba implementado en `api/workspace_routes.py` y su tabla tiene clave primaria compuesta `(user_id, project_id)`. La cobertura previa comprobaba el SQL con mocks, pero no probaba el comportamiento de lectura/escritura con PostgreSQL real.
+
+### Implementación
+- Nuevo `tests/test_workspace_chat_history_postgres.py`.
+- Inserta dos usuarios y dos proyectos únicos en PostgreSQL efímero.
+- Escribe historial para (usuario A, proyecto A), (usuario B, proyecto A) y (usuario A, proyecto B).
+- Lee las tres combinaciones y verifica que cada una conserva solo sus mensajes.
+- Comprueba que (usuario B, proyecto B), combinación sin historial, devuelve lista vacía.
+- Comprueba que existen exactamente tres filas, no una fila compartida.
+- Elimina proyectos y usuarios de prueba en `finally`; la migración usa FK con cascada.
+- `.github/workflows/ci.yml` incluye el test en `postgres-migrations`, después de aplicar migraciones 001→023. No usa PostgreSQL de producción.
+
+### Commits
+- `c8bb3f6a6694d21e39719e39863760cfaf3af47a` — prueba de aislamiento real de historial.
+- `feaa9c76aa86ab4d78b40b86d6f54bbba80a97cb` — ejecución en el job PostgreSQL de CI.
+- Este handoff registra la entrega; su propio commit será el HEAD de verificación CI.
+
+### Verificación y límites
+- La prueba está publicada y conectada al job PostgreSQL; **todavía no se declara ejecutada ni aprobada** hasta obtener el resultado del workflow para el HEAD final.
+- No se cambió la implementación productiva del chat ni el frontend: el contrato ya existente se está verificando con PostgreSQL real.
+- No se tocó `agent/opencode-vps`, `main`, la rama de integración, VPS, datos persistentes ni configuración operativa.
+- La validación no sustituye E2E del navegador con autenticación real ni prueba de Qdrant/RAG.
+
+### Siguiente tarea ascendente
+Continuar Fase 1 con aislamiento de fuentes/chunks RAG por proyecto en el backend vectorial de CI, sin modificar la lógica de negocio compartida con OpenCode. Antes de editar, comprobar qué tests y contratos existentes ya cubren ese alcance.
+
+### Ampliación HTTP/PostgreSQL de la misma regresión
+- Se amplió `tests/test_workspace_chat_history_postgres.py` con una prueba ASGI HTTP de `GET /workspace/chat/history`.
+- La ruta usa la membresía real consultada en PostgreSQL: el usuario A (viewer miembro) recibe su historial persistido; el usuario B, existente pero no miembro del proyecto, recibe 404 y no recibe el contenido privado.
+- Se mantiene el override únicamente de identidad de sesión para aislar el test; no se mockean `authorize_project`, la consulta de membresía ni el almacenamiento de historial.
+- El rate limiter se sustituye por no-op en esta prueba para que el alcance sea autorización + persistencia, sin depender de Redis ni consumir buckets reales.
+- Commit: `897bc110c20b28f76913ef3cf439c91fef3b0d61`.
+- El archivo ya estaba incluido en el job `postgres-migrations` por el commit `feaa9c7`; esta ampliación se ejecutará junto con la prueba de helpers.

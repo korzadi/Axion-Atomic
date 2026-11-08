@@ -172,4 +172,4 @@ jobs:
       - name: Verify migration idempotency
         run: python -m api.migrate
       - name: Verify PostgreSQL schema and billing transactions
-        run: python -m pytest -q tests/test_postgres_migrations.py tests/test_billing_reservations_postgres.py tests/test_billing_execution_store_postgres.py tests/test_billing_execution_durable_postgres.py tests/test_email_verification_postgres.py tests/test_payment_manager_postgres.py tests/test_qvapay_settlement_postgres.py tests/test_mfa_store_postgres.py tests/test_admin_user_management_postgres.py
+        run: python -m pytest -q tests/test_postgres_migrations.py tests/test_billing_reservations_postgres.py tests/test_billing_execution_store_postgres.py tests/test_billing_execution_durable_postgres.py tests/test_email_verification_postgres.py tests/test_payment_manager_postgres.py tests/test_qvapay_settlement_postgres.py tests/test_mfa_store_postgres.py tests/test_admin_user_management_postgres.py tests/test_workspace_authorization_postgres.py tests/test_workspace_chat_history_postgres.py
