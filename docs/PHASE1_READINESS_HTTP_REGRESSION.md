@@ -2,7 +2,7 @@
 
 **Rama:** `agent/chatgpt`  
 **Área:** API-02 / ARC-01  
-**Commit de implementación:** `231fed410c1f23c3daaa13a7bb9d414331e82154`
+**Commits de implementación:** `231fed410c1f23c3daaa13a7bb9d414331e82154`, `c5bc2f49a5eacbbae4bc3eb0f33ac3fe5a4f3d19`
 
 ## Brecha abordada
 
@@ -10,10 +10,11 @@ Las pruebas existentes de `/health/readiness` invocaban directamente la función
 
 ## Cobertura añadida
 
-En `tests/test_api_health.py` se añadieron dos pruebas asíncronas con `httpx.ASGITransport`, sin servicios externos:
+En `tests/test_api_health.py` se añadieron tres pruebas asíncronas con `httpx.ASGITransport`, sin servicios externos:
 
 1. La ruta HTTP devuelve **503** y `status=blocked` cuando falla una dependencia crítica; conserva el diagnóstico seguro y no expone el texto interno de la excepción.
 2. La ruta HTTP devuelve **200** cuando los controles requeridos están listos, aunque Redis (dependencia opcional) esté degradado; el estado opcional se conserva en la respuesta.
+3. La ruta HTTP `/health/live` devuelve **200** y `alive` sin invocar chequeos de dependencias, separando liveness de readiness.
 
 ## Límites
 
