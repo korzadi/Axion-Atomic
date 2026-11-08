@@ -139,6 +139,11 @@ def ensure_collection():
         _collection_checked_at = time.monotonic()
 
 
+def _manual_source_path(source_id: str) -> str:
+    """Representa una fuente manual bajo el mismo contrato project_id/path del índice."""
+    return f"manual/{source_id}"
+
+
 def _project_filter(project_id: str):
     if not isinstance(project_id, str) or not project_id.strip():
         raise ValueError("project_id es obligatorio")
@@ -173,7 +178,7 @@ async def ingest_text(text, source, project_id: str, source_id: str | None = Non
             models.PointStruct(
                 id=str(uuid.uuid4()),
                 vector=vector,
-                payload={"text": chunk, "source": source, "source_id": source_id, "project_id": project_id, "chunk": index},
+                payload={"text": chunk, "source": source, "source_id": source_id, "project_id": project_id, "path": _manual_source_path(source_id), "chunk": index},
             )
         )
     if points:
@@ -237,7 +242,7 @@ async def replace_source(source_id: str, text: str, source: str, project_id: str
         new_points.append(models.PointStruct(
             id=str(uuid.uuid4()),
             vector=vector,
-            payload={"text": chunk, "source": source, "source_id": normalized_source_id, "project_id": project_id, "chunk": index},
+            payload={"text": chunk, "source": source, "source_id": normalized_source_id, "project_id": project_id, "path": _manual_source_path(normalized_source_id), "chunk": index},
         ))
     try:
         await asyncio.to_thread(
