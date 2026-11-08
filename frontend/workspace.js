@@ -44,15 +44,22 @@
   agentStatus.textContent = "Agente listo.";
   const agentOutput = document.createElement("pre");
   agentOutput.style.cssText = "white-space:pre-wrap;overflow-wrap:anywhere;max-height:22rem;overflow:auto";
+  const agentHistoryButton = document.createElement("button");
+  agentHistoryButton.type = "button";
+  agentHistoryButton.textContent = "Actualizar historial";
+  const agentHistory = document.createElement("div");
+  agentHistory.style.cssText = "display:grid;gap:.4rem";
   const agentActions = document.createElement("div");
   agentActions.style.cssText = "display:flex;gap:.5rem;flex-wrap:wrap";
-  agentPanel.append(agentTitle, agentDescription, agentGoal, agentStart, agentStatus, agentOutput, agentActions);
+  agentPanel.append(agentTitle, agentDescription, agentGoal, agentStart, agentStatus, agentOutput, agentActions, agentHistoryButton, agentHistory);
   root.appendChild(agentPanel);
 
   function setAgentBusy(value) {
     agentBusy = Boolean(value);
-    agentStart.disabled = agentBusy || !currentProject;
-    agentGoal.disabled = agentBusy || !currentProject;
+    const canStart = ["owner", "admin", "editor"].includes(currentProjectRole);
+    agentStart.disabled = agentBusy || !currentProject || !canStart;
+    agentGoal.disabled = agentBusy || !currentProject || !canStart;
+    agentHistoryButton.disabled = agentBusy || !currentProject;
   }
   function showAgentRun(run) {
     activeAgentRun = run && run.run_id ? run : activeAgentRun;
@@ -142,6 +149,44 @@
     } finally { setAgentBusy(false); }
   });
 
+  async function loadAgentHistory() {
+    if (!currentProject || agentBusy) return;
+    agentHistoryButton.disabled = true;
+    agentHistory.replaceChildren();
+    const query = "?project_id=" + encodeURIComponent(currentProject) + "&limit=10";
+    try {
+      const data = await request("/workspace/agent/runs" + query);
+      const items = Array.isArray(data.items) ? data.items : [];
+      if (!items.length) {
+        const empty = document.createElement("p");
+        empty.textContent = "Todavía no hay ejecuciones guardadas en este proyecto.";
+        agentHistory.appendChild(empty);
+      }
+      items.forEach((item) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = (item.status || "sin estado") + " · " + (item.goal || "Tarea") + " · " + String(item.id || "").slice(0, 8);
+        button.addEventListener("click", async () => {
+          if (agentBusy || !item.id) return;
+          setAgentBusy(true);
+          agentStatus.textContent = "Recuperando ejecución guardada…";
+          try {
+            const detail = await request("/workspace/agent/runs/" + encodeURIComponent(item.id) + "?project_id=" + encodeURIComponent(currentProject));
+            showAgentRun({ ...detail, run_id: detail.id, pending_actions: Array.isArray(detail.pending_actions) ? detail.pending_actions : [] });
+            agentStatus.textContent = "Ejecución recuperada del historial.";
+          } catch (error) {
+            agentStatus.textContent = error.message;
+          } finally { setAgentBusy(false); }
+        });
+        agentHistory.appendChild(button);
+      });
+    } catch (error) {
+      const message = document.createElement("p");
+      message.textContent = "No se pudo cargar el historial: " + error.message;
+      agentHistory.appendChild(message);
+    } finally { agentHistoryButton.disabled = !currentProject || agentBusy; }
+  }
+  agentHistoryButton.addEventListener("click", loadAgentHistory);
   function csrfToken() {
     const match = document.cookie.match(/(?:^|; )axion_csrf=([^;]+)/);
     return match ? decodeURIComponent(match[1]) : "";
@@ -228,8 +273,10 @@
     activeAgentRun = null;
     agentOutput.textContent = "";
     agentActions.replaceChildren();
+    agentHistory.replaceChildren();
     setAgentBusy(false);
     await loadHistory();
+    await loadAgentHistory();
     setStatus("Proyecto listo. Atomic Code está conectado al backend.");
   }
   async function activate(user) {
@@ -253,8 +300,9 @@
     activeAgentRun = null;
     agentOutput.textContent = "";
     agentActions.replaceChildren();
+    agentHistory.replaceChildren();
     setAgentBusy(false);
-    try { await loadHistory(); setStatus("Historial del proyecto cargado."); }
+    try { await loadHistory(); await loadAgentHistory(); setStatus("Historial del proyecto cargado."); }
     catch (error) { setStatus(error.message); }
   });
   $("ws-create-project").addEventListener("click", async () => {
