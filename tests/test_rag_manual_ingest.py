@@ -287,7 +287,7 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
         legacy_secret = "AKIA" + "ABCDEFGHIJKLMNOP"
         payload = {
             "project_id": "project-a",
-            "source": 'config API_TOKEN="legacy-source-secret-123"',
+            "source": 'config API_KEY="legacy-source-secret-123"',
             "text": f"Documento antiguo\nAWS_ACCESS_KEY={legacy_secret}\nContenido útil",
         }
         response = SimpleNamespace(points=[SimpleNamespace(payload=payload)])
