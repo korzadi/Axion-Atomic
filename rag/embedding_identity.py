@@ -45,3 +45,22 @@ def require_compatible_embeddings(expected: EmbeddingIdentity, actual: Embedding
             f"esperada {expected.model}/{expected.dimension}, "
             f"recibida {actual.model}/{actual.dimension}"
         )
+
+
+def require_embedder_store_compatibility(embedder, store) -> None:
+    """Validate identity at the actual RepoIndexer/store composition boundary."""
+    embedder_dimension = getattr(embedder, "dimension", None)
+    store_dimension = getattr(store, "dim", None)
+    if store_dimension is not None and embedder_dimension != store_dimension:
+        raise ValueError(
+            "Dimensión de embeddings incompatible con el almacén vectorial: "
+            f"embedder={embedder_dimension}, store={store_dimension}"
+        )
+    store_identity = getattr(store, "embedding_identity", None)
+    embedder_identity = getattr(embedder, "identity", None)
+    if store_identity is not None:
+        if not isinstance(store_identity, EmbeddingIdentity):
+            raise TypeError("El almacén declara una identidad de embeddings inválida")
+        if not isinstance(embedder_identity, EmbeddingIdentity):
+            raise ValueError("El embedder debe declarar su identidad para usar este almacén")
+        require_compatible_embeddings(store_identity, embedder_identity)
