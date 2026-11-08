@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from api.config import Settings
+from api.config import Settings, is_public_https_origin
 
 
 class EnvironmentAliasTests(unittest.TestCase):
@@ -46,6 +46,54 @@ class EnvironmentAliasTests(unittest.TestCase):
         legacy = self.load_settings({"SMTP_USER": "smtp-legacy"})
         self.assertEqual(current.smtp_username, "smtp-current")
         self.assertEqual(legacy.smtp_username, "smtp-legacy")
+
+
+    def test_qdrant_url_uses_shared_public_https_contract(self):
+        settings = self.load_settings({
+            "QDRANT_URL": "HTTPS://CLUSTER.QDRANT.IO:8443/",
+        })
+        self.assertEqual(settings.qdrant_url, "HTTPS://CLUSTER.QDRANT.IO:8443/")
+
+    def test_qdrant_url_rejects_invalid_public_origins(self):
+        invalid_urls = (
+            "http://cluster.qdrant.io",
+            "https://127.0.0.1",
+            "https://cluster.qdrant.io:invalid",
+            "https://cluster.qdrant.io:",
+            "https://cluster.qdrant.io/path",
+            "https://cluster..qdrant.io",
+            "https://cluster.qdrant.io..",
+            "https://-cluster.qdrant.io",
+            "https://cluster.qdrant.io?token=hidden",
+            "https://user:password@cluster.qdrant.io",
+        )
+        for url in invalid_urls:
+            with self.subTest(url=url):
+                with self.assertRaises(ValueError):
+                    self.load_settings({"QDRANT_URL": url})
+
+    def test_oauth_origin_uses_shared_public_https_contract(self):
+        settings = self.load_settings({
+            "OAUTH_PUBLIC_BASE_URL": "HTTPS://AXYRONATOMIC.COM.:8443/",
+        })
+        self.assertEqual(settings.oauth_public_base_url, "https://axyronatomic.com:8443")
+        self.assertTrue(is_public_https_origin(settings.oauth_public_base_url))
+
+    def test_oauth_origin_rejects_malformed_dns_hostnames(self):
+        invalid_origins = (
+            "https://a..example.com",
+            "https://-bad.example.com",
+            "https://bad-.example.com",
+            "https://example.com:",
+            "https://example.com..",
+            "https://bad_host.example.com",
+            "https://a" + "x" * 64 + ".example.com",
+        )
+        for origin in invalid_origins:
+            with self.subTest(origin=origin):
+                self.assertFalse(is_public_https_origin(origin))
+                with self.assertRaises(ValueError):
+                    self.load_settings({"OAUTH_PUBLIC_BASE_URL": origin})
 
 
 if __name__ == "__main__":
