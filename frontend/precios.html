@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Planes y precios — Axyron Atomic</title>
+<link rel="stylesheet" href="/studio.css">
+<meta name="description" content="Planes y precios — Axyron Atomic — Axyron Atomic.">>
+<style>
+:root{--bg:#070b18;--bg2:#0d1428;--tx:#eaf2ff;--mu:#91a4c7;--bd:rgba(117,154,220,.19);--ac:#27d9f2;--ac2:#a879ff;--ac3:#438cff;--glow:rgba(39,217,242,.2);color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+:root[data-theme="dark"]{--bg:#070b18;--bg2:#0d1428;--tx:#eaf2ff;--mu:#91a4c7;--bd:rgba(117,154,220,.19);--ac:#27d9f2;--ac2:#a879ff;--ac3:#438cff;--glow:rgba(39,217,242,.2);color-scheme:dark}
+:root[data-theme="light"]{--bg:#f3f7ff;--bg2:#ffffff;--tx:#101a35;--mu:#596b8f;--bd:#d8e2f4;--ac:#087eae;--ac2:#7849c7;--ac3:#2879db;--glow:rgba(37,99,235,.14);color-scheme:light}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:80px}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.6;overflow-x:hidden;transition:background .3s,color .3s}
+img{max-width:100%}a{color:inherit;text-decoration:none}
+.wrap{width:min(1160px,92%);margin:auto}
+.grad{background:linear-gradient(90deg,var(--ac3),var(--ac),var(--ac2));-webkit-background-clip:text;background-clip:text;color:transparent;background-size:200%;animation:flow 6s linear infinite}
+@keyframes flow{to{background-position:200%}}
+#fx{position:fixed;inset:0;width:100%;height:100%;z-index:-1;opacity:.55}
+header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);background:color-mix(in srgb,var(--bg) 80%,transparent);border-bottom:1px solid var(--bd)}
+.nav{display:flex;align-items:center;gap:18px;height:68px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.15rem}
+.logo svg{width:36px;height:36px}
+.links{display:flex;gap:22px;margin-left:auto;font-size:.95rem;color:var(--mu)}
+.links a:hover{color:var(--ac)}
+.links a[aria-current="page"]{color:var(--ac)}
+.acts{display:flex;gap:10px;align-items:center}
+.btn{border:1px solid var(--bd);background:var(--bg2);color:var(--tx);padding:10px 18px;border-radius:12px;font:600 .92rem inherit;font-family:inherit;cursor:pointer;transition:.25s;display:inline-flex;align-items:center;gap:8px}
+.btn:hover{transform:translateY(-2px);border-color:var(--ac);box-shadow:0 8px 24px var(--glow)}
+.btn.p{background:linear-gradient(120deg,var(--ac),var(--ac2));color:#fff;border:0}
+.btn.big{padding:14px 26px;font-size:1rem}
+.menu{display:none}
+.theme{position:relative}
+.tmenu{position:absolute;right:0;top:48px;background:var(--bg2);border:1px solid var(--bd);border-radius:14px;padding:6px;min-width:150px;display:none;box-shadow:0 14px 40px rgba(0,0,0,.25)}
+.tmenu.open{display:block}
+.tmenu button{display:flex;gap:10px;width:100%;background:none;border:0;color:var(--tx);padding:10px 12px;border-radius:9px;cursor:pointer;font:inherit}
+.tmenu button:hover,.tmenu button.on{background:var(--glow);color:var(--ac)}
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:30px;align-items:center;padding:70px 0 40px;min-height:82vh}
+.pill{display:inline-block;padding:6px 14px;border:1px solid var(--bd);border-radius:99px;font-size:.82rem;color:var(--ac);background:var(--bg2);margin-bottom:18px}
+h1{font-size:clamp(2.3rem,6vw,4.2rem);line-height:1.05;margin:0 0 18px;letter-spacing:-1px}
+.lead{color:var(--mu);font-size:1.15rem;max-width:560px}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin:28px 0}
+.stats{display:flex;gap:30px;flex-wrap:wrap;margin-top:10px}
+.stats b{display:block;font-size:1.7rem}.stats span{color:var(--mu);font-size:.85rem}
+.robot{position:relative;display:grid;place-items:center}
+.robot img{width:min(440px,90%);filter:drop-shadow(0 0 40px var(--glow))}
+.robot::before{content:"";position:absolute;width:75%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,var(--ac) 0,transparent 65%);opacity:.25}
+@keyframes fl{50%{transform:translateY(-18px) rotate(1.5deg)}}
+@keyframes pu{50%{transform:scale(1.15);opacity:.4}}
+section{padding:80px 0}
+.sh{text-align:center;max-width:640px;margin:0 auto 46px}
+.sh h2{font-size:clamp(1.8rem,4vw,2.8rem);margin:0 0 10px}.sh p{color:var(--mu);margin:0}
+.grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.card{background:var(--bg2);border:1px solid var(--bd);border-radius:20px;padding:26px;transition:.3s;position:relative;overflow:hidden}
+.card:hover{transform:translateY(-6px);border-color:var(--ac);box-shadow:0 18px 44px var(--glow)}
+.card .ic{width:50px;height:50px;border-radius:14px;display:grid;place-items:center;font-size:1.5rem;background:linear-gradient(135deg,var(--ac3),var(--ac2));margin-bottom:14px;color:#fff}
+.card h3{margin:0 0 6px}.card p{margin:0;color:var(--mu);font-size:.95rem}
+.steps{counter-reset:s}.steps .card::before{counter-increment:s;content:"0" counter(s);position:absolute;right:20px;top:10px;font-size:2.6rem;font-weight:800;opacity:.12}
+.price .card.hot{border-color:var(--ac2);box-shadow:0 0 0 1px var(--ac2),0 20px 50px var(--glow)}
+.price h3{font-size:1.2rem}.amt{font-size:2.4rem;font-weight:800;margin:8px 0}.amt small{font-size:.9rem;color:var(--mu);font-weight:400}
+.price ul{list-style:none;padding:0;margin:14px 0 22px;color:var(--mu);font-size:.93rem}.price li{padding:5px 0}.price li::before{content:"✓ ";color:var(--ac3);font-weight:700}
+.price .btn{width:100%;justify-content:center}
+details{background:var(--bg2);border:1px solid var(--bd);border-radius:14px;padding:16px 20px;margin-bottom:12px}
+summary{cursor:pointer;font-weight:600}details p{color:var(--mu);margin:10px 0 0}
+.band{border-radius:28px;padding:54px 24px;text-align:center;background:linear-gradient(120deg,var(--ac),var(--ac2));color:#fff}
+.band .btn{margin-top:16px;color:var(--tx)}
+footer{border-top:1px solid var(--bd);padding:40px 0 24px;color:var(--mu);font-size:.9rem}
+.fg{display:flex;flex-wrap:wrap;gap:30px;justify-content:space-between}.fg div a{display:block;padding:3px 0}.fg a:hover{color:var(--ac)}
+.copy{margin-top:26px;text-align:center}
+html.reveal-enabled .rv{opacity:0;transform:translateY(30px);transition:opacity .8s,transform .8s}html.reveal-enabled .rv.in{opacity:1;transform:none}
+dialog{border:1px solid var(--bd);border-radius:22px;background:var(--bg2);color:var(--tx);padding:30px;width:min(420px,92vw)}
+dialog::backdrop{background:rgba(3,6,20,.7);backdrop-filter:blur(4px)}
+dialog h3{margin:0 0 4px;font-size:1.5rem}dialog p{margin:0 0 18px;color:var(--mu)}
+label{display:block;font-size:.85rem;margin:12px 0 5px;color:var(--mu)}
+input{width:100%;padding:12px 14px;border-radius:11px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font:inherit}
+input:focus{outline:2px solid var(--ac);border-color:transparent}
+.x{float:right;background:none;border:0;color:var(--mu);font-size:1.4rem;cursor:pointer}
+.msg{margin-top:12px;font-size:.9rem;color:var(--ac3);min-height:1.3em}
+.sw{margin-top:14px;text-align:center;font-size:.9rem;color:var(--mu)}.sw a{color:var(--ac);cursor:pointer}
+@media(max-width:860px){
+.hero{grid-template-columns:1fr;text-align:center;padding-top:40px}.lead{margin:auto}.cta,.stats{justify-content:center}.robot{order:-1}
+.menu{display:inline-flex}.links{position:absolute;top:68px;left:0;right:0;flex-direction:column;background:var(--bg2);padding:14px 5%;border-bottom:1px solid var(--bd);display:none;margin:0}.links.open{display:flex}
+.acts .hide{display:none}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.rv{opacity:1;transform:none}}
+.aurora{position:fixed;inset:0;z-index:-2;overflow:hidden;pointer-events:none}.aurora::before,.aurora::after{content:"";position:absolute;width:60vmax;height:60vmax;border-radius:50%;filter:blur(90px);opacity:.28;animation:dr 18s ease-in-out infinite alternate}.aurora::before{background:var(--ac2);top:-25vmax;left:-15vmax}.aurora::after{background:var(--ac3);bottom:-30vmax;right:-15vmax;animation-delay:-9s}@keyframes dr{to{transform:translate(8vmax,6vmax) scale(1.2)}}
+#prog{position:fixed;top:0;left:0;height:3px;width:0;z-index:99;background:linear-gradient(90deg,var(--ac3),var(--ac2))}
+.card{background:color-mix(in srgb,var(--bg2) 72%,transparent);backdrop-filter:blur(14px);transform-style:preserve-3d;will-change:transform}
+.card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:radial-gradient(300px circle at var(--mx,50%) var(--my,0%),var(--glow),transparent 60%);opacity:0;transition:.3s;pointer-events:none}.card:hover::after{opacity:1}
+.robot::after{content:"";position:absolute;width:92%;aspect-ratio:1;border-radius:50%;border:1px dashed var(--ac);opacity:.35}@keyframes sp{to{transform:rotate(360deg)}}
+.mq{overflow:hidden;border-block:1px solid var(--bd);padding:16px 0;mask:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}.mq div{display:flex;gap:46px;width:max-content;animation:mq 28s linear infinite;color:var(--mu);font-weight:600;letter-spacing:.5px}@keyframes mq{to{transform:translateX(-50%)}}
+.demo{display:grid;grid-template-columns:.8fr 1.2fr;gap:34px;align-items:center}
+.demo ul{list-style:none;padding:0;margin:20px 0 0}.demo li{padding:8px 0;color:var(--mu)}.demo li::before{content:"✦ ";color:var(--ac3)}
+.win{border:1px solid var(--bd);border-radius:20px;background:color-mix(in srgb,var(--bg2) 85%,transparent);backdrop-filter:blur(16px);box-shadow:0 30px 80px var(--glow);overflow:hidden}
+.wb{display:flex;align-items:center;gap:7px;padding:12px 16px;border-bottom:1px solid var(--bd)}.wb i{width:11px;height:11px;border-radius:50%;background:#ff5f57}.wb i:nth-child(2){background:#febc2e}.wb i:nth-child(3){background:#28c840}.wb span{margin-left:10px;font-size:.8rem;color:var(--mu)}
+.tabs{display:flex;gap:6px;padding:10px 12px;flex-wrap:wrap;border-bottom:1px solid var(--bd)}.tabs button{border:0;background:none;color:var(--mu);padding:7px 13px;border-radius:9px;cursor:pointer;font:600 .85rem inherit;font-family:inherit}.tabs button.on{background:linear-gradient(120deg,var(--ac),var(--ac2));color:#fff}
+.chat{padding:18px;min-height:300px;font-size:.93rem}.b{padding:11px 15px;border-radius:14px;margin-bottom:12px;max-width:92%;white-space:pre-wrap;word-break:break-word}.b.u{margin-left:auto;background:var(--glow);border:1px solid var(--bd)}.b.a{background:var(--bg);border:1px solid var(--bd);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85rem}
+.cur::after{content:"▍";color:var(--ac3);animation:bk 1s steps(2) infinite}@keyframes bk{50%{opacity:0}}
+.tg{display:inline-flex;gap:4px;padding:4px;border:1px solid var(--bd);border-radius:99px;background:var(--bg2);margin-top:16px}.tg button{border:0;background:none;color:var(--mu);padding:8px 18px;border-radius:99px;cursor:pointer;font:600 .88rem inherit;font-family:inherit}.tg button.on{background:linear-gradient(120deg,var(--ac),var(--ac2));color:#fff}
+.code{background:var(--bg);border:1px solid var(--bd);border-radius:16px;padding:18px;font:.82rem/1.7 ui-monospace,Menlo,Consolas,monospace;overflow-x:auto;color:var(--mu);margin:0}.code b{color:var(--ac3);font-weight:600}.code em{color:var(--ac2);font-style:normal}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:30px;align-items:center}
+.ck{position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));max-width:560px;margin:auto;z-index:60;background:var(--bg2);border:1px solid var(--bd);border-radius:16px;padding:16px;display:none;gap:14px;align-items:center;flex-wrap:wrap;box-shadow:0 20px 50px rgba(0,0,0,.3);font-size:.88rem}.ck.show{display:flex}.ck span{flex:1;min-width:200px;color:var(--mu)}
+#top{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));width:46px;height:46px;border-radius:50%;border:0;background:linear-gradient(120deg,var(--ac),var(--ac2));color:#fff;font-size:1.2rem;cursor:pointer;opacity:0;pointer-events:none;transition:.3s;z-index:55}#top.show{opacity:1;pointer-events:auto}
+.nl{display:flex;gap:8px;margin-top:10px}.nl input{max-width:220px}
+@media(max-width:860px){.demo,.two{grid-template-columns:1fr}}
+.ic svg{fill:none;stroke:#fff;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ico{fill:none;stroke:var(--ac);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.art{display:block;width:100%;height:auto;border-radius:14px;color:var(--tx)}.art+.ic{margin:-30px 0 14px 12px;position:relative;box-shadow:0 8px 22px var(--glow)}
+#seguridad li{display:flex;align-items:center;gap:10px;padding:7px 0}
+.shot{max-width:980px;margin:auto;border-radius:24px;box-shadow:0 40px 90px var(--glow)}.shot svg{width:100%;height:auto;display:block}
+.mb{fill:var(--bg2);stroke:var(--bd)}.mb2{fill:var(--bg);stroke:var(--bd)}.mc{fill:var(--bg);stroke:var(--bd)}.ml{fill:var(--mu);opacity:.3}.mt{fill:var(--tx);font:700 16px system-ui,sans-serif}.mm{fill:var(--mu);font:12px system-ui,sans-serif}
+.mauth,.only-m{display:none}.mauth{gap:10px;padding-top:6px}
+.usr{display:flex;align-items:center;gap:8px}.usr[hidden]{display:none}.av{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(120deg,var(--ac),var(--ac2));color:#fff;font-weight:700}#un{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:.9rem}
+@media(max-width:860px){.mauth{display:flex}.only-m{display:inline-flex}#un{display:none}.acts .btn{padding:9px 14px}}
+</style>
+<style id="axyron-hidden-state-fix">[hidden]{display:none!important}</style>
+</head>
+<body>
+<div class="aurora" aria-hidden="true"></div><div id="prog"></div><canvas id="fx" aria-hidden="true"></canvas>
+<header><div class="wrap nav">
+<a class="logo" href="/" aria-label="Axyron Atomic">
+<svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#3b82f6"/><stop offset="1" stop-color="#a855f7"/></linearGradient></defs><ellipse cx="32" cy="38" rx="28" ry="10" fill="none" stroke="url(#lg)" stroke-width="3.5" transform="rotate(-18 32 38)"/><path d="M32 6 10 54h11l11-27 11 27h11z" fill="url(#lg)"/><circle cx="32" cy="40" r="3.5" fill="#fff"/></svg>
+<span>Axyron <span class="grad">Atomic</span></span></a>
+<nav class="links" id="links"><a href="/modelos.html">Modelos</a><a href="/funciones.html">Funciones</a><a href="/como.html">Cómo funciona</a><a href="/demo.html">Demo</a><a href="/seguridad.html">Seguridad</a><a href="/precios.html" aria-current="page">Precios</a><a href="/faq.html">FAQ</a><a href="#app/inicio" id="studio-nav" hidden>Axyron Studio</a><div class="mauth"><button class="btn" data-open="login">Iniciar sesión</button><button class="btn p" data-open="reg">Registrarse</button></div></nav>
+<div class="acts">
+<div class="theme"><button class="btn" id="tbtn" aria-label="Cambiar tema" aria-haspopup="true"><span id="ticon">🖥️</span></button>
+<div class="tmenu" id="tmenu"><button data-t="light">☀️ Claro</button><button data-t="dark">🌙 Oscuro</button><button data-t="system">🖥️ Sistema</button></div></div>
+<button class="btn hide" data-open="login">Iniciar sesión</button>
+<button class="btn p hide" data-open="reg">Registrarse</button>
+<div class="usr" id="usr" hidden><span class="av" id="av"></span><span id="un"></span><button class="btn" id="out">Salir</button></div>
+<button class="btn p only-m" data-open="login">Entrar</button>
+<button class="btn menu" id="menu" aria-label="Menú">☰</button>
+</div></div></header>
+<main>
+<section id="precios"><div class="wrap price">
+<div class="sh rv"><h2>Planes <span class="grad">simples</span></h2><p>1 crédito = 100 tokens. Compra única; sin renovación automática.</p></div>
+<div class="grid">
+<div class="card rv"><h3>FREE</h3><div class="amt">$0</div><ul><li>50 créditos al verificar tu correo</li><li>Concesión única</li><li>Atomic Code</li></ul><button class="btn" data-open="reg">Crear cuenta</button></div>
+<div class="card rv"><h3>STARTER</h3><div class="amt">$4.99</div><ul><li>300 créditos (30.000 tokens)</li><li>Atomic Code</li><li>Compra única</li></ul><button class="btn p" data-open="reg">Elegir STARTER</button></div>
+<div class="card rv"><h3>PLUS</h3><div class="amt">$9.99</div><ul><li>750 créditos (75.000 tokens)</li><li>Atomic Code</li><li>Compra única</li></ul><button class="btn p" data-open="reg">Elegir PLUS</button></div>
+<div class="card hot rv"><h3>PRO</h3><div class="amt">$19.99</div><ul><li>1.700 créditos (170.000 tokens)</li><li>Atomic Code</li><li>Compra única</li></ul><button class="btn p" data-open="reg">Elegir PRO</button></div>
+<div class="card rv"><h3>STUDIO</h3><div class="amt">$39.99</div><ul><li>3.600 créditos (360.000 tokens)</li><li>Atomic Code</li><li>Compra única</li></ul><button class="btn p" data-open="reg">Elegir STUDIO</button></div>
+<div class="card rv"><h3>VPS / Empresa</h3><div class="amt">A medida</div><ul><li>Instalación en tu servidor</li><li>Multiusuario y roles</li><li>Integraciones a medida</li></ul><button class="btn" data-open="reg">Contactar</button></div>
+</div>
+<p style="text-align:center;color:var(--mu);margin:26px auto 0;max-width:640px">Los planes se pagan en USD, una sola vez por compra. Sin suscripciones ni renovación automática. FREE se concede una sola vez tras verificar tu correo.</p>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+<div class="fg"><div><div class="logo" style="margin-bottom:8px">Axyron <span class="grad">Atomic</span></div><p style="max-width:280px;margin:0">Tu asistente de IA, más poderoso, más libre.</p></div>
+<div><b>Producto</b><a href="/modelos.html">Modelos</a><a href="/funciones.html">Funciones</a><a href="/precios.html">Precios</a></div>
+<div><b>Ayuda</b><a href="/faq.html">FAQ</a><a href="/como.html">Cómo funciona</a></div>
+<div><b>Legal</b><a href="#">Privacidad</a><a href="#">Términos</a></div></div>
+<div class="fg" style="margin-top:24px"><div><b>Novedades</b><p class="muted">El boletín estará disponible en una próxima actualización.</p></div></div>
+<div class="copy">© 2026 Axyron Atomic · Un proyecto de Korzadi</div>
+</div></footer>
+
+<button id="top" aria-label="Subir">↑</button>
+<div class="ck" id="ck"><span>Usamos almacenamiento local solo para recordar tu tema.</span><button class="btn p" id="cka">Entendido</button></div>
+<dialog id="dlg"><button class="x" id="cl" aria-label="Cerrar">×</button>
+<h3 id="dt"></h3><p id="ds"></p>
+<form id="fm" novalidate>
+<div id="nm"><label for="n">Nombre</label><input id="n" autocomplete="name"></div>
+<label for="e">Correo</label><input id="e" type="email" autocomplete="email">
+<label for="p">Contraseña</label><input id="p" type="password" autocomplete="current-password" minlength="12"><div id="termsRow" style="display:none;margin-top:12px"><label><input id="terms" type="checkbox"> Acepto los términos y la política de privacidad.</label></div><div id="mfaRow" style="display:none;margin-top:12px"><label for="mfaCode">Código MFA</label><input id="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></div>
+<button class="btn p big" style="width:100%;justify-content:center;margin-top:18px" id="sb"></button>
+<div class="msg" id="mg" role="status"></div></form>
+<div class="sw" id="sw"></div></dialog>
+
+<script>
+(function(){
+var R=document.documentElement,K='axyron-theme';
+function ld(){try{return localStorage.getItem(K)||'system'}catch(e){return'system'}}
+function ap(t){if(t==='system')R.removeAttribute('data-theme');else R.setAttribute('data-theme',t);
+document.getElementById('ticon').textContent={light:'☀️',dark:'🌙',system:'🖥️'}[t];
+document.querySelectorAll('#tmenu button').forEach(function(b){b.classList.toggle('on',b.dataset.t===t)})}
+ap(ld());
+var tm=document.getElementById('tmenu');
+document.getElementById('tbtn').onclick=function(e){e.stopPropagation();tm.classList.toggle('open')};
+document.addEventListener('click',function(){tm.classList.remove('open')});
+tm.querySelectorAll('button').forEach(function(b){b.onclick=function(){try{localStorage.setItem(K,b.dataset.t)}catch(e){}ap(b.dataset.t)}});
+var lk=document.getElementById('links');
+document.getElementById('menu').onclick=function(){lk.classList.toggle('open')};
+lk.onclick=function(){lk.classList.remove('open')};
+/* modal */
+var d=document.getElementById('dlg'),mode='login',mfaChallenge=null,resetToken=null;
+ function csrf(){var m=document.cookie.match(/(?:^|; )axion_csrf=([^;]+)/);return m?decodeURIComponent(m[1]):''}
+ async function api(path,options){var o=options||{};o.credentials='same-origin';o.headers=Object.assign({'Content-Type':'application/json'},o.headers||{});if(o.method&&o.method!=='GET')o.headers['X-CSRF-Token']=csrf();var r=await fetch(path,o),v={};try{v=await r.json()}catch(e){}if(!r.ok)throw new Error(v.detail||v.message||('HTTP '+r.status));return v}
+ function msg(t){document.getElementById('mg').textContent=t}
+ function show(m){mode=m;mfaChallenge=null;var reg=m==='reg';document.getElementById('dt').textContent=reg?'Crea tu cuenta':'Bienvenido de nuevo';document.getElementById('ds').textContent=reg?'Verifica tu correo para activar la cuenta.':'Inicia sesión en Axyron Atomic.';document.getElementById('nm').style.display=reg?'block':'none';document.getElementById('termsRow').style.display=reg?'block':'none';document.getElementById('mfaRow').style.display='none';document.getElementById('sb').textContent=reg?'Registrarme':'Entrar';document.getElementById('p').autocomplete=reg?'new-password':'current-password';msg('');document.getElementById('sw').innerHTML=reg?'¿Ya tienes cuenta? <a id="sl">Inicia sesión</a> · <a id="resend">Reenviar verificación</a>':'¿No tienes cuenta? <a id="sl">Regístrate</a> · <a id="forgot">Olvidé mi contraseña</a> · <a id="resend">Reenviar verificación</a>';document.getElementById('sl').onclick=function(){show(reg?'login':'reg')};var resend=document.getElementById('resend');if(resend)resend.onclick=async function(){var email=document.getElementById('e').value.trim();if(!email){msg('Escribe tu correo primero.');return}try{var v=await api('/auth/resend-verification',{method:'POST',body:JSON.stringify({email:email})});msg(v.message||'Si la cuenta necesita verificación, recibirás un correo.')}catch(e){msg(e.message)}};var fp=document.getElementById('forgot');if(fp)fp.onclick=async function(){var email=document.getElementById('e').value.trim();if(!email){msg('Escribe tu correo primero.');return}try{var v=await api('/auth/password/forgot',{method:'POST',body:JSON.stringify({email:email})});msg(v.message||'Si existe una cuenta activa, recibirás instrucciones.')}catch(e){msg(e.message)}};if(!d.open)d.showModal()}
+ document.querySelectorAll('[data-open]').forEach(function(b){b.onclick=function(){lk.classList.remove('open');show(b.dataset.open==='reg'?'reg':'login')}});
+ document.getElementById('cl').onclick=function(){d.close()};d.addEventListener('click',function(e){if(e.target===d)d.close()});
+ document.getElementById('fm').onsubmit=async function(e){e.preventDefault();var email=document.getElementById('e').value.trim(),password=document.getElementById('p').value,name=document.getElementById('n').value.trim();if((mode==='reg'||mode==='reset'||(mode==='login'&&!mfaChallenge))&&password.length<12){msg('La contraseña debe tener al menos 12 caracteres.');return}if(mode==='reg'&&(!name||!document.getElementById('terms').checked)){msg('Completa tu nombre y acepta los términos.');return}var b=document.getElementById('sb');b.disabled=true;try{if(mode==='reg'){var v=await api('/auth/register',{method:'POST',body:JSON.stringify({email:email,password:password,display_name:name,terms_accepted:true})});msg(v.message||'Revisa tu correo para verificar tu cuenta.');document.getElementById('fm').reset();return}if(mode==='reset'){await api('/auth/password/reset',{method:'POST',body:JSON.stringify({token:resetToken,new_password:password})});resetToken=null;show('login');msg('Contraseña actualizada. Ya puedes iniciar sesión.');document.getElementById('fm').reset();return}if(mfaChallenge){await api('/auth/mfa/challenge/verify',{method:'POST',body:JSON.stringify({challenge_token:mfaChallenge,code:document.getElementById('mfaCode').value.trim()})});mfaChallenge=null;await loadUser();d.close();return}var v=await api('/auth/login',{method:'POST',body:JSON.stringify({email:email,password:password})});if(v.mfa_required){mfaChallenge=v.challenge_token;document.getElementById('mfaRow').style.display='block';msg('Introduce el código MFA y vuelve a pulsar Entrar.');return}await loadUser();d.close();document.getElementById('fm').reset()}catch(err){msg(err.message)}finally{b.disabled=false}};
+ async function loadUser(){try{var v=await api('/auth/me');setU(v.user)}catch(e){setU(null)}}
+  (async function handleAuthReturn(){
+    var hash=location.hash.slice(1),params=new URLSearchParams(hash),verifyToken=params.get('verify-email'),passwordToken=params.get('reset-password');
+    var query=new URLSearchParams(location.search),oauth=query.get('oauth'),oauthError=query.get('oauth_error'),oauthMfa=query.get('mfa_required');
+    if(hash&&(hash.indexOf('verify-email=')===0||hash.indexOf('reset-password=')===0))history.replaceState(null,'',location.pathname+location.search);
+    if(verifyToken){try{var verified=await api('/auth/verify-email',{method:'POST',body:JSON.stringify({token:verifyToken})});show('login');msg(verified.message||'Correo verificado. Ya puedes iniciar sesión.')}catch(err){show('login');msg(err.message)}return}
+    if(passwordToken){resetToken=passwordToken;show('login');mode='reset';document.getElementById('dt').textContent='Nueva contraseña';document.getElementById('ds').textContent='Elige una contraseña nueva de al menos 12 caracteres.';document.getElementById('p').value='';document.getElementById('p').autocomplete='new-password';document.getElementById('sb').textContent='Cambiar contraseña';document.getElementById('sw').textContent='El enlace de recuperación es de un solo uso.';return}
+    if(oauth==='success'){history.replaceState(null,'',location.pathname);await loadUser();return}
+    if(oauthMfa==='1'){history.replaceState(null,'',location.pathname);show('login');mfaChallenge='oauth-cookie-challenge-placeholder';document.getElementById('mfaRow').style.display='block';msg('Introduce el código MFA de tu aplicación para completar el acceso.');return}
+    if(oauthError){history.replaceState(null,'',location.pathname);show('login');msg('No se pudo completar el acceso con el proveedor externo. Inténtalo de nuevo.')}
+  })();
+ document.getElementById('out').onclick=async function(){try{await api('/auth/logout',{method:'POST',body:'{}'})}catch(e){}setU(null)};
+ async function loadPublicData(){var set=function(id,v){var el=document.getElementById(id);if(el)el.textContent=v};try{var c=await api('/billing/catalog'),models=c.models||[];set('modelCount',models.filter(function(m){return m.available_for_chat}).length);set('billingState',c.checkout_enabled?'Activo':'No disponible')}catch(e){set('modelCount','—');set('billingState','No verificado')}try{await api('/health/live');set('apiState','En línea');set('serviceStatus','Servicios respondiendo')}catch(e){set('apiState','No disponible');set('serviceStatus','Servicio temporalmente no disponible')}}
+/* iconos e ilustraciones */
+var I={code:'<path d="M8 8l-5 4 5 4M16 8l5 4-5 4M14 5l-4 14"/>',video:'<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9l5 3-5 3z"/>',image:'<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M4 18l5-5 4 4 3-3 4 4"/>',brain:'<path d="M9 4a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 1V4a3 3 0 0 0-3 0zM15 4a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 1"/>',rocket:'<path d="M5 19c0-3 1-4 3-5M14 4c4 0 6 2 6 6-2 4-5 6-8 7l-5-5c1-3 3-6 7-8z"/><circle cx="14.5" cy="9.5" r="1.5"/>',shield:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',cloud:'<path d="M7 18a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.6 1.2A3.5 3.5 0 0 1 17 18z"/>',users:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c2.5 0 4 1.8 4 4.5"/>',plug:'<path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/>',db:'<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',dev:'<rect x="4" y="5" width="16" height="11" rx="2"/><path d="M2 20h20"/>',bld:'<path d="M4 21V5l8-2v18M12 9h8v12M7 9h2M7 13h2M7 17h2M15 13h2M15 17h2"/>',pal:'<path d="M12 3a9 9 0 0 0 0 18c1.5 0 2-1 1.5-2s0-2.5 1.5-2.5H18a3 3 0 0 0 3-3C21 7 17 3 12 3z"/><circle cx="8" cy="11" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16" cy="11" r="1"/>',check:'<path d="M5 12l5 5 9-10"/>',server:'<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 8h.01M7 17h.01"/>',light:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/>',dark:'<path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10z"/>',system:'<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 21h8M12 16v5"/>'};
+function sv(n,s,c){return '<svg class="'+(c||'')+'" viewBox="0 0 24 24" width="'+s+'" height="'+s+'" aria-hidden="true">'+I[n]+'</svg>'}
+var M={'Atomic Code':'code','Atomic Video':'video','Atomic Vision':'image','Atomic Reasoning':'brain','Alto rendimiento':'rocket','Seguridad total':'shield','IA en la nube y en tu VPS':'cloud','Multiusuario':'users','Integración total':'plug','Memoria y RAG':'db','Desarrolladores':'dev','Empresas':'bld','Creadores':'pal'};
+document.querySelectorAll('.ic').forEach(function(e){var h=e.parentNode.querySelector('h3'),n=h&&M[h.textContent.trim()];if(n)e.innerHTML=sv(n,26)});
+var LB={light:'Claro',dark:'Oscuro',system:'Sistema'};
+document.querySelectorAll('#tmenu button').forEach(function(b){b.innerHTML=sv(b.dataset.t,18,'ico')+' '+LB[b.dataset.t]});
+var ti=document.getElementById('ticon');
+function fixT(){if(!ti.firstElementChild)ti.innerHTML=sv(R.getAttribute('data-theme')||'system',20,'ico')}
+new MutationObserver(fixT).observe(ti,{childList:true});fixT();
+document.querySelectorAll('#seguridad li').forEach(function(l,i){l.innerHTML=sv(['shield','check','db','server'][i],20,'ico')+'<span>'+l.textContent.replace(/^\S+\s*/,'')+'</span>'});
+var MO={'Atomic Code':'<g fill="url(#g)"><rect x="30" y="24" width="90" height="8" rx="4"/><rect x="46" y="42" width="140" height="8" rx="4"/><rect x="46" y="60" width="100" height="8" rx="4"/><rect x="30" y="78" width="60" height="8" rx="4"/></g><text x="215" y="78" font-size="46" font-weight="800" fill="url(#g)" font-family="monospace">&lt;/&gt;</text>','Atomic Video':'<circle cx="160" cy="52" r="28" fill="url(#g)"/><path d="M151 38l22 14-22 14z" fill="#fff"/><rect x="30" y="98" width="260" height="6" rx="3" fill="currentColor" opacity=".15"/><rect x="30" y="98" width="150" height="6" rx="3" fill="url(#g)"/>','Atomic Vision':'<circle cx="245" cy="34" r="15" fill="url(#g)"/><path d="M20 104l70-54 50 38 40-28 80 44z" fill="url(#g)" opacity=".85"/>','Atomic Reasoning':'<g stroke="url(#g)" stroke-width="3" fill="none"><path d="M60 62L130 30 200 72 270 40M130 30L150 96 200 72"/></g><g fill="url(#g)"><circle cx="60" cy="62" r="9"/><circle cx="130" cy="30" r="9"/><circle cx="200" cy="72" r="11"/><circle cx="270" cy="40" r="9"/><circle cx="150" cy="96" r="8"/></g>'};
+document.querySelectorAll('#modelos .card').forEach(function(c,i){var t=c.querySelector('h3').textContent.trim(),g='g'+i;c.insertAdjacentHTML('afterbegin','<svg class="art" viewBox="0 0 320 120" aria-hidden="true"><defs><linearGradient id="'+g+'" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--ac3)"/><stop offset="1" style="stop-color:var(--ac2)"/></linearGradient></defs><rect width="320" height="120" fill="url(#'+g+')" opacity=".2"/><path d="M0 30h320M0 60h320M0 90h320M80 0v120M160 0v120M240 0v120" stroke="currentColor" opacity=".08"/>'+(MO[t]||'').replace(/#g\)/g,'#'+g+')')+'</svg>')});
+var shot=document.getElementById('shot');if(shot)shot.innerHTML='<svg viewBox="0 0 900 470" role="img" aria-label="Panel de Axyron Atomic"><defs><linearGradient id="pg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--ac3)"/><stop offset="1" style="stop-color:var(--ac2)"/></linearGradient></defs><rect x="1" y="1" width="898" height="468" rx="22" class="mb"/><rect x="1" y="1" width="190" height="468" rx="22" class="mb2"/><circle cx="28" cy="26" r="6" fill="#ff5f57"/><circle cx="48" cy="26" r="6" fill="#febc2e"/><circle cx="68" cy="26" r="6" fill="#28c840"/><path d="M30 112L50 70l20 42h-8l-12-24-12 24z" fill="url(#pg)"/><text x="84" y="100" class="mt">Axyron</text><rect x="24" y="150" width="142" height="34" rx="10" fill="url(#pg)" opacity=".25"/><rect x="40" y="163" width="90" height="8" rx="4" fill="url(#pg)"/><rect x="40" y="210" width="110" height="8" rx="4" class="ml"/><rect x="40" y="244" width="80" height="8" rx="4" class="ml"/><rect x="40" y="278" width="100" height="8" rx="4" class="ml"/><rect x="40" y="312" width="70" height="8" rx="4" class="ml"/><text x="215" y="50" class="mt">Vista conceptual · datos reales al iniciar sesión</text><rect x="690" y="30" width="170" height="28" rx="14" class="mc"/><circle cx="708" cy="44" r="5" fill="#28c840"/><text x="722" y="48" class="mm">Atomic Code activo</text><g><rect x="215" y="76" width="205" height="84" rx="16" class="mc"/><rect x="440" y="76" width="205" height="84" rx="16" class="mc"/><rect x="665" y="76" width="195" height="84" rx="16" class="mc"/></g><text x="235" y="106" class="mm">Peticiones hoy</text><text x="235" y="140" class="mt" style="font-size:26px">—</text><text x="460" y="106" class="mm">Proyectos</text><text x="460" y="140" class="mt" style="font-size:26px">—</text><text x="685" y="106" class="mm">Modelos activos</text><text x="685" y="140" class="mt" style="font-size:26px">—</text><rect x="215" y="180" width="645" height="262" rx="16" class="mc"/><text x="235" y="212" class="mt" style="font-size:14px">Uso de los modelos</text><path d="M250 410L330 372 410 388 490 322 570 338 650 275 730 292 830 235V420H250z" fill="url(#pg)" opacity=".16"/><path d="M250 410L330 372 410 388 490 322 570 338 650 275 730 292 830 235" fill="none" stroke="url(#pg)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><g fill="#fff" stroke="url(#pg)" stroke-width="3"><circle cx="490" cy="322" r="5"/><circle cx="650" cy="275" r="5"/><circle cx="830" cy="235" r="5"/></g></svg>';
+var fv=document.createElement('link');fv.rel='icon';fv.href='data:image/svg+xml,'+encodeURIComponent(document.querySelector('header .logo svg').outerHTML.replace('<svg','<svg xmlns="http://www.w3.org/2000/svg"'));document.head.appendChild(fv);
+document.querySelector('footer .logo').insertAdjacentHTML('afterbegin',document.querySelector('header .logo svg').outerHTML);
+/* demo */
+var D={code:['Atomic Code','Disponible en una próxima actualización. Inicia sesión y abre «Mi espacio» para usar Atomic Code.'],rea:['Atomic Reasoning','Próxima actualización.'],vis:['Atomic Vision','Próxima actualización.'],vid:['Atomic Video','Próxima actualización.']};
+ var ch=document.getElementById('chat'),tk=0;
+ if(ch){
+ function run(k){var id=++tk;ch.replaceChildren();var u=document.createElement('div');u.className='b u';u.textContent=D[k][0];var a=document.createElement('div');a.className='b a';a.textContent=D[k][1];ch.appendChild(u);ch.appendChild(a)}
+ document.querySelectorAll('#tabs button').forEach(function(b){b.onclick=function(){document.querySelectorAll('#tabs button').forEach(function(x){x.classList.remove('on')});b.classList.add('on');run(b.dataset.k)}});
+ run('code')}
+/* precios */
+document.querySelectorAll('#tg button').forEach(function(b){b.onclick=function(){document.querySelectorAll('#tg button').forEach(function(x){x.classList.remove('on')});b.classList.add('on');document.getElementById('pp').textContent=b.dataset.p}});
+/* tilt + brillo */
+if(matchMedia('(hover:hover) and (pointer:fine)').matches)document.querySelectorAll('.card').forEach(function(c){c.addEventListener('mousemove',function(e){var r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;c.style.setProperty('--mx',x*100+'%');c.style.setProperty('--my',y*100+'%');c.style.transform='perspective(700px) rotateX('+((.5-y)*6)+'deg) rotateY('+((x-.5)*6)+'deg) translateY(-6px)'});c.addEventListener('mouseleave',function(){c.style.transform=''})});
+/* progreso, subir, cookies, boletín */
+var pg=document.getElementById('prog'),tp=document.getElementById('top');
+addEventListener('scroll',function(){var h=R.scrollHeight-innerHeight;pg.style.width=(h>0?scrollY/h*100:0)+'%';tp.classList.toggle('show',scrollY>600)},{passive:true});
+tp.onclick=function(){scrollTo({top:0,behavior:'smooth'})};
+var ck=document.getElementById('ck'),ok=false;try{ok=localStorage.getItem('axyron-ck')}catch(e){}
+if(!ok)setTimeout(function(){ck.classList.add('show')},1500);
+document.getElementById('cka').onclick=function(){ck.classList.remove('show');try{localStorage.setItem('axyron-ck','1')}catch(e){}};
+var newsletterForm=document.getElementById('nlf');if(newsletterForm)newsletterForm.onsubmit=function(e){e.preventDefault();var message=document.getElementById('nlm'),email=document.getElementById('nle');if(message&&email)message.textContent=/^\S+@\S+\.\S+$/.test(email.value)?'El boletín estará disponible en una próxima actualización.':'Correo no válido.'};
+/* Sesión real validada por el backend mediante cookie HttpOnly. */
+ function setU(u){cur=u;document.querySelectorAll('.acts [data-open],.mauth').forEach(function(x){x.style.display=u?'none':''});var el=document.getElementById('usr');el.hidden=!u;var workspaceNav=document.getElementById('workspace-nav');if(workspaceNav)workspaceNav.hidden=!u;if(u){var n=u.display_name||u.email||'Usuario';document.getElementById('av').textContent=n.charAt(0).toUpperCase();document.getElementById('un').textContent=n}window.dispatchEvent(new CustomEvent('axyron:user',{detail:{user:u}}))}
+ var cur=null;loadUser();loadPublicData();
+/* reveal + counters */
+if('IntersectionObserver' in window){var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){x.target.classList.add('in');io.unobserve(x.target)}})},{threshold:.12});document.documentElement.classList.add('reveal-enabled');document.querySelectorAll('.rv').forEach(function(x){io.observe(x)});}else{document.querySelectorAll('.rv').forEach(function(x){x.classList.add('in')});}
+/* Sin contadores inventados: los indicadores se cargan desde la API. */
+/* particles */
+var c=document.getElementById('fx'),x=c.getContext('2d'),P=[],W,H;
+function rs(){W=c.width=innerWidth;H=c.height=innerHeight;P=[];for(var i=0;i<Math.min(70,W/18);i++)P.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.4,vy:(Math.random()-.5)*.4})}
+rs();addEventListener('resize',rs);
+function col(){return getComputedStyle(R).getPropertyValue('--ac').trim()||'#38bdf8'}
+function dr(){x.clearRect(0,0,W,H);var a=col();x.fillStyle=a;x.strokeStyle=a;
+for(var i=0;i<P.length;i++){var p=P[i];p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>W)p.vx*=-1;if(p.y<0||p.y>H)p.vy*=-1;
+x.globalAlpha=.7;x.beginPath();x.arc(p.x,p.y,1.6,0,6.3);x.fill();
+for(var j=i+1;j<P.length;j++){var q=P[j],dx=p.x-q.x,dy=p.y-q.y,ds=dx*dx+dy*dy;if(ds<14000){x.globalAlpha=.18*(1-ds/14000);x.beginPath();x.moveTo(p.x,p.y);x.lineTo(q.x,q.y);x.stroke()}}}
+requestAnimationFrame(dr)}
+if(!matchMedia('(prefers-reduced-motion:reduce)').matches)dr();
+})();
+</script>
+<script src="/workspace.js" defer></script>
+<script src="/studio.js" defer></script>
+</body>
+</html>

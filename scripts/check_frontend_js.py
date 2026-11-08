@@ -30,23 +30,25 @@ class ScriptExtractor(HTMLParser):
 
 def main():
     frontend = Path(__file__).resolve().parents[1] / "frontend"
-    html = frontend / "Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html"
-    parser = ScriptExtractor()
-    parser.feed(html.read_text(encoding="utf-8"))
-    if not parser.scripts:
-        raise SystemExit("No se encontraron scripts inline en la página principal seleccionada")
-    for index, script in enumerate(parser.scripts, start=1):
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", suffix=".js"
-        ) as source:
-            source.write(script)
-            source.flush()
-            subprocess.run(
-                ["node", "--check", source.name],
-                text=True,
-                check=True,
-            )
-        print(f"Script inline {index}: sintaxis válida")
+    pages = sorted(frontend.glob("*.html"))
+    failures = 0
+    for page in pages:
+        parser = ScriptExtractor()
+        parser.feed(page.read_text(encoding="utf-8"))
+        if not parser.scripts:
+            continue
+        for index, script in enumerate(parser.scripts, start=1):
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", suffix=".js"
+            ) as source:
+                source.write(script)
+                source.flush()
+                subprocess.run(
+                    ["node", "--check", source.name],
+                    text=True,
+                    check=True,
+                )
+            print(f"{page.name} script inline {index}: sintaxis válida")
     workspace_script = frontend / "workspace.js"
     subprocess.run(["node", "--check", str(workspace_script)], text=True, check=True)
     print("Workspace JS: sintaxis válida")

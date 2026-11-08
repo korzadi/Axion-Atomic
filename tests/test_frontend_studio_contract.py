@@ -32,13 +32,19 @@ def test_landing_does_not_create_fake_browser_sessions():
     assert "localStorage.setItem('axyron-user'" not in source
 
 
-def test_unreleased_models_and_commercial_features_are_roadmap_items():
-    source = FRONTEND.read_text(encoding="utf-8")
-    assert "Atomic Video" in source and "Próxima actualización" in source
-    assert "Atomic Vision" in source
-    assert "Atomic Reasoning" in source
-    assert "Checkout deshabilitado" in source
-    assert "Precios y cuotas pendientes de aprobación" in source
+def test_modelos_and_precios_publish_only_the_real_state():
+    frontend = FRONTEND.parent
+    modelos = (frontend / "modelos.html").read_text(encoding="utf-8")
+    precios = (frontend / "precios.html").read_text(encoding="utf-8")
+    assert "Atomic Video" in modelos and "Próxima actualización" in modelos
+    assert "Atomic Vision" in modelos
+    assert "Atomic Reasoning" in modelos
+    assert "$4.99" in precios and "$9.99" in precios
+    assert "$19.99" in precios and "$39.99" in precios
+    assert "50 créditos" in precios
+    assert "1 crédito = 100 tokens" in precios
+    assert "Checkout deshabilitado" not in precios
+    assert "No se aceptan pagos todavía" not in precios
 
 
 def test_optional_newsletter_markup_cannot_abort_landing_reveal():

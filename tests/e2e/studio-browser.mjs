@@ -5,6 +5,10 @@ import { chromium } from "playwright";
 
 const frontend = new URL("../../frontend/", import.meta.url);
 const html = await readFile(new URL("Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html", frontend));
+const publicPages = {};
+for (const name of ["modelos", "funciones", "como", "demo", "seguridad", "precios", "faq"]) {
+  publicPages["/" + name + ".html"] = await readFile(new URL(name + ".html", frontend));
+}
 const workspaceJs = await readFile(new URL("workspace.js", frontend));
 const studioJs = await readFile(new URL("studio.js", frontend));
 const studioCss = await readFile(new URL("studio.css", frontend));
@@ -14,6 +18,11 @@ const server = createServer((request, response) => {
   if (request.url === "/studio.js") {
     response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
     response.end(studioJs);
+    return;
+  }
+  if (publicPages[request.url]) {
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(publicPages[request.url]);
     return;
   }
   if (request.url === "/studio.css") {
@@ -50,7 +59,6 @@ try {
   await page.waitForLoadState("networkidle");
   await page.locator("#inicio h1:visible").waitFor();
   await page.locator("#inicio .robot img:visible").waitFor();
-  await page.locator("#modelos:visible").waitFor();
   assert.deepEqual(landingPageErrors, [], "La landing no debe lanzar errores JavaScript");
   assert.equal(await page.locator("#workspace-app").isHidden(), true);
   assert.equal(await page.locator("#studio-shell").isHidden(), true);
@@ -58,6 +66,9 @@ try {
   assert.equal(await page.locator("#studio-root").count(), 1);
   assert.equal(await page.locator('link[href="/studio.css"]').count(), 1);
   assert.equal(await page.locator("#ws-chat-form").count(), 1);
+  await page.goto(baseUrl + "/modelos.html");
+  await page.getByRole("heading", { name: /Modelos/ }).waitFor();
+  await page.goto(baseUrl);
   await page.getByRole("heading", { name: /Tu asistente de IA/ }).waitFor();
   await page.locator('[data-open="reg"]:visible').first().click();
   await page.locator("#e").waitFor();
