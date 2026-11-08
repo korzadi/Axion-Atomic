@@ -446,6 +446,9 @@ async def retrieve(query: str, project_id: str, limit: int = 5):
             for h in result.points
             if h.payload and h.payload.get("project_id") == project_id
         )
+    except EmbeddingIdentityMigrationRequired:
+        # No ocultar al consumidor que el proyecto requiere una migración legacy explícita.
+        raise
     except Exception:
         # No convertir una caída del almacén en una respuesta aparentemente válida sin contexto.
         logger.error("RAG retrieval failed; knowledge store is unavailable")
