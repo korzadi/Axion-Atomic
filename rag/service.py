@@ -1,23 +1,86 @@
 import asyncio
 import logging
 import threading
+import inspect
+from contextlib import asynccontextmanager
+from functools import wraps
 import time
 import uuid
 
-from agent.secrets import find_secrets
+from agent.secrets import find_secrets, redact
 from qdrant_client import QdrantClient, models
 from api.config import settings
 from api.ollama import embed
 from rag.chunking import chunk_text
+from rag.embedding_identity import EmbeddingIdentity
 
 client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
 logger = logging.getLogger(__name__)
 _collection_lock = threading.Lock()
 _collection_checked_at = 0.0
+_local_project_mutation_locks: dict[str, asyncio.Lock] = {}
 _COLLECTION_CHECK_INTERVAL_SECONDS = 60.0
 
 MAX_MANUAL_INGEST_CHARS = 100_000
 MAX_MANUAL_SOURCE_CHARS = 500
+MAX_IDENTITY_PREFLIGHT_POINTS = 10_000
+
+
+def _embedding_identity_payload() -> dict:
+    identity = EmbeddingIdentity.from_settings(settings)
+    return {"embedding_model": identity.model, "embedding_dimension": identity.dimension}
+
+
+def _project_embedding_filter(project_id: str):
+    identity = _embedding_identity_payload()
+    return models.Filter(must=_project_filter(project_id).must + [
+        models.FieldCondition(key="embedding_model", match=models.MatchValue(value=identity["embedding_model"])),
+        models.FieldCondition(key="embedding_dimension", match=models.MatchValue(value=identity["embedding_dimension"])),
+    ])
+
+
+async def _assert_project_has_no_unidentified_embeddings(project_id: str) -> None:
+    """Fail closed rather than silently hiding historical vectors without identity."""
+    offset = None
+    scanned = 0
+    while True:
+        points, next_offset = await asyncio.to_thread(
+            client.scroll,
+            collection_name=settings.qdrant_collection,
+            scroll_filter=_project_filter(project_id),
+            limit=256,
+            offset=offset,
+            with_payload=["project_id", "embedding_model", "embedding_dimension"],
+            with_vectors=False,
+        )
+        for point in points:
+            payload = point.payload or {}
+            model_name = payload.get("embedding_model")
+            dimension = payload.get("embedding_dimension")
+            if payload.get("project_id") == project_id and (
+                not isinstance(model_name, str)
+                or not model_name.strip()
+                or not isinstance(dimension, int)
+                or isinstance(dimension, bool)
+                or dimension <= 0
+            ):
+                raise EmbeddingIdentityMigrationRequired(
+                    "El proyecto contiene vectores históricos sin identidad de embeddings; "
+                    "se requiere una migración explícita antes de recuperar contexto."
+                )
+        scanned += len(points)
+        if scanned > MAX_IDENTITY_PREFLIGHT_POINTS:
+            raise EmbeddingIdentityMigrationRequired(
+                "No se pudo verificar la identidad de todos los vectores del proyecto; "
+                "la recuperación se bloqueó de forma segura."
+            )
+        if next_offset is None or not points:
+            return
+        offset = next_offset
+
+
+class EmbeddingIdentityMigrationRequired(RuntimeError):
+    """Hay vectores legacy cuya identidad no puede inferirse sin migración explícita."""
 
 
 class SensitiveContentError(ValueError):
@@ -51,6 +114,61 @@ def validate_manual_ingest(text: str, source: str, project_id: str) -> None:
         )
 
 
+
+@asynccontextmanager
+async def _project_mutation_lock(project_id: str):
+    """Comparte la misma clave advisory que RepoIndexer entre todas las rutas RAG."""
+    # Importación diferida para evitar ciclos durante la carga de api.main.
+    from api.database import engine
+    from agent.sqlalchemy_meta import SqlAlchemyMetaStore
+
+    # SQLite se usa en desarrollo y CI; no implementa advisory locks PostgreSQL.
+    # El fallback local evita romper esos entornos, pero no ofrece coordinación
+    # entre procesos y nunca debe confundirse con el bloqueo de producción.
+    if getattr(getattr(engine, "dialect", None), "name", None) != "postgresql":
+        lock = _local_project_mutation_locks.setdefault(project_id, asyncio.Lock())
+        async with lock:
+            yield
+        return
+
+    async with SqlAlchemyMetaStore(engine).project_lock(project_id):
+        yield
+
+
+def _serialize_project_mutation(preflight):
+    """Serializa escrituras manuales por proyecto, también entre workers API."""
+    def decorate(function):
+        signature = inspect.signature(function)
+
+        @wraps(function)
+        async def wrapped(*args, **kwargs):
+            bound = signature.bind(*args, **kwargs)
+            preflight(**bound.arguments)
+            project_id = bound.arguments["project_id"]
+            async with _project_mutation_lock(project_id):
+                return await function(*args, **kwargs)
+
+        return wrapped
+    return decorate
+
+
+def _preflight_ingest(*, text, source, project_id, source_id=None, **_):
+    validate_manual_ingest(text, source, project_id)
+    if source_id is not None:
+        try:
+            uuid.UUID(source_id)
+        except (ValueError, TypeError, AttributeError):
+            raise ValueError("source_id debe ser un UUID válido") from None
+
+
+def _preflight_delete(*, source_id, project_id, **_):
+    _project_filter(project_id)
+    try:
+        uuid.UUID(source_id)
+    except (ValueError, TypeError, AttributeError):
+        raise ValueError("source_id debe ser un UUID válido") from None
+
+
 def ensure_collection():
     """Comprueba/crea la colección con caché breve y sincronización entre threads.
 
@@ -76,13 +194,23 @@ def ensure_collection():
             )
         # Qdrant Cloud puede exigir índices keyword para filtrar payloads.
         # Se crean idempotentemente también en colecciones preexistentes.
-        for field_name in ("project_id", "source_id"):
+        for field_name, field_schema in (
+            ("project_id", models.PayloadSchemaType.KEYWORD),
+            ("source_id", models.PayloadSchemaType.KEYWORD),
+            ("embedding_model", models.PayloadSchemaType.KEYWORD),
+            ("embedding_dimension", models.PayloadSchemaType.INTEGER),
+        ):
             client.create_payload_index(
                 collection_name=settings.qdrant_collection,
                 field_name=field_name,
-                field_schema=models.PayloadSchemaType.KEYWORD,
+                field_schema=field_schema,
             )
         _collection_checked_at = time.monotonic()
+
+
+def _manual_source_path(source_id: str) -> str:
+    """Representa una fuente manual bajo el mismo contrato project_id/path del índice."""
+    return f"manual/{source_id}"
 
 
 def _project_filter(project_id: str):
@@ -97,8 +225,8 @@ def _project_filter(project_id: str):
     )
 
 
+@_serialize_project_mutation(_preflight_ingest)
 async def ingest_text(text, source, project_id: str, source_id: str | None = None):
-    validate_manual_ingest(text, source, project_id)  # Antes de Qdrant y del embedder.
     try:
         source_id = str(uuid.UUID(source_id)) if source_id else str(uuid.uuid4())
     except (ValueError, TypeError, AttributeError):
@@ -119,7 +247,7 @@ async def ingest_text(text, source, project_id: str, source_id: str | None = Non
             models.PointStruct(
                 id=str(uuid.uuid4()),
                 vector=vector,
-                payload={"text": chunk, "source": source, "source_id": source_id, "project_id": project_id, "chunk": index},
+                payload={"text": chunk, "source": source, "source_id": source_id, "project_id": project_id, "path": _manual_source_path(source_id), "chunk": index, **_embedding_identity_payload()},
             )
         )
     if points:
@@ -131,15 +259,15 @@ async def ingest_text(text, source, project_id: str, source_id: str | None = Non
     return len(points)
 
 
+@_serialize_project_mutation(_preflight_ingest)
 async def replace_source(source_id: str, text: str, source: str, project_id: str) -> int:
     """Reindexa una fuente conservando su ID; publica la nueva versión antes de retirar la anterior."""
-    validate_manual_ingest(text, source, project_id)
     try:
         normalized_source_id = str(uuid.UUID(source_id))
     except (ValueError, TypeError, AttributeError):
         raise ValueError("source_id debe ser un UUID válido") from None
     project_filter = models.Filter(
-        must=_project_filter(project_id).must + [
+        must=_project_embedding_filter(project_id).must + [
             models.FieldCondition(key="source_id", match=models.MatchValue(value=normalized_source_id))
         ]
     )
@@ -183,7 +311,7 @@ async def replace_source(source_id: str, text: str, source: str, project_id: str
         new_points.append(models.PointStruct(
             id=str(uuid.uuid4()),
             vector=vector,
-            payload={"text": chunk, "source": source, "source_id": normalized_source_id, "project_id": project_id, "chunk": index},
+            payload={"text": chunk, "source": source, "source_id": normalized_source_id, "project_id": project_id, "path": _manual_source_path(normalized_source_id), "chunk": index, **_embedding_identity_payload()},
         ))
     try:
         await asyncio.to_thread(
@@ -219,15 +347,13 @@ async def replace_source(source_id: str, text: str, source: str, project_id: str
     return len(new_points)
 
 
+@_serialize_project_mutation(_preflight_delete)
 async def delete_source(source_id: str, project_id: str) -> None:
     """Elimina todos los fragmentos de una fuente, siempre dentro del proyecto indicado."""
     project_filter = _project_filter(project_id)
-    try:
-        normalized_source_id = str(uuid.UUID(source_id))
-    except (ValueError, TypeError, AttributeError):
-        raise ValueError("source_id debe ser un UUID válido") from None
+    normalized_source_id = str(uuid.UUID(source_id))
     source_filter = models.Filter(
-        must=project_filter.must + [
+        must=_project_embedding_filter(project_id).must + [
             models.FieldCondition(key="source_id", match=models.MatchValue(value=normalized_source_id))
         ]
     )
@@ -310,21 +436,25 @@ async def retrieve(query: str, project_id: str, limit: int = 5):
         return ""
     try:
         await asyncio.to_thread(ensure_collection)
+        await _assert_project_has_no_unidentified_embeddings(project_id)
         vector = await embed(query)
         result = await asyncio.to_thread(
             client.query_points,
             collection_name=settings.qdrant_collection,
             query=vector,
-            query_filter=project_filter,
+            query_filter=_project_embedding_filter(project_id),
             limit=limit,
             with_payload=True,
         )
         return "\\n\\n".join(
-            "[Source: " + str(h.payload.get("source", "unknown")) + "]\\n"
-            + str(h.payload.get("text", ""))
+            "[Source: " + redact(str(h.payload.get("source", "unknown"))) + "]\\n"
+            + redact(str(h.payload.get("text", "")))
             for h in result.points
             if h.payload and h.payload.get("project_id") == project_id
         )
+    except EmbeddingIdentityMigrationRequired:
+        # No ocultar al consumidor que el proyecto requiere una migración legacy explícita.
+        raise
     except Exception:
         # No convertir una caída del almacén en una respuesta aparentemente válida sin contexto.
         logger.error("RAG retrieval failed; knowledge store is unavailable")
