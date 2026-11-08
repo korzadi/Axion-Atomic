@@ -196,10 +196,10 @@ class AuthRouteGateTests(unittest.TestCase):
              patch("api.auth_recovery_routes._send_password_reset_if_active", side_effect=RuntimeError("mail unavailable")):
             resend = asyncio.run(resend_verification(req, request))
             forgot = asyncio.run(forgot_password(req, request))
-        self.assertEqual(resend.status_code, 202)
-        self.assertEqual(forgot.status_code, 202)
-        self.assertEqual(resend.body, b'{"status":"accepted","message":"Si existe una cuenta pendiente para ese correo, recibir\xc3\xa1s instrucciones."}')
-        self.assertEqual(forgot.body, b'{"status":"accepted","message":"Si existe una cuenta activa para ese correo, recibir\xc3\xa1s instrucciones."}')
+        self.assertEqual(resend["status"], "accepted")
+        self.assertEqual(forgot["status"], "accepted")
+        self.assertIn("Si existe una cuenta pendiente", resend["message"])
+        self.assertIn("Si existe una cuenta activa", forgot["message"])
 
     def test_recovery_endpoints_do_not_reveal_whether_email_delivery_is_configured(self):
         from api.auth_recovery_routes import resend_verification, forgot_password
@@ -213,12 +213,12 @@ class AuthRouteGateTests(unittest.TestCase):
              patch("api.auth_recovery_routes.settings.oauth_public_base_url", None):
             resend = asyncio.run(resend_verification(req, request))
             forgot = asyncio.run(forgot_password(req, request))
-        self.assertEqual(resend.status_code, 202)
-        self.assertEqual(forgot.status_code, 202)
-        self.assertIn(b'"status":"accepted"', resend.body)
-        self.assertIn(b'"status":"accepted"', forgot.body)
-        self.assertNotIn(b"not configured", resend.body.lower())
-        self.assertNotIn(b"not configured", forgot.body.lower())
+        self.assertEqual(resend["status"], "accepted")
+        self.assertEqual(forgot["status"], "accepted")
+        self.assertIn("Si existe una cuenta pendiente", resend["message"])
+        self.assertIn("Si existe una cuenta activa", forgot["message"])
+        self.assertNotIn("not configured", resend["message"].lower())
+        self.assertNotIn("not configured", forgot["message"].lower())
 
     def test_oauth_provider_discovery_exposes_only_availability_flags(self):
         from api.auth_routes import oauth_providers
