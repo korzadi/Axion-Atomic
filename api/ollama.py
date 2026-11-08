@@ -105,7 +105,9 @@ async def chat(messages, temperature=0.2, max_tokens=2048):
 async def embed(value: str):
     cached = await get_embedding(settings.embed_model, settings.embed_dimension, value)
     if cached is not None:
-        return cached
+        # También se valida la caché: entradas históricas o corruptas no deben
+        # eludir el contrato compartido antes de llegar a Qdrant.
+        return validate_embedding_vector(cached, settings.embed_dimension)
     async with ollama_gate.slot():
         async with httpx.AsyncClient(timeout=settings.ollama_request_timeout_seconds) as client:
             response = await client.post(
