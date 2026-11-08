@@ -1,6 +1,6 @@
 # QvaPay — método de cobro previsto para AXION ATOMIC
 
-**Estado:** método comercial identificado por el propietario; integración técnica todavía bloqueada y sin cobros habilitados.
+**Estado:** aprobación comercial de QvaPay confirmada por el propietario; integración técnica todavía bloqueada y sin cobros habilitados.
 
 ## Evidencia disponible
 
