@@ -74,6 +74,8 @@ Este repositorio está en desarrollo por fases. La presencia de una carpeta, doc
 
 AXYRON STUDIO se distribuye como un servicio independiente: `Dockerfile.frontend` construye la imagen Nginx sin privilegios `axyron-atomic-frontend`, mientras `Dockerfile` construye exclusivamente la API Python `axyron-atomic-api`. El frontend sirve los archivos de `frontend/` y reenvía las rutas dinámicas al servicio interno `api:8000`; el puerto local `127.0.0.1:8070` es la entrada web unificada. La página principal seleccionada se conserva y carga `studio.css` y `studio.js`.
 
+Uso desde la perspectiva del usuario final: [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
+
 ### Secciones de la primera versión
 
 - **Resumen:** estado HTTP de la API, proyectos y consumo real disponible.
@@ -85,7 +87,7 @@ AXYRON STUDIO se distribuye como un servicio independiente: `Dockerfile.frontend
 - **Consumo:** telemetría por proyecto cuando existen mediciones.
 - **Facturación:** catálogo y órdenes propias en modo informativo; no se inicia checkout ni se acreditan créditos desde la interfaz.
 - **Cuenta y seguridad:** datos de sesión y estado/enrolamiento MFA; las operaciones no expuestas por el backend no se simulan.
-- **Administración:** portal independiente en `https://admin.axyronatomic.com`; no forma parte de la navegación de Axyron Studio. La API actual permite consultar permisos y roles, sin mutaciones administrativas.
+- **Administración:** portal independiente en `https://admin.axyronatomic.com`; no forma parte de la navegación de Axyron Studio. La API permite consultar permisos y roles, conceder/revocar roles globales y cambiar el estado de cuentas de forma auditada con confirmaciones y MFA; los cobros y precios comerciales siguen desactivados.
 - **Privacidad y legal:** controles técnicos existentes y elementos legales pendientes, sin simular solicitudes de datos que aún no tienen endpoint.
 - **API e integraciones:** estado informativo de la API y conectores pendientes de un flujo seguro de credenciales.
 - **Herramientas:** capacidades del runtime supervisado y sandbox/automatización identificados como próximas actualizaciones cuando el ciclo no esté validado.
