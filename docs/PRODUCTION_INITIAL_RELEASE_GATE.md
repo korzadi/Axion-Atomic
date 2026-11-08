@@ -2,8 +2,8 @@
 
 > **Estado actual verificado — 2026-11-08 (certificación QA-HEAD-001/002, rama `agent/opencode-vps`).**
 > Las secciones siguientes son un registro histórico y se conservan sin reescritura. Estado real comprobado ese día:
-> - `main = a5df4f7`; CI del SHA exacto en verde (run `42515231275`, los cinco jobs).
-> - Producción sirve el código de `main` previo (`e383621`/`aad1f48`); la única deriva de código en `a5df4f7` es el valor por defecto de `qvapay_lightning_address` (`axionatomic@` → `axyronatomic@qvpay.me`, inerte con `QVAPAY_ENABLED=false`), más documentación y pruebas. La actualización de producción a `a5df4f7` corresponde al propietario.
+> - `main = ad68953`; CI del SHA exacto en verde (run `42525211231`, los seis jobs, incluido `qdrant-e2e`).
+> - Producción sirve el código del `main` previo (`a2f41d0` al 2026-11-08); `ad68953` añade los fixes RAG fail-closed (PR #15), el E2E Qdrant real (PR #21) y documentación. El delta no contiene migraciones nuevas. La actualización de producción a `ad68953` corresponde al propietario.
 > - `AUTH_ENABLED=true` en producción (readiness `ready`; 401 sin sesión, 422 con payload inválido; sin cuentas ni correos reales de prueba todavía).
 > - Migraciones PostgreSQL `022` y `023` aplicadas en producción el 2026-11-08 con rehearsal previo en contenedor desechable; segunda ejecución del migrador: ninguna migración pendiente.
 > - `QVAPAY_ENABLED=false` (confirmado por presencia de flag `false`); `BILLING_ENFORCEMENT_ENABLED` no habilitado (sombra/`shadow`, confirmado en readiness); `SANDBOX_DOCKER_ENABLED` ausente → por defecto `false` y fail-closed.

@@ -27,7 +27,7 @@ Guía operativa para sesiones de OpenCode. Antes de programar, carga la skill `p
 ## Flujo de trabajo
 
 - Commits en estilo Conventional Commits (`feat:`, `fix:`, `test:`...). CI se dispara en `main`, `hardening/**` y PRs a `main`.
-- CI (`.github/workflows/ci.yml`) ejecuta: pytest, sintaxis JS y shell, build de ambas imágenes con smoke test, E2E Playwright, Qdrant Cloud y migraciones PostgreSQL. No afirmes que CI pasó sin evidencia del SHA actual.
+- CI (`.github/workflows/ci.yml`) ejecuta seis trabajos: pytest, sintaxis JS y shell, build de ambas imágenes con smoke test, E2E Playwright, Qdrant Cloud y migraciones PostgreSQL, además de `qdrant-e2e` (E2E real con Qdrant efímero en servicio). No afirmes que CI pasó sin evidencia del SHA actual.
 - El estado real de capacidades está en `docs/V1_ACCEPTANCE_MATRIX.md`; una carpeta o endpoint no prueba que la función esté integrada.
 - Mantén sincronizados backend, frontend, contratos, permisos, pruebas y documentación. Añade pruebas de regresión para cambios funcionales.
 

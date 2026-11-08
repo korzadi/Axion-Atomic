@@ -17,7 +17,8 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | API-02 | API | Errores de capacidad/pool controlados | Handlers en `api/main.py`; regresiones HTTP/ASGI en `tests/test_capacity_http.py` | Verificada en CI para `a5df4f7` (run `42515231275`, 5/5; python-tests success) |
 | STU-01 | Studio | Proyectos autenticados | `/auth/projects` y SPA | Parcial; AUTH habilitada en producción el 2026-11-08 (readiness `ready`, 401 sin sesión); E2E con buzón real pendiente |
 | STU-02 | Studio | Chat real, RAG por proyecto e historial persistente | `/workspace/chat/completions`, `/workspace/chat/history` | Implementada; E2E real pendiente |
-| STU-03 | Studio | Ingesta/listado/gestión de fuentes con permisos | `/workspace/knowledge/*` | Parcial; integración Qdrant real pendiente |
+| STU-03 | Studio | Ingesta/listado/gestión de fuentes con permisos | `/workspace/knowledge/*`; E2E real contra Qdrant efímero en CI (`tests/test_rag_qdrant_e2e.py`, 9 escenarios: ingesta, identidad activa, sustitución entre identidades, borrado acotado, mismo `source_id` en dos proyectos, vectores legacy bloqueados) | Implementada; verificada E2E en CI para `ad68953` (job `qdrant-e2e`, 6/6 verde, run `42525211231`); staging pendiente |
+| AI-02 | IA | Embeddings y Qdrant con datos aislados reales | Health VPS; job `qdrant-cloud-integration` (colección efímera en Cloud) y job `qdrant-e2e` (servicio local efímero, commit del servidor impreso en logs) | Implementada; verificada en CI para `ad68953` (Cloud + efímero, run `42525211231`); staging pendiente |
 | STU-04 | UX | Responsive, teclado, lector de pantalla y WCAG | `tests/e2e/a11y-scan.mjs` (axe-core WCAG 2 A/AA): 0 violaciones en landing, login administrativo, vista autenticada de gestión y vistas de Studio autenticado (`#app/inicio`, `#app/facturacion`, backend simulado); auditoría de teclado (Tab) en landing/portal/gestión sin trampas ni foco perdido | Parcial: faltan lectores de pantalla reales y validación contra backend en staging; auditoría total pendiente |
 | AGT-01 | Agente | Inicio, listado, detalle y reanudación persistentes | `ProjectAgentRuntime`, `/workspace/agent/runs*` | Implementada; CI HEAD pendiente |
 | AGT-02 | Agente | Aprobación ligada al hash y revisor autenticado | `DbApprovalGate`, `action_approvals` | Implementada; CI HEAD pendiente |
@@ -25,7 +26,6 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | AGT-04 | Sandbox | Shell aislado con daemon dedicado y límites | `DockerBackend` sin bind mount, transferencia tar por stdin, configuración `SANDBOX_DOCKER_*` fail-closed | Parcial; activación bloqueada hasta daemon/TLS/CLI, imágenes digest y E2E real |
 | AGT-05 | Agente | Cancelación explícita de ejecuciones pendientes | `/workspace/agent/runs/{run_id}/cancel`, migración 022, pruebas HTTP/transacción | Implementada; CI HEAD pendiente |
 | AI-01 | IA | Ollama y modelo configurado accesibles desde API | Health VPS 6/6 | Verificada en VPS en ese momento |
-| AI-02 | IA | Embeddings y Qdrant con datos aislados reales | Health VPS y tests históricos | Parcial; falta E2E con datos desechables |
 | SEC-01 | Seguridad | Registro, verificación, login, sesión, CSRF y logout E2E | `api/auth_routes.py`, `api/auth.py` | Parcial; AUTH habilitada en producción el 2026-11-08 (readiness `ready`; 401 sin sesión, 422 con payload inválido); registro/verificación/MFA E2E con buzón real NO ejecutado; no se declara verificada |
 | SEC-02 | Seguridad | MFA, keyring, recuperación y rotación probados | `api/mfa.py`, migración MFA | Parcial; MFA activa en producción (`mfa_encryption_key=true` en readiness); login MFA real con cuenta NO ensayado; recuperación y rotación sin E2E |
 | SEC-03 | Seguridad | OAuth GitHub/Google y correo probados | Rutas OAuth/email | Parcial; SMTP autenticado y OAuth configurado en producción (presencia verificada; sin correo de prueba enviado); flujo E2E con buzón real pendiente |
@@ -38,9 +38,9 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación/conciliación y gestión de roles/estado auditadas con CSRF; pruebas PostgreSQL de gestión de usuarios y roles (CI verde); E2E de navegador de gestión de usuarios, reversión y recuperación de facturación (CI verde) | Verificada para `1db1d32` a nivel de backend/CI local; pendiente validación en staging |
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh`; contrato probado por `test_vps_installer_contract.py` (23 pruebas) | Código publicado y CI en verde; falta ensayo sobre stack ocupado en staging (ejecución `--check` real confirma cierre seguro: puerto 8070 ocupado, no se detiene el servicio) |
 | OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado; ejecutado en el host el 2026-11-08 (stack `axyron-atomic` sano; legado `axion-atomic` ausente; sin `.env` impreso) | Ejecutada en el host (2026-11-08); pendiente revisión operativa del operador previa a cualquier actualización |
-| OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador, `restore_postgres.sh` y simulacro de restauración real; sección de mantenimiento añadida | Restore verificado en entorno desechable con backup real; upgrade/rollback sin ensayar en staging |
-| QA-01 | QA | Suite Python aprobada en HEAD evaluado | `agent/opencode-vps` `08b6e65`: `pytest -q` → 911 passed, 11 skipped; CI `42485697750` green en `5e55582` (python-tests incluido) | Verificada local y en CI para `c41f490` (run `42488024013`) y para `a5df4f7` (run `42515231275`; python-tests success; suite local 1033 passed tras corrección de hermeticidad en `tests/test_frontend_serving.py`) |
-| QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions: `42485697750` sobre `5e55582` — studio-browser-e2e, container-image-build, postgres-migrations, qdrant-cloud-integration, python-tests: success | Verificada para `5e55582`, `c41f490` (run `42488024013`) y `a5df4f7` (run `42515231275`; los cinco jobs en verde) |
+| OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador, `restore_postgres.sh` y simulacro de restauración real; sección de mantenimiento añadida | Restore verificado en entorno desechable con backup real; rollback de aplicación ensayado en vivo ida y vuelta (salud 6/6, readiness `ready`); upgrade aislado en staging pendiente |
+| QA-01 | QA | Suite Python aprobada en HEAD evaluado | `agent/opencode-vps` `08b6e65`: `pytest -q` → 911 passed, 11 skipped; CI `42485697750` green en `5e55582` (python-tests incluido) | Verificada local y en CI para `c41f490` (run `42488024013`), `a5df4f7` (run `42515231275`) y `ad68953` (run `42525211231`, jobs 6/6; suite local **1035 passed, 22 skipped**) |
+| QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions: `42485697750` sobre `5e55582` — studio-browser-e2e, container-image-build, postgres-migrations, qdrant-cloud-integration, python-tests: success | Verificada para `5e55582`, `c41f490` (run `42488024013`), `a5df4f7` (run `42515231275`) y `ad68953` (run `42525211231`; **6/6 jobs**, incluidos `postgres-migrations` y `qdrant-e2e`) |
 | DOC-01 | Docs | README, AGENTS, instalación, seguridad y usuario alineados | Documentación del repo | Parcial |
 | REL-01 | Lanzamiento | Todas las puertas críticas aprobadas | Esta matriz | Bloqueada; faltan (1) ensayo con buzón real (registro/verificación/MFA), (2) `QVAPAY_USER_TOKEN` y catálogo/precios aprobados, (3) AGT-04 (daemon dedicado con TLS e imágenes digest) |
 
@@ -339,7 +339,7 @@ Tareas asignadas por el propietario: certificar el estado del SHA de referencia 
 
 ### Bloqueadores pendientes (sin cambios)
 - `REL-01` **bloqueada**: (1) ensayo de registro/verificación/MFA con buzón real, (2) `QVAPAY_USER_TOKEN` + catálogo/precios aprobados, (3) `AGT-04` (daemon dedicado con TLS e imágenes por digest). La V1.0 no se declara liberada.
-- Producción sigue en el código del `main` previo; la actualización a `a5df4f7` corresponde al propietario.
+- Producción sigue en el código del `main` previo (`a2f41d0` al 2026-11-08); la actualización a `ad68953` (incluye fixes RAG fail-closed, ARC-04 y docs) corresponde al propietario; el delta no incluye migraciones nuevas.
 
 ## Despliegue controlado a `main = a2f41d0` — 8 de noviembre de 2026 (`agent/opencode-vps`)
 
@@ -348,3 +348,26 @@ Tareas asignadas por el propietario: certificar el estado del SHA de referencia 
 - Verificación real: `/health` 6/6 ok; readiness `ready`; `/auth/me` 401; landing/dominio 200; assets servidos idénticos al repo (`cmp`); logs sin errores.
 - Producción == `main` (`a2f41d0`). Contenido nuevo respecto al despliegue anterior: fix de hermeticidad de pruebas y documentación — sin cambios de código de producción.
 - `REL-01` sigue bloqueada (mismos tres bloqueadores). V1.0 no se declara liberada.
+
+## Auditoría integral V1.0 — 8 de noviembre de 2026 (`agent/opencode-vps`)
+
+- `main` verificado en `ad68953`: CI del SHA exacto `42525211231` → **6/6 jobs** (python-tests, postgres-migrations, qdrant-cloud-integration, qdrant-e2e, container-image-build, studio-browser-e2e).
+- Suite local: **1035 passed, 22 skipped** (`DATABASE_URL=sqlite`, como CI). `compileall`, `check_frontend_js.py`, `bash -n`, `pip check`, `git diff --check`: correctos.
+- `STU-03` y `AI-02` pasan a **Implementada con verificación E2E real** (job `qdrant-e2e`, servicio efímero `qdrant/qdrant:v1.15.4`); eliminada la referencia a `AI-02` duplicada/obsoleta.
+- Nueva regresión unitaria: `tests/test_rag_replace_rollback.py` — fallo inyectado en el borrado de fragmentos antiguos; fija el contrato de `replace_source` (versión previa preservada; rollback de la versión nueva; fallo cerrado si también falla el rollback). **No** es E2E y no sustituye la evidencia de `tests/test_rag_qdrant_e2e.py`.
+- Sin secretos en el árbol (verificación de patrones; sin `.env` trackeado).
+- `main` va por delante de producción (`ad68953` vs código desplegado `a2f41d0`); delta sin migraciones nuevas. Actualizar producción corresponde al propietario.
+
+### Avance por criterios reales (conteo del texto de esta matriz, 31 criterios)
+- **Verificada/Verificado (incluye OPS-02 ejecutada en host y DB-02 en entorno desechable):** 9 (API-01, API-02, AI-01, DB-01, DB-02, QA-01, QA-02, ADM-01 [backend/CI], OPS-02 [host]).
+- **Implementada (con CI verde en `ad68953`; E2E/staging pendiente):** 9 (AGT-01, AGT-02, AGT-03, AGT-05, STU-02, STU-03, AI-02, BILL-01, BILL-02).
+- **Parcial (incluye OPS-01 con preflight verificado en host y OPS-03 con rollback ida y vuelta en vivo):** 12 (ARC-01, STU-01, STU-04, SEC-01, SEC-02, SEC-03, SEC-04, PAY-01, OPS-01, OPS-03, DOC-01, AGT-04).
+- **Bloqueada:** 1 (REL-01).
+
+### Frentes y porcentajes honestos (evidencia, no deseos)
+- **Implementación:** ~90 % de criterios con código presente y CI verde; 1 criterio bloqueado (REL-01) y ninguno ausente de forma conocida.
+- **Pruebas verificadas (local + CI en `ad68953`):** ~80 % de criterios con evidencia ejecutable; el resto son Parcial por dependencia externa (staging, buzón real, Qdrant Cloud E2E de release, sandbox).
+- **Preparación productiva:** ~75 % — producción `ready` con auth activa, migraciones al día, backup/rollback ensayados, pero 15 commits tras `main` y sin E2E con buzón real.
+- **Bloqueadores de liberación:** REL-01: (1) buzón real; (2) QvaPay token/catálogo; (3) AGT-04. Más decisión del propietario sobre despliegue del `main` actual.
+
+**Las cifras son conteo textual de esta matriz y de los resultados de CI/pruebas citados; no existe telemetría externa. V1.0 NO se declara liberada.**
