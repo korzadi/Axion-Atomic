@@ -220,6 +220,42 @@ class AuthRouteGateTests(unittest.TestCase):
         self.assertNotIn("not configured", resend["message"].lower())
         self.assertNotIn("not configured", forgot["message"].lower())
 
+    def test_recovery_endpoints_apply_ip_and_normalized_account_rate_limits(self):
+        from api.auth_recovery_routes import resend_verification, forgot_password
+        from api.schemas import EmailAddressRequest
+        request = Mock(spec=Request)
+        request.client.host = "198.51.100.33"
+        req = EmailAddressRequest(email="  Person@Example.com ")
+        with patch("api.auth_recovery_routes.settings.auth_enabled", True), \\
+             patch("api.auth_recovery_routes._limit") as limiter, \\
+             patch("api.auth_recovery_routes.email_delivery_configured", return_value=False):
+            asyncio.run(resend_verification(req, request))
+            asyncio.run(forgot_password(req, request))
+        self.assertEqual(limiter.call_count, 4)
+        calls = limiter.call_args_list
+        self.assertEqual(calls[0].args[1], "auth:verify-resend:ip")
+        self.assertEqual(calls[1].args[1], "auth:verify-resend:account")
+        self.assertEqual(calls[1].args[4], "person@example.com")
+        self.assertEqual(calls[2].args[1], "auth:password-forgot:ip")
+        self.assertEqual(calls[3].args[1], "auth:password-forgot:account")
+        self.assertEqual(calls[3].args[4], "person@example.com")
+
+    def test_recovery_rate_limit_rejection_stops_processing_with_429(self):
+        from api.auth_recovery_routes import resend_verification
+        from api.schemas import EmailAddressRequest
+        request = Mock(spec=Request)
+        request.client.host = "198.51.100.34"
+        with patch("api.auth_recovery_routes.settings.auth_enabled", True), \\
+             patch("api.auth_recovery_routes._limit", side_effect=HTTPException(status_code=429, detail="Demasiadas solicitudes")) as limiter, \\
+             patch("api.auth_recovery_routes._resend_verification_if_pending") as delivery:
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(resend_verification(
+                    EmailAddressRequest(email="person@example.com"), request,
+                ))
+        self.assertEqual(raised.exception.status_code, 429)
+        limiter.assert_called_once()
+        delivery.assert_not_called()
+
     def test_oauth_provider_discovery_exposes_only_availability_flags(self):
         from api.auth_routes import oauth_providers
         with patch("api.auth_routes.configured", side_effect=lambda settings, provider: provider == "google"):
