@@ -26,6 +26,25 @@ class AuthRouteGateTests(unittest.TestCase):
         with patch("api.auth_routes.settings.auth_enabled", True):
             _require_auth_feature()
 
+    def test_registration_consent_requires_explicit_json_boolean(self):
+        for value in (1, 0, "true", "false", "yes"):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    RegisterRequest(
+                        email="user@example.com",
+                        password="StrongPassword123!",
+                        display_name="User",
+                        terms_accepted=value,
+                    )
+
+        accepted = RegisterRequest(
+            email="user@example.com",
+            password="StrongPassword123!",
+            display_name="User",
+            terms_accepted=True,
+        )
+        self.assertIs(accepted.terms_accepted, True)
+
     def test_registration_password_has_minimum_length(self):
         with self.assertRaises(ValueError):
             RegisterRequest(email="user@example.com", password="short", display_name="User")
