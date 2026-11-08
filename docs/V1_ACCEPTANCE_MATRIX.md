@@ -137,3 +137,11 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - El portal administrativo incorpora los controles solo cuando el backend informa `users.manage`.
 - Verificación local: 874 pruebas pasan y 9 se omiten (PostgreSQL). Las rutas nuevas aún no se probaron contra PostgreSQL real ni con E2E de navegador, y CI sigue pendiente para este HEAD.
 - ADM-01 permanece **Parcial**: backend y pruebas unitarias implementados; E2E browser y validación PostgreSQL pendientes.
+
+## Revisión incremental de sandbox, instalación y QA — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Sandbox: el snapshot rechaza enlaces duros además de symlinks; prueba de regresión con archivo externo. El backend local usa el intérprete del proceso, eliminando fallos por ausencia de `python`.
+- Instalación: añadido `scripts/restore_postgres.sh` con restricciones fail-closed (contenedor no productivo, base vacía, dump verificado, confirmación exacta) y 6 pruebas de contrato con Docker simulado. No se ejecutó una restauración real.
+- Administración: añadidas pruebas PostgreSQL para concesión/revocación de roles, protección del último `platform_admin`, revocación de sesiones y activación solo con correo verificado; el job PostgreSQL de CI las ejecutará.
+- QA local: **875 passed, 9 skipped** antes de las nuevas pruebas PostgreSQL; `compileall`, sintaxis JS y `git diff --check` correctos.
+- OPS-03 y DB-02 siguen **Pendientes** hasta ejecutar una restauración real en un entorno aislado autorizado. AGT-04 sigue **Parcial**. QA-02 y REL-01 siguen bloqueadas por CI/staging.

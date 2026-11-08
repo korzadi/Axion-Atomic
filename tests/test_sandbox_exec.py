@@ -53,6 +53,22 @@ class SnapshotTests(Base):
             self.assertFalse({".env", "node_modules/x.js", "link"} & names)
         self.assertEqual(self.leftover(), [])
 
+    def test_rejects_hardlink_to_file_outside_project(self):
+        outside = self.root.parent / (self.root.name + "-hardlink-outside")
+        outside.mkdir()
+        self.addCleanup(lambda: __import__("shutil").rmtree(outside, ignore_errors=True))
+        secret = outside / "secret.txt"
+        secret.write_text("outside secret", encoding="utf-8")
+        try:
+            (self.root / "hardlink-secret").hardlink_to(secret)
+        except (OSError, NotImplementedError):
+            self.skipTest("El sistema de archivos no permite crear enlaces duros")
+        with self.assertRaises(OSError) as caught:
+            with Snapshot(self.ws, base_dir=self.sbx_base.name):
+                pass
+        self.assertIn("enlaces duros", str(caught.exception))
+        self.assertEqual(self.leftover(), [])
+
     def test_size_limit_and_cleanup_on_error(self):
         with self.assertRaises(SnapshotTooLarge):
             with Snapshot(self.ws, max_bytes=10, base_dir=self.sbx_base.name): pass

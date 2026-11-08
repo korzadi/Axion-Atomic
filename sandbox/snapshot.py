@@ -1,6 +1,6 @@
 """Copia temporal del proyecto para ejecutar código. Excluye lo sensible/ignorado (el sandbox nunca ve .env ni claves),
-omite symlinks y limita tamaño. Las aperturas usan descriptores relativos al root y O_NOFOLLOW para evitar
-que un symlink concurrente convierta el snapshot en una lectura fuera del proyecto."""
+omite symlinks, rechaza enlaces duros y limita tamaño. Las aperturas usan descriptores relativos al root y O_NOFOLLOW
+para evitar que un symlink concurrente convierta el snapshot en una lectura fuera del proyecto."""
 import os
 import shutil
 import stat
@@ -43,6 +43,8 @@ class Snapshot:
             info = os.fstat(fd)
             if not stat.S_ISREG(info.st_mode):
                 raise OSError("El snapshot solo admite archivos regulares")
+            if info.st_nlink > 1:
+                raise OSError("El snapshot rechaza archivos con enlaces duros")
             return fd, info
         except BaseException:
             os.close(fd)

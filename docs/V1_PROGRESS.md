@@ -3,7 +3,7 @@
 **Rama de trabajo:** `agent/opencode-vps`
 **Fase activa:** 12 — QA y liberación V1.0 (desarrollo inverso 12 → 7)
 **Estado global:** EN DESARROLLO  
-**Implementación global estimada:** 60% (media simple de las 12 fases; no equivale a preparación productiva)
+**Implementación global estimada:** 63% (media simple de las 12 fases; no equivale a preparación productiva)
 **Preparación productiva:** 35% (requiere CI del HEAD, staging y configuración externa)
 
 > Regla: los porcentajes son estimaciones de implementación basadas en la matriz de aceptación. No certifican disponibilidad operativa. Solo se declara **verificada** una capacidad cuando existe una prueba reproducible aprobada para el HEAD indicado. Las fases 10 y 12 conservan bloqueos externos que impiden declarar la V1.0 liberada.
@@ -18,12 +18,12 @@
 | 4 | Modelos de IA | 65% | EN PROGRESO |
 | 5 | Agente AXYRON | 75% | EN PROGRESO |
 | 6 | Memoria y RAG | 70% | EN PROGRESO |
-| 7 | Archivos y sandbox | 60% | EN PROGRESO |
-| 8 | Administración | 70% | EN PROGRESO |
+| 7 | Archivos y sandbox | 65% | EN PROGRESO |
+| 8 | Administración | 80% | EN PROGRESO |
 | 9 | Créditos y facturación | 75% | EN PROGRESO |
 | 10 | Integración QvaPay | 25% | BLOQUEADA |
-| 11 | Instalación y documentación | 45% | EN PROGRESO |
-| 12 | QA y liberación V1.0 | 50% | EN PROGRESO |
+| 11 | Instalación y documentación | 55% | EN PROGRESO |
+| 12 | QA y liberación V1.0 | 60% | EN PROGRESO |
 
 **Lectura de los porcentajes:** reflejan implementación y pruebas locales del código inspeccionado, no aceptación en staging. Las cifras heredadas del orden antiguo de fases se conservan solo como histórico en las secciones siguientes.
 
@@ -249,3 +249,27 @@ Continuar con Fase 11 (instalación y documentación): revisar preflight del ins
 - Probar las mutaciones contra PostgreSQL real y la matriz HTTP completa con sesiones/CSRF reales.
 - Añadir E2E de navegador para la nueva gestión.
 - Revisar si se requieren más operaciones administrativas (catálogo, tarifas) antes de cerrar la fase.
+
+## Checkpoint Fases 7 y 11 — sandbox y restauración (2026-11-08)
+
+### Fase 7
+- `sandbox/snapshot.py` rechaza archivos con enlaces duros (`st_nlink > 1`) además de symlinks. Evita incluir en el snapshot contenido externo al que un enlace duro apunte.
+- Prueba de regresión en `tests/test_sandbox_exec.py` que crea un enlace duro a un archivo externo y verifica rechazo y limpieza del directorio temporal.
+- El backend local resuelve el intérprete Python del proceso, eliminando fallos de entorno ya registrados.
+- Aislamiento Docker, red deshabilitada, límites de CPU/memoria/PIDs, auditoría y limpieza ya existían y sus pruebas siguen pasando.
+- Sigue bloqueado AGT-04 completo: daemon dedicado, TLS, imágenes fijadas por digest y E2E real no están disponibles en este entorno.
+
+### Fase 11
+- Nuevo `scripts/restore_postgres.sh`: restauración únicamente en un contenedor/base desechables, rechaza nombres del stack real, exige base vacía, verifica el dump con `pg_restore --list`, no imprime secretos y exige confirmación exacta.
+- Documentación de restauración aislada, actualización segura y procedimiento de recuperación en `docs/VPS_INSTALLATION.md`.
+- 6 pruebas de contrato del script con Docker simulado; no se ejecutó una restauración real ni se creó infraestructura.
+
+### Verificación combinada
+- `python3 -m pytest -q` — **875 passed, 9 skipped** antes de añadir las pruebas PostgreSQL de administración (que se omiten localmente).
+- `python3 scripts/check_frontend_js.py` — OK.
+- `git diff --check` — limpio.
+- CI del HEAD: pendiente.
+
+### Bloqueos de Fase 10 y Fase 9
+- QvaPay: no se implementa adaptador, webhook ni consulta de transacción porque el contrato oficial de Lightning Address sigue sin confirmación escrita. No se inventan endpoints ni firmas. Solo existe el gestor interno de órdenes y su verificación server-side preparada.
+- Facturación: el catálogo comercial es `preview_only`, sin precios ni paquetes aprobados; no se activan cobros. La deuda pendiente es de producto/negocio, no de código inventable.
