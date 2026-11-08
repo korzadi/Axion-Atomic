@@ -161,7 +161,7 @@ class AuthRouteGateTests(unittest.TestCase):
         self.assertNotIn(secret_token, str(result))
         self.assertNotIn("token", result)
 
-    def test_registration_email_failure_does_not_expose_verification_token(self):
+    def test_registration_email_failure_keeps_generic_response_and_hides_token(self):
         from types import SimpleNamespace
         from api.auth_routes import register
         request = Mock(spec=Request)
@@ -174,13 +174,13 @@ class AuthRouteGateTests(unittest.TestCase):
              patch("api.auth_routes.create_user", return_value="new-user-id"), \
              patch("api.auth_routes.issue_email_verification_token", return_value=SimpleNamespace(token=secret_token)), \
              patch("api.auth_routes.send_verification_email", side_effect=RuntimeError("mail transport failure")):
-            with self.assertRaises(HTTPException) as raised:
-                asyncio.run(register(
-                    RegisterRequest(email="new@example.com", password="StrongPassword123!", display_name="New", terms_accepted=True),
-                    request,
-                ))
-        self.assertEqual(raised.exception.status_code, 503)
-        self.assertNotIn(secret_token, str(raised.exception.detail))
+            result = asyncio.run(register(
+                RegisterRequest(email="new@example.com", password="StrongPassword123!", display_name="New", terms_accepted=True),
+                request,
+            ))
+        self.assertEqual(result["status"], "pending_verification")
+        self.assertNotIn(secret_token, str(result))
+        self.assertNotIn("token", result)
 
     def test_recovery_endpoints_return_generic_responses_even_when_delivery_fails(self):
         from api.auth_recovery_routes import resend_verification, forgot_password
