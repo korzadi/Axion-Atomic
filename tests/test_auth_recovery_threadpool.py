@@ -96,31 +96,31 @@ class AuthRecoveryThreadpoolTests(unittest.TestCase):
     def test_invalid_email_verification_token_returns_client_error(self):
         from fastapi import HTTPException
         calls = []
-        with patch("api.auth_recovery_routes.settings.auth_enabled", True), \\
-             patch("api.auth_recovery_routes.run_in_threadpool", side_effect=self.threadpool_runner(calls)), \\
-             patch("api.auth_recovery_routes.consume_rate_limit", return_value=self.rate_limit_decision()), \\
-             patch("api.auth_recovery_routes.consume_email_verification_token", return_value=False):
-            with self.assertRaises(HTTPException) as raised:
-                asyncio.run(verify_email(EmailTokenRequest(token="x" * 32), self.request()))
+        with patch("api.auth_recovery_routes.settings.auth_enabled", True):
+            with patch("api.auth_recovery_routes.run_in_threadpool", side_effect=self.threadpool_runner(calls)):
+                with patch("api.auth_recovery_routes.consume_rate_limit", return_value=self.rate_limit_decision()):
+                    with patch("api.auth_recovery_routes.consume_email_verification_token", return_value=False) as consume:
+                        with self.assertRaises(HTTPException) as raised:
+                            asyncio.run(verify_email(EmailTokenRequest(token="x" * 32), self.request()))
         self.assertEqual(raised.exception.status_code, 400)
         self.assertEqual(raised.exception.detail, "El enlace no es válido o ha caducado.")
-        self.assertEqual(calls, [_limit, calls[1]])
+        self.assertEqual(calls, [_limit, consume])
 
     def test_invalid_password_reset_token_returns_client_error(self):
         from fastapi import HTTPException
         calls = []
-        with patch("api.auth_recovery_routes.settings.auth_enabled", True), \\
-             patch("api.auth_recovery_routes.run_in_threadpool", side_effect=self.threadpool_runner(calls)), \\
-             patch("api.auth_recovery_routes.consume_rate_limit", return_value=self.rate_limit_decision()), \\
-             patch("api.auth_recovery_routes.consume_password_reset_token", return_value=False):
-            with self.assertRaises(HTTPException) as raised:
-                asyncio.run(reset_password(
-                    PasswordResetRequest(token="x" * 32, new_password="StrongPassword123!"),
-                    self.request(),
-                ))
+        with patch("api.auth_recovery_routes.settings.auth_enabled", True):
+            with patch("api.auth_recovery_routes.run_in_threadpool", side_effect=self.threadpool_runner(calls)):
+                with patch("api.auth_recovery_routes.consume_rate_limit", return_value=self.rate_limit_decision()):
+                    with patch("api.auth_recovery_routes.consume_password_reset_token", return_value=False) as consume:
+                        with self.assertRaises(HTTPException) as raised:
+                            asyncio.run(reset_password(
+                                PasswordResetRequest(token="x" * 32, new_password="StrongPassword123!"),
+                                self.request(),
+                            ))
         self.assertEqual(raised.exception.status_code, 400)
         self.assertEqual(raised.exception.detail, "El enlace no es válido o ha caducado.")
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls, [_limit, consume])
 
 
 if __name__ == "__main__":
