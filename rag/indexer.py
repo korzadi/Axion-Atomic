@@ -107,8 +107,8 @@ class RepoIndexer:
                     # SQL es la fuente canónica: quitar primero los metadatos.
                     # Si falla la limpieza vectorial, reconcile_project reintentará.
                     await asyncio.to_thread(self.meta.delete_file, pid, gone)
-                    await self.store.delete_ids(old_ids)
                     rep.removed.append(gone)
+                    await self.store.delete_ids(old_ids)
                 except (AxionError, OSError, ValueError) as exc:
                     rep.errors.append(f"{gone}: {exc}")
         try:
