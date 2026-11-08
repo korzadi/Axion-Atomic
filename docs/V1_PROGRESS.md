@@ -22,7 +22,7 @@
 | 8 | Administración | 80% | EN PROGRESO |
 | 9 | Créditos y facturación | 80% | EN PROGRESO |
 | 10 | Integración QvaPay | 50% | EN PROGRESO |
-| 11 | Instalación y documentación | 70% | EN PROGRESO |
+| 11 | Instalación y documentación | 75% | EN PROGRESO |
 | 12 | QA y liberación V1.0 | 70% | EN PROGRESO |
 
 **Lectura de los porcentajes:** reflejan implementación y pruebas locales del código inspeccionado, no aceptación en staging. Las cifras heredadas del orden antiguo de fases se conservan solo como histórico en las secciones siguientes.
@@ -610,3 +610,13 @@ Confirmar CI del SHA publicado; después continuar Fase 11 (preflight/staging) y
 
 ### Límites
 - Solo lectura; no habilita checkout, cobros ni acreditación. Catálogo/precios siguen pendientes del producto.
+
+## Checkpoint Fase 11 — instalación, documentación y secretos (2026-11-08, `agent/opencode-vps`)
+
+### Cambios
+- `docs/USER_GUIDE.md`: guía de usuario completa (cuenta, MFA, proyectos, Atomic Code, Conocimiento, agente con aprobaciones, consumo, facturación, administración, privacidad, límites y cosas no disponibles); README enlaza la guía.
+- `tests/test_secrets_in_repo_guard.py`: guardarraíl de secretos (rutas prohibidas en git, patrones de claves privadas/tokens, cobertura de .gitignore): 3 passed.
+- `.env.example` ya estaba blindado con `tests/test_env_example_contract.py` (5 pruebas).
+- `scripts/install_vps.sh --check` ejecutado en el host real: falla de forma segura ante stack existente (`Puerto 8070 ocupado; no se detendrá el servicio existente.`, exit 1); sin cambios ni secretos impresos.
+- `test_vps_installer_contract.py`: 23 passed. OPS-01/02/03 actualizados en la matriz.
+- Fase 11 pasa a 75%; pendiente: `--prepare/--check/--deploy` y rollback en staging, inventario real (operador), upgrade aislado.
