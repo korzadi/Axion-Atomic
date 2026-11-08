@@ -270,3 +270,9 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - `STU-04` continúa **Parcial**, pero con navegación completa por teclado verificada en las vistas escaneadas.
 - Suite local (SQLite): **1006 passed, 11 skipped**; `compileall`, `check_frontend_js.py`, `pip check` y `git diff --check` correctos. CI del HEAD resultante pendiente al redactar; no se declara ninguna puerta verificada para este SHA.
 - `ADM-01` conserva su verificación previa para `1db1d32`; el endpoint nuevo requiere CI propio. `REL-01` sigue **bloqueada**. No se ejecutaron pagos, cobros, despliegues ni cambios de infraestructura.
+
+## Confirmación CI del bloque QvaPay/teclado — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- CI del HEAD `76c5356e0bd0001b659db0aa10eb2a51191256b2` (run `42496361002`, al redactar): **5/5 jobs en verde** — `python-tests` 1006 passed / 11 skipped; `postgres-migrations` 74 passed; `studio-browser-e2e` aprobado (incluye conciliación QvaPay en el portal); `container-image-build` y `qdrant-cloud-integration` success.
+- `QA-01` y `QA-02`: evidencia en verde para `76c5356`. `ADM-01`: el endpoint `POST /admin/billing/qvapay/reconcile` queda cubierto por CI (python-tests + e2e browser). Sigue pendiente la validación en staging.
+- `REL-01` sigue **bloqueada** (AUTH/MFA sin habilitar, AGT-04, catálogo/precios QvaPay, staging). No se declara la V1.0 liberada.

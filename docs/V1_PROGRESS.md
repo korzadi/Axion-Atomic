@@ -678,3 +678,12 @@ El propietario autorizó el trabajo en `agent/opencode-vps` (no en `agent/chatgp
 - Fase 10 (QvaPay): conciliación administrativa implementada y probada; checkout/rutas HTTP/catálogo de cobro siguen bloqueados por decisiones comerciales.
 - Fase 11 (Instalación y documentación): sin cambios; pendiente staging con autorización del operador.
 - Fase 12 (QA): teclado auditado; suite 1006/1006 (SQLite); REL-01 sigue bloqueada.
+
+## Evidencia CI del bloque anterior — 2026-11-08 (`agent/opencode-vps`)
+
+- CI del HEAD `76c5356e0bd0001b659db0aa10eb2a51191256b2` (run `42496361002` al redactar; rama `agent/opencode-vps`): los cinco jobs en verde:
+  - `python-tests`: **1006 passed, 11 skipped** (con `DATABASE_URL=sqlite:///./ci-test.db`).
+  - `postgres-migrations`: **74 passed** (PostgreSQL efímero, migraciones 001→023 + doble ejecución del migrador).
+  - `studio-browser-e2e`: aprobado con la nueva sección «Conciliación de cobros QvaPay».
+  - `container-image-build`: success. `qdrant-cloud-integration`: success.
+- QA-01/QA-02 pueden considerarse verificadas **para este SHA** (no para staging ni para producción). REL-01 sigue bloqueada por AUTH/sandbox/catálogo/staging.
