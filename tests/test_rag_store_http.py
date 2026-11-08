@@ -49,7 +49,12 @@ class Q(BaseHTTPRequestHandler):
                 col["points"][p["id"]] = p
             return self._send(200, {"result": {"status": "completed"}})
         if sub == "/points/delete":
-            col["points"] = {k: p for k, p in col["points"].items() if not match(p["payload"], body["filter"])}; return self._send(200, {"result": {}})
+            if "points" in body:
+                ids = set(body["points"])
+                col["points"] = {key: point for key, point in col["points"].items() if key not in ids}
+            else:
+                col["points"] = {k: p for k, p in col["points"].items() if not match(p["payload"], body["filter"])}
+            return self._send(200, {"result": {}})
         if sub == "/points/search":
             def cos(a, b):
                 na, nb = math.sqrt(sum(x * x for x in a)) or 1, math.sqrt(sum(x * x for x in b)) or 1
@@ -113,6 +118,13 @@ class QdrantTests(Base):
         self.assertEqual(set(S["cols"]["col"]["points"]), {"c"})
         with self.assertRaises(ValueError): await st.delete_project("")
 
+    async def test_delete_ids_removes_only_superseded_points(self):
+        st = QdrantStore(self.url, "col", 4); await st.ensure(); await st.upsert(self.pts())
+        await st.delete_ids(["a", "c"])
+        self.assertEqual(set(S["cols"]["col"]["points"]), {"b"})
+        request = [r for r in S["requests"] if r[1].endswith("/points/delete")][-1]
+        self.assertEqual(request[2], {"points": ["a", "c"]})
+
     async def test_upsert_requires_complete_payload_before_any_http_write(self):
         st = QdrantStore(self.url, "col", 4); await st.ensure()
         writes_before = sum(1 for request in S["requests"] if request[0] == "PUT" and "/points" in request[1])
@@ -155,6 +167,12 @@ class InMemoryStoreTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await st.upsert([valid, invalid])
         self.assertEqual(st.points, {})
+
+    async def test_delete_ids_removes_only_requested_points(self):
+        st = InMemoryVectorStore()
+        await st.upsert(QdrantTests.pts(None))
+        await st.delete_ids(["a", "c"])
+        self.assertEqual(set(st.points), {"b"})
 
 
 class EmbedderTests(Base):
