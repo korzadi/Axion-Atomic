@@ -8,6 +8,16 @@ from starlette.concurrency import run_in_threadpool
 
 from api.auth import CSRF_COOKIE, require_csrf
 from api.billing_recovery import recover_completed_billing_executions
+from api.config import settings
+from api.qvapay_lightning import (
+    QvaPayLightningClient,
+    QvaPayLightningError,
+)
+from api.qvapay_settlement import (
+    MAX_PAGES as QVAPAY_MAX_PAGES,
+    fetch_recent_payments,
+    reconcile_lightning_payments,
+)
 from api.billing_reservations import (
     IdempotencyConflict,
     ReservationNotFound,
@@ -805,5 +815,84 @@ async def admin_reverse_settled_reservation(
         "state": result.state,
         "reversed_credits": result.reversed_credits,
         "idempotent": result.idempotent,
+        "audited": True,
+    }
+
+
+@router.post("/billing/qvapay/reconcile")
+async def admin_reconcile_qvapay_lightning(
+    reason: str = Query(default="Conciliación manual QvaPay", min_length=8, max_length=500),
+    max_pages: int = Query(default=QVAPAY_MAX_PAGES, ge=1, le=QVAPAY_MAX_PAGES),
+    user=Depends(require_global_permission("billing.manage")),
+    _csrf_user=Depends(_admin_csrf),
+):
+    """Concilia cobros Lightning recientes con invoices abiertas.
+
+    Consulta los últimos cobros del titular en QvaPay (solo lectura) y confirma
+    las órdenes pendientes que coincidan exactamente: misma referencia, sats
+    exactos, destinatario y transaction_uuid. Nunca carga a nadie ni acredita
+    créditos por sí solo; la acreditación pasa por ``confirm_verified_payment``
+    con las mismas reglas que el flujo automático. Falla cerrado cuando la
+    integración está desactivada o falta el token.
+    """
+    if not settings.qvapay_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="La integración QvaPay está desactivada",
+        )
+    token = (
+        settings.qvapay_user_token.get_secret_value()
+        if settings.qvapay_user_token is not None
+        else None
+    )
+    if not token:
+        raise HTTPException(
+            status_code=503,
+            detail="El token de QvaPay no está configurado",
+        )
+    try:
+        with engine.begin() as conn:
+            _audit_global_event(
+                conn,
+                actor_id=user["id"],
+                target_user_id=None,
+                action="billing.qvapay.reconcile",
+                role=None,
+                reason=reason,
+            )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudo registrar la conciliación en auditoría",
+        ) from exc
+    try:
+        client = QvaPayLightningClient(timeout=settings.qvapay_request_timeout_seconds)
+        payments = await fetch_recent_payments(client, token=token, max_pages=max_pages)
+    except QvaPayLightningError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudo consultar QvaPay de forma segura",
+        ) from exc
+    try:
+        results = await run_in_threadpool(
+            reconcile_lightning_payments,
+            engine=engine,
+            payments=payments,
+            recipient=settings.qvapay_lightning_address,
+            actor=str(user["id"]),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="La conciliación no pudo completarse",
+        ) from exc
+    outcomes: dict[str, int] = {}
+    for item in results:
+        outcomes[item.outcome] = outcomes.get(item.outcome, 0) + 1
+    return {
+        "examined_open_invoices": len(results),
+        "payments_fetched": len(payments),
+        "outcomes": outcomes,
+        "items": [{"order_id": item.order_id, "outcome": item.outcome} for item in results],
         "audited": True,
     }
