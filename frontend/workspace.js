@@ -13,6 +13,126 @@
   let currentProject = null;
   let history = [];
   let busy = false;
+  let agentBusy = false;
+  let activeAgentRun = null;
+
+  // Panel nativo del agente: usa las rutas persistentes ya existentes y nunca
+  // ejecuta una modificación sin una decisión explícita del propietario/admin.
+  const agentPanel = document.createElement("section");
+  agentPanel.className = "ws-agent-panel";
+  agentPanel.setAttribute("aria-labelledby", "ws-agent-title");
+  agentPanel.style.cssText = "margin-top:1.25rem;padding:1rem;border:1px solid var(--border-color, #8886);border-radius:12px;display:grid;gap:.75rem";
+  const agentTitle = document.createElement("h3");
+  agentTitle.id = "ws-agent-title";
+  agentTitle.textContent = "Agente AXYRON";
+  const agentDescription = document.createElement("p");
+  agentDescription.textContent = "Describe una tarea para que el agente analice el proyecto, proponga cambios y espere tu aprobación.";
+  const agentGoal = document.createElement("textarea");
+  agentGoal.rows = 3;
+  agentGoal.maxLength = 10000;
+  agentGoal.placeholder = "Ej.: Analiza el módulo de autenticación y propone una corrección concreta.";
+  agentGoal.setAttribute("aria-label", "Objetivo del agente AXYRON");
+  agentGoal.style.cssText = "width:100%;min-height:5rem;resize:vertical";
+  const agentStart = document.createElement("button");
+  agentStart.type = "button";
+  agentStart.textContent = "Iniciar tarea";
+  const agentStatus = document.createElement("p");
+  agentStatus.setAttribute("role", "status");
+  agentStatus.setAttribute("aria-live", "polite");
+  agentStatus.textContent = "Agente listo.";
+  const agentOutput = document.createElement("pre");
+  agentOutput.style.cssText = "white-space:pre-wrap;overflow-wrap:anywhere;max-height:22rem;overflow:auto";
+  const agentActions = document.createElement("div");
+  agentActions.style.cssText = "display:flex;gap:.5rem;flex-wrap:wrap";
+  agentPanel.append(agentTitle, agentDescription, agentGoal, agentStart, agentStatus, agentOutput, agentActions);
+  root.appendChild(agentPanel);
+
+  function setAgentBusy(value) {
+    agentBusy = Boolean(value);
+    agentStart.disabled = agentBusy || !currentProject;
+    agentGoal.disabled = agentBusy || !currentProject;
+  }
+  function showAgentRun(run) {
+    activeAgentRun = run && run.run_id ? run : activeAgentRun;
+    agentOutput.textContent = "";
+    if (!run) return;
+    const lines = [
+      "Estado: " + (run.status || "desconocido"),
+      "Ejecución: " + (run.run_id || activeAgentRun && activeAgentRun.run_id || "—"),
+      "Pasos: " + (Number.isSafeInteger(run.steps) ? run.steps : 0)
+    ];
+    if (run.final) lines.push("", run.final);
+    if (run.error) lines.push("", "Error: " + run.error);
+    const pending = Array.isArray(run.pending_actions) ? run.pending_actions : [];
+    if (pending.length) lines.push("", "Acciones que requieren aprobación:");
+    agentOutput.textContent = lines.join("\\n");
+    agentActions.replaceChildren();
+    pending.forEach((action) => {
+      const row = document.createElement("div");
+      row.style.cssText = "display:grid;gap:.35rem;padding:.65rem;border:1px solid var(--border-color, #8886);border-radius:8px";
+      const label = document.createElement("p");
+      label.textContent = action.tool + ": " + action.summary;
+      const approve = document.createElement("button");
+      approve.type = "button";
+      approve.textContent = "Aprobar y continuar";
+      const reject = document.createElement("button");
+      reject.type = "button";
+      reject.textContent = "Rechazar";
+      approve.addEventListener("click", () => decideAgentAction(action.proposal_id, true));
+      reject.addEventListener("click", () => decideAgentAction(action.proposal_id, false));
+      row.append(label, approve, reject);
+      agentActions.appendChild(row);
+    });
+    if (!pending.length && run.status === "done") agentStatus.textContent = "Tarea terminada.";
+    else if (!pending.length) agentStatus.textContent = "Agente: " + (run.status || "en proceso") + ".";
+  }
+  async function decideAgentAction(proposalId, approved) {
+    if (!activeAgentRun || !currentProject || agentBusy) return;
+    setAgentBusy(true);
+    agentStatus.textContent = approved ? "Registrando aprobación…" : "Registrando rechazo…";
+    try {
+      const query = "?project_id=" + encodeURIComponent(currentProject);
+      await request("/workspace/agent/approvals/" + encodeURIComponent(proposalId) + query, {
+        method: "POST",
+        body: JSON.stringify({ approved, note: approved ? "Aprobado desde AXYRON Studio" : "Rechazado desde AXYRON Studio" })
+      });
+      agentStatus.textContent = "Decisión guardada. Continuando ejecución…";
+      const run = await request("/workspace/agent/runs/" + encodeURIComponent(activeAgentRun.run_id) + "/resume" + query, {
+        method: "POST",
+        body: JSON.stringify({})
+      });
+      showAgentRun(run);
+    } catch (error) {
+      agentStatus.textContent = error.message;
+    } finally { setAgentBusy(false); }
+  }
+  agentStart.addEventListener("click", async () => {
+    const goal = agentGoal.value.trim();
+    if (!currentProject || goal.length < 5 || agentBusy) {
+      if (goal.length < 5) agentStatus.textContent = "Describe una tarea de al menos 5 caracteres.";
+      return;
+    }
+    setAgentBusy(true);
+    agentStatus.textContent = "AXYRON está analizando el proyecto…";
+    agentActions.replaceChildren();
+    agentOutput.textContent = "";
+    try {
+      const run = await request("/workspace/agent/runs", {
+        method: "POST",
+        body: JSON.stringify({ project_id: currentProject, goal })
+      });
+      showAgentRun(run);
+      if (run.status === "awaiting_approval") {
+        agentStatus.textContent = "Propuesta preparada. Revisa cada cambio antes de aprobarlo.";
+      } else if (run.status === "done") {
+        agentStatus.textContent = "Tarea terminada.";
+      } else {
+        agentStatus.textContent = "Ejecución: " + run.status + ".";
+      }
+    } catch (error) {
+      agentStatus.textContent = error.message;
+    } finally { setAgentBusy(false); }
+  });
 
   function csrfToken() {
     const match = document.cookie.match(/(?:^|; )axion_csrf=([^;]+)/);
