@@ -281,6 +281,38 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("private qdrant endpoint", str(caught.exception))
 
 
+    async def test_retrieval_redacts_legacy_secrets_from_text_and_source(self):
+        from types import SimpleNamespace
+
+        legacy_secret = "AKIA" + "ABCDEFGHIJKLMNOP"
+        payload = {
+            "project_id": "project-a",
+            "source": 'config API_TOKEN="legacy-source-secret-123"',
+            "text": f"Documento antiguo\nAWS_ACCESS_KEY={legacy_secret}\nContenido útil",
+        }
+        response = SimpleNamespace(points=[SimpleNamespace(payload=payload)])
+        with (
+            patch.object(service, "ensure_collection"),
+            patch.object(service, "embed", new=AsyncMock(return_value=[0.1, 0.2, 0.3, 0.4])),
+            patch.object(service.client, "query_points", return_value=response) as query,
+        ):
+            context = await service.retrieve("consulta segura", "project-a")
+
+        self.assertNotIn(legacy_secret, context)
+        self.assertIn("[REDACTED:aws_access_key]", context)
+        self.assertIn("[REDACTED:credential_assignment]", context)
+        self.assertIn("Contenido útil", context)
+        self.assertEqual(
+            query.call_args.kwargs["query_filter"].must[0].key,
+            "project_id",
+        )
+        self.assertEqual(
+            query.call_args.kwargs["query_filter"].must[0].match.value,
+            "project-a",
+        )
+
+
+
 if __name__ == "__main__":
     unittest.main()
 
