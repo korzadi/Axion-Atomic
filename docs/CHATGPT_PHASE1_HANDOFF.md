@@ -107,3 +107,11 @@ El historial ya estaba implementado en `api/workspace_routes.py` y su tabla tien
 
 ### Siguiente tarea ascendente
 Continuar Fase 1 con aislamiento de fuentes/chunks RAG por proyecto en el backend vectorial de CI, sin modificar la lógica de negocio compartida con OpenCode. Antes de editar, comprobar qué tests y contratos existentes ya cubren ese alcance.
+
+### Ampliación HTTP/PostgreSQL de la misma regresión
+- Se amplió `tests/test_workspace_chat_history_postgres.py` con una prueba ASGI HTTP de `GET /workspace/chat/history`.
+- La ruta usa la membresía real consultada en PostgreSQL: el usuario A (viewer miembro) recibe su historial persistido; el usuario B, existente pero no miembro del proyecto, recibe 404 y no recibe el contenido privado.
+- Se mantiene el override únicamente de identidad de sesión para aislar el test; no se mockean `authorize_project`, la consulta de membresía ni el almacenamiento de historial.
+- El rate limiter se sustituye por no-op en esta prueba para que el alcance sea autorización + persistencia, sin depender de Redis ni consumir buckets reales.
+- Commit: `897bc110c20b28f76913ef3cf439c91fef3b0d61`.
+- El archivo ya estaba incluido en el job `postgres-migrations` por el commit `feaa9c7`; esta ampliación se ejecutará junto con la prueba de helpers.
