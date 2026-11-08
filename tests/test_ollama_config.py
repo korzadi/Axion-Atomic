@@ -107,6 +107,17 @@ class OllamaClientTests(unittest.IsolatedAsyncioTestCase):
             settings.ollama_request_timeout_seconds = 30
             self.assertTrue(await ollama.configured_chat_model_available())
 
+    async def test_model_availability_recognizes_ollama_latest_alias(self):
+        payload = {"models": [{"name": "atomic-code:latest"}]}
+        with patch.object(ollama, "settings") as settings, patch.object(
+            ollama.httpx, "AsyncClient", FakeTagsClient
+        ) as client:
+            client.return_value.payload = payload
+            settings.chat_model = "atomic-code"
+            settings.ollama_base_url = "http://ollama:11434"
+            settings.ollama_request_timeout_seconds = 30
+            self.assertTrue(await ollama.configured_chat_model_available())
+
     async def test_model_availability_is_false_when_configured_tag_is_missing(self):
         with patch.object(ollama, "settings") as settings, patch.object(
             ollama.httpx, "AsyncClient", FakeTagsClient
