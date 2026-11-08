@@ -55,8 +55,14 @@ async def _assert_project_has_no_unidentified_embeddings(project_id: str) -> Non
         )
         for point in points:
             payload = point.payload or {}
+            model_name = payload.get("embedding_model")
+            dimension = payload.get("embedding_dimension")
             if payload.get("project_id") == project_id and (
-                not payload.get("embedding_model") or not isinstance(payload.get("embedding_dimension"), int)
+                not isinstance(model_name, str)
+                or not model_name.strip()
+                or not isinstance(dimension, int)
+                or isinstance(dimension, bool)
+                or dimension <= 0
             ):
                 raise EmbeddingIdentityMigrationRequired(
                     "El proyecto contiene vectores históricos sin identidad de embeddings; "
