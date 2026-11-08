@@ -11,6 +11,7 @@
   const send = $("ws-send");
   let currentUser = null;
   let currentProject = null;
+  let currentProjectRole = null;
   let history = [];
   let busy = false;
   let agentBusy = false;
@@ -68,7 +69,13 @@
     if (pending.length) lines.push("", "Acciones que requieren aprobación:");
     agentOutput.textContent = lines.join("\\n");
     agentActions.replaceChildren();
+    if (pending.length && !["owner", "admin"].includes(currentProjectRole)) {
+      const notice = document.createElement("p");
+      notice.textContent = "La propuesta está pendiente. Solo el propietario o un administrador del proyecto puede aprobarla o rechazarla.";
+      agentActions.appendChild(notice);
+    }
     pending.forEach((action) => {
+      if (!["owner", "admin"].includes(currentProjectRole)) return;
       const row = document.createElement("div");
       row.style.cssText = "display:grid;gap:.35rem;padding:.65rem;border:1px solid var(--border-color, #8886);border-radius:8px";
       const label = document.createElement("p");
@@ -88,7 +95,7 @@
     else if (!pending.length) agentStatus.textContent = "Agente: " + (run.status || "en proceso") + ".";
   }
   async function decideAgentAction(proposalId, approved) {
-    if (!activeAgentRun || !currentProject || agentBusy) return;
+    if (!activeAgentRun || !currentProject || !["owner", "admin"].includes(currentProjectRole) || agentBusy) return;
     setAgentBusy(true);
     agentStatus.textContent = approved ? "Registrando aprobación…" : "Registrando rechazo…";
     try {
@@ -199,11 +206,16 @@
     items.forEach((project) => {
       const option = document.createElement("option");
       option.value = project.id;
+      option.dataset.role = project.role || "";
       option.textContent = project.name || "Proyecto";
       projectSelect.appendChild(option);
     });
     if (!items.length) {
       currentProject = null;
+      currentProjectRole = null;
+      activeAgentRun = null;
+      agentOutput.textContent = "";
+      agentActions.replaceChildren();
       setAgentBusy(false);
       setStatus("Crea tu primer proyecto para comenzar.");
       messages.replaceChildren();
@@ -212,6 +224,10 @@
     const preferred = preferredProjectId == null ? null : String(preferredProjectId);
     currentProject = items.some((item) => String(item.id) === preferred) ? preferred : String(items[0].id);
     projectSelect.value = currentProject;
+    currentProjectRole = items.find((item) => String(item.id) === currentProject)?.role || null;
+    activeAgentRun = null;
+    agentOutput.textContent = "";
+    agentActions.replaceChildren();
     setAgentBusy(false);
     await loadHistory();
     setStatus("Proyecto listo. Atomic Code está conectado al backend.");
@@ -233,6 +249,10 @@
 
   projectSelect.addEventListener("change", async () => {
     currentProject = projectSelect.value || null;
+    currentProjectRole = projectSelect.selectedOptions[0]?.dataset.role || null;
+    activeAgentRun = null;
+    agentOutput.textContent = "";
+    agentActions.replaceChildren();
     setAgentBusy(false);
     try { await loadHistory(); setStatus("Historial del proyecto cargado."); }
     catch (error) { setStatus(error.message); }
