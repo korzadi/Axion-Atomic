@@ -134,6 +134,8 @@ try {
       body = { reservations: [], ledger: [], executions: [], usage: [] };
     } else if (url.pathname === "/admin/billing/executions") {
       body = { executions: [], pagination: { total: 0, limit: 25, offset: 0, has_more: false } };
+    } else if (url.pathname === "/admin/billing/reservations/reverse") {
+      body = { reservation_id: "123e4567-e89b-12d3-a456-426655440000", reversed_credits: 100, idempotent: false };
     } else if (url.pathname.endsWith("/roles")) {
       body = method === "POST"
         ? { user_id: "user-1", role: "billing_readonly", status: "granted" }
@@ -153,8 +155,12 @@ try {
   await managePage.locator("#um-status").selectOption("disabled");
   await managePage.locator("#um-status-run").click();
   await managePage.getByText("Usuario user-1 ahora en estado disabled.").waitFor();
+  await managePage.locator("#billing-reversal-reservation").fill("123e4567-e89b-12d3-a456-426655440000");
+  await managePage.locator("#billing-reversal-reason").fill("Motivo auditable verificado en E2E");
+  await managePage.locator("#billing-reversal-run").click();
+  await managePage.getByText("Créditos revertidos: 100").waitFor();
   await managePage.close();
-  process.stdout.write("Axyron Atomic landing, admin MFA and user management browser E2E: passed\\n");
+  process.stdout.write("Axyron Atomic landing, admin MFA, user management and billing reversal browser E2E: passed\\n");
 } finally {
   await browser.close();
   await new Promise(resolve => server.close(resolve));

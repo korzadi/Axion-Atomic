@@ -18,3 +18,4 @@ knowledge/
 
 .env.backup-format
 .env.backup-mfa-*
+/node_modules/
