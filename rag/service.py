@@ -7,7 +7,7 @@ from functools import wraps
 import time
 import uuid
 
-from agent.secrets import find_secrets
+from agent.secrets import find_secrets, redact
 from qdrant_client import QdrantClient, models
 from api.config import settings
 from api.ollama import embed
@@ -372,8 +372,8 @@ async def retrieve(query: str, project_id: str, limit: int = 5):
             with_payload=True,
         )
         return "\\n\\n".join(
-            "[Source: " + str(h.payload.get("source", "unknown")) + "]\\n"
-            + str(h.payload.get("text", ""))
+            "[Source: " + redact(str(h.payload.get("source", "unknown"))) + "]\\n"
+            + redact(str(h.payload.get("text", "")))
             for h in result.points
             if h.payload and h.payload.get("project_id") == project_id
         )
