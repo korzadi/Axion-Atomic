@@ -12,7 +12,7 @@ from core.ollama_transport import OllamaTransport
 from rag.embedder import OllamaEmbedder
 from rag.store import Hit, InMemoryVectorStore, Point, QdrantStore, StoreConfigError
 
-S = {"cols": {}, "headers": [], "requests": []}
+S = {"cols": {}, "headers": [], "requests": [], "repeat_scroll_cursor": False}
 
 
 def match(payload, flt):
@@ -65,6 +65,8 @@ class Q(BaseHTTPRequestHandler):
             start = next((i + 1 for i, point in enumerate(points) if point["id"] == offset), 0)
             page = points[start:start + body["limit"]]
             next_offset = page[-1]["id"] if start + len(page) < len(points) and page else None
+            if S["repeat_scroll_cursor"] and offset is not None:
+                next_offset = offset
             return self._send(200, {"result": {"points": page, "next_page_offset": next_offset}})
         if sub == "/points/search":
             def cos(a, b):
@@ -150,6 +152,17 @@ class QdrantTests(Base):
         self.assertEqual(len(requests), 2)
         self.assertEqual(requests[0][2]["filter"]["must"][0]["key"], "project_id")
         self.assertEqual(requests[0][2]["filter"]["must"][0]["match"]["value"], "p1")
+
+    async def test_list_project_ids_fails_closed_on_repeated_scroll_cursor(self):
+        st = QdrantStore(self.url, "col", 4)
+        await st.ensure()
+        await st.upsert([
+            Point(f"p1-{i}", [1, 0, 0, 0], {"project_id": "p1", "path": "a.py"})
+            for i in range(260)
+        ])
+        S["repeat_scroll_cursor"] = True
+        with self.assertRaisesRegex(TransportError, "cursor de paginación repetido"):
+            await st.list_project_ids("p1")
 
     async def test_upsert_requires_complete_payload_before_any_http_write(self):
         st = QdrantStore(self.url, "col", 4); await st.ensure()
