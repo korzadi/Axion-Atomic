@@ -3,7 +3,7 @@
 **Rama de trabajo:** `agent/opencode-vps`
 **Fase activa:** 12 — QA y liberación V1.0 (desarrollo inverso 12 → 7)
 **Estado global:** EN DESARROLLO  
-**Implementación global estimada:** 63% (media simple de las 12 fases; no equivale a preparación productiva)
+**Implementación global estimada:** 64% (media simple de las 12 fases; no equivale a preparación productiva)
 **Preparación productiva:** 35% (requiere CI del HEAD, staging y configuración externa)
 
 > Regla: los porcentajes son estimaciones de implementación basadas en la matriz de aceptación. No certifican disponibilidad operativa. Solo se declara **verificada** una capacidad cuando existe una prueba reproducible aprobada para el HEAD indicado. Las fases 10 y 12 conservan bloqueos externos que impiden declarar la V1.0 liberada.
@@ -21,7 +21,7 @@
 | 7 | Archivos y sandbox | 65% | EN PROGRESO |
 | 8 | Administración | 80% | EN PROGRESO |
 | 9 | Créditos y facturación | 80% | EN PROGRESO |
-| 10 | Integración QvaPay | 25% | BLOQUEADA |
+| 10 | Integración QvaPay | 35% | EN PROGRESO |
 | 11 | Instalación y documentación | 55% | EN PROGRESO |
 | 12 | QA y liberación V1.0 | 60% | EN PROGRESO |
 
@@ -271,7 +271,7 @@ Continuar con Fase 11 (instalación y documentación): revisar preflight del ins
 - CI del HEAD: pendiente.
 
 ### Bloqueos de Fase 10 y Fase 9
-- QvaPay: no se implementa adaptador, webhook ni consulta de transacción porque el contrato oficial de Lightning Address sigue sin confirmación escrita. No se inventan endpoints ni firmas. Solo existe el gestor interno de órdenes y su verificación server-side preparada.
+- QvaPay: contrato oficial de Lightning Address confirmado y adaptador de cliente implementado con pruebas. El cobro sigue desactivado: faltan custodia del token del titular, persistencia de invoices, sincronización paginada, rutas de checkout, catálogo/precios aprobados y pruebas en sandbox oficial. No existe webhook firmado; no se inventan endpoints ni firmas.
 - Facturación: el catálogo comercial es `preview_only`, sin precios ni paquetes aprobados; no se activan cobros. La deuda pendiente es de producto/negocio, no de código inventable.
 
 ### E2E de navegador (Fase 12)
@@ -293,7 +293,7 @@ Continuar con Fase 11 (instalación y documentación): revisar preflight del ins
 - No se ejecutaron PostgreSQL real ni CI del HEAD. No se habilitan cobros ni facturación.
 
 ### Siguiente tarea
-Validar el job PostgreSQL de CI con las pruebas administrativas y de facturación; después revisar conciliación/reversos sin inventar precios ni el contrato QvaPay.
+Validar el job PostgreSQL de CI con las pruebas administrativas y de facturación; después revisar conciliación/reversos sin inventar precios ni endpoints de QvaPay.
 
 ## Checkpoint Fase 9 — reversión auditada de consumo (2026-11-08)
 
@@ -310,3 +310,21 @@ Validar el job PostgreSQL de CI con las pruebas administrativas y de facturació
 - `python3 -m pytest -q` — **885 passed, 10 skipped**.
 - `compileall`, sintaxis JS, E2E de navegador y `git diff --check` — OK.
 - CI del HEAD: pendiente. No se activan cobros, precios ni QvaPay.
+
+## Checkpoint Fase 10 — cliente oficial de QvaPay Lightning Address (2026-11-08)
+
+### Implementado
+- `api/qvapay_lightning.py`: cliente asíncrono para `GET /user/lightning-address`, LNURL `payRequest`, callback de invoice y `GET /coins`; transporte `httpx` inyectable para pruebas.
+- Validación de dirección `name@qvpay.me`, callback limitado a dominios oficiales de QvaPay, importes dentro de límites LNURL, comentario LUD-12 y conversión USD→sats con redondeo hacia arriba.
+- `match_payment` exige referencia, sats exactos y dirección; no confía solo en el comentario del pagador.
+- Configuración en `api/config.py`: `QVAPAY_ENABLED=false` por defecto, token como `SecretStr`, timeout positivo y dirección validada. Nunca se registra el token.
+- `docs/QVAPAY_INTEGRATION_STATUS.md` y `docs/QVAPAY_LIGHTNING_PAYMENT_FLOW.md` actualizados con el contrato oficial y sus límites.
+
+### Verificación
+- 13 pruebas nuevas en `tests/test_qvapay_lightning.py` con `httpx.MockTransport`.
+- `python3 -m pytest -q` — **898 passed, 10 skipped**.
+- `compileall`, sintaxis JS y `git diff --check` — OK.
+- No se usaron credenciales reales, no se crearon invoices reales y no se habilitaron cobros. CI del HEAD pendiente.
+
+### Siguiente tarea
+Persistencia de invoices y sincronización paginada de cobros ligada a órdenes internas, sin activar checkout hasta disponer de catálogo/precios aprobados y sandbox oficial.

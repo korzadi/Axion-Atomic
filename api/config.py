@@ -1,7 +1,7 @@
 import ipaddress
 from urllib.parse import urlsplit
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -93,6 +93,34 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
     smtp_ssl: bool = False
     email_from: str | None = None
+
+    # QvaPay Lightning Address: desactivado por defecto. El token del titular
+    # es un secreto de servidor y nunca debe registrarse ni exponerse al frontend.
+    qvapay_enabled: bool = False
+    qvapay_user_token: SecretStr | None = None
+    qvapay_lightning_address: str = "axionatomic@qvpay.me"
+    qvapay_request_timeout_seconds: float = 10.0
+
+    @field_validator("qvapay_lightning_address")
+    @classmethod
+    def require_qvapay_lightning_address(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        parts = normalized.split("@")
+        if (
+            len(parts) != 2
+            or parts[1] != "qvpay.me"
+            or not parts[0]
+            or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789._-" for char in parts[0])
+        ):
+            raise ValueError("QVAPAY_LIGHTNING_ADDRESS debe ser name@qvpay.me")
+        return normalized
+
+    @field_validator("qvapay_request_timeout_seconds")
+    @classmethod
+    def require_positive_qvapay_timeout(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("QVAPAY_REQUEST_TIMEOUT_SECONDS debe ser positivo")
+        return value
 
     # Redis Cache (RCache) es auxiliar: si Redis cae, el sistema usa Ollama sin caché.
     redis_url: str | None = None

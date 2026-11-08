@@ -34,12 +34,12 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | DB-02 | Datos | Restauración real de backup en entorno aislado | Backup pre-migration documentado | Pendiente |
 | BILL-01 | Facturación | Medición tokens en shadow mode | `inference_usage_events`; agregado por modelo en `/admin/billing/overview` | Implementada; no cobra con facturación desactivada |
 | BILL-02 | Facturación | Reservas, ledger, reversos e idempotencia conectados a inferencia | `workspace_chat`, ejecución durable, atestación, recuperación y reversión auditada de consumo liquidado | Implementada y probada con dobles; PostgreSQL real/Ollama pendiente |
-| PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada por propietario; integración técnica por validar | Bloqueada |
+| PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada; contrato oficial de Lightning Address verificado; adaptador de cliente y pruebas unitarias implementados. Persistencia, sincronización y rutas de checkout pendientes | Parcial; activación bloqueada por token, catálogo/precios y sandbox |
 | ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación/conciliación y gestión de roles/estado auditadas con CSRF; E2E de navegador de la gestión de usuarios ejecutado localmente | Parcial; PostgreSQL/E2E de recuperación pendientes |
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh` actualizado | Código publicado; CI pendiente |
 | OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución VPS pendiente |
 | OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador y documentación | Pendiente |
-| QA-01 | QA | Suite Python aprobada en HEAD evaluado | Rama `agent/opencode-vps`: `python3 -m pytest -q` → 885 pasan y 10 se omiten (PostgreSQL) con venv/local; CI del HEAD pendiente | Parcial; local aprobada, CI pendiente |
+| QA-01 | QA | Suite Python aprobada en HEAD evaluado | Rama `agent/opencode-vps`: `python3 -m pytest -q` → 898 pasan y 10 se omiten (PostgreSQL) con venv/local; CI del HEAD pendiente | Parcial; local aprobada, CI pendiente |
 | QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions | No confirmada para HEAD actual |
 | DOC-01 | Docs | README, AGENTS, instalación, seguridad y usuario alineados | Documentación del repo | Parcial |
 | REL-01 | Lanzamiento | Todas las puertas críticas aprobadas | Esta matriz | Bloqueada |
@@ -170,3 +170,12 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Pruebas: 10 contratos HTTP con motor simulado y 3 pruebas PostgreSQL añadidas a `test_billing_reservations_postgres.py` (cuota, lote comprado y estados no reversibles).
 - Verificación local: **885 passed, 10 skipped** (PostgreSQL); sintaxis JS y E2E de navegador aprobados. Las pruebas PostgreSQL nuevas no se ejecutaron localmente; CI del HEAD pendiente.
 - No se habilitan cobros ni checkout; la reversión es una operación administrativa auditada.
+
+## Revisión incremental de QvaPay Lightning Address — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Se verificó el contrato oficial de Lightning Address: `GET /user/lightning-address` con Bearer del titular, LNURL público en `qvpay.me`, callback oficial de invoice y `GET /coins` para BTC/USD.
+- Se confirmó que no existe webhook firmado específico de Lightning: la conciliación requiere consulta autenticada y paginada. El comentario LUD-12 no es autenticación; la correlación exige referencia, sats exactos, dirección y `transaction_uuid`.
+- Nuevo `api/qvapay_lightning.py`: cliente asíncrono con transporte inyectable, validación de callback oficial, conversión USD→sats, parseo de estado/cobros y `match_payment` conservador.
+- Nuevas 13 pruebas en `tests/test_qvapay_lightning.py` con `httpx.MockTransport`; cubren errores sin filtrar el token, límites LNURL, callback malicioso, precio BTC, conversión y emparejamiento.
+- Configuración desactivada por defecto: `QVAPAY_ENABLED=false`, token `SecretStr`, dirección validada y timeout positivo. No se solicitó ni registró ningún token real.
+- Verificación local: **898 passed, 10 skipped**; `compileall`, sintaxis JS y `git diff --check` correctos. Persisten pendientes persistencia de invoices, sincronización, rutas HTTP, catálogo/precios y pruebas en sandbox oficial; no hay cobros habilitados.
