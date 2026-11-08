@@ -107,10 +107,13 @@ class RepoIndexer:
                                          for i, v in zip(ids, vectors)])
                 await asyncio.to_thread(self.meta.replace_file, pid, rel, sha, revision, size, list(zip(ids, chunks)),
                                         datetime.now(timezone.utc).isoformat())
+                # SQL ya confirmó la nueva versión: el informe debe reflejar la
+                # indexación aunque falle la limpieza secundaria de vectores viejos.
+                rep.indexed.append(rel)
+                rep.chunks += len(chunks)
                 # Si la limpieza falla, los vectores anteriores quedan huérfanos
                 # pero el Retriever los descarta porque ya no existen en MetaStore.
                 await self.store.delete_ids(old_ids)
-                rep.indexed.append(rel); rep.chunks += len(chunks)
             except (AxionError, OSError, ValueError) as exc:
                 rep.errors.append(f"{rel}: {exc}")
                 seen.add(rel)                             # un error transitorio no debe borrar lo ya indexado
