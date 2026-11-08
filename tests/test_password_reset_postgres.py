@@ -64,6 +64,36 @@ def test_unknown_or_inactive_accounts_do_not_issue_reset_tokens():
         """), {"id": user_id, "email": email})
     assert issue_password_reset_token(engine=engine, email=email) is None
 
+
+def test_password_reset_revokes_every_active_session_atomically():
+    user_id, email = _active_user()
+    now = datetime.now(timezone.utc)
+    session_ids = [f"reset-session-{uuid.uuid4()}" for _ in range(3)]
+    with engine.begin() as conn:
+        for session_id in session_ids:
+            conn.execute(text("""
+                INSERT INTO user_sessions
+                    (id,user_id,token_hash,csrf_hash,created_at,expires_at,last_seen_at)
+                VALUES (:id,:user_id,:token_hash,:csrf_hash,:now,:expires,:now)
+            """), {
+                "id": session_id, "user_id": user_id,
+                "token_hash": uuid.uuid4().hex + uuid.uuid4().hex,
+                "csrf_hash": uuid.uuid4().hex + uuid.uuid4().hex,
+                "now": now, "expires": now + timedelta(hours=1),
+            })
+    issued = issue_password_reset_token(engine=engine, email=email)
+    assert issued is not None
+    assert consume_password_reset_token(
+        engine=engine, token=issued.token,
+        new_password="New-Strong-Password-123!",
+    ) is True
+    with engine.connect() as conn:
+        revoked = conn.execute(text("""
+            SELECT count(*) FROM user_sessions
+            WHERE user_id=:user_id AND revoked_at IS NOT NULL
+        """), {"user_id": user_id}).scalar_one()
+    assert revoked == len(session_ids)
+
 def test_malformed_token_and_weak_password_are_rejected():
     assert consume_password_reset_token(engine=engine, token="short", new_password="New-Strong-Password-123!") is False
     _, email = _active_user()
