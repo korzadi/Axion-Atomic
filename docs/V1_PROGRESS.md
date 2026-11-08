@@ -874,3 +874,13 @@ Conclusión: el procedimiento de rollback documentado funciona en producción re
 ### Estado honesto
 - Implementación ~90 % de criterios con código y CI verde; pruebas verificadas ~80 %; preparación productiva ~75 % (producción en `a2f41d0`; 15 commits de `main` pendientes de despliegue por el propietario; delta sin migraciones).
 - `REL-01` **bloqueada**: (1) buzón real; (2) token/catálogo QvaPay; (3) AGT-04. V1.0 no se declara liberada.
+
+## Despliegue controlado a `main = a298344` — 2026-11-08 (autorizado por el propietario)
+
+- PR #22 fusionado con autorización del propietario: `main = a298344`; CI 6/6 verde (run `42526094951`).
+- Ramas sincronizadas ff: `main` = `origin/agent/chatgpt` = `origin/agent/opencode-vps` = `a298344`.
+- Backup previo: `backups/pre-main-a298344-20261108T213805Z.dump` (0600, 297 objetos). Imágenes previas etiquetadas `axyron-atomic-api:rollback-a298344` y `axyron-atomic-frontend:rollback-a298344`.
+- Rebuild y recreación solo de la API (el frontend no cambió de contenido); postgres y redis intactos.
+- Verificación real: `/health` 6/6 ok; `/health/readiness` `ready` (auth/email/cookie/origin/MFA true; billing `shadow`); `/auth/me` 401; dominio público 200; assets servidos == repo (`cmp`); logs sin errores.
+- Contenido respecto al despliegue anterior: rollback test `replace_source`, docs QA/reconciliación y demás archivos de PR #22. Sin cambios de esquema ni migraciones (022/023 intactas).
+- `REL-01` sigue bloqueada (buzón real, QvaPay token/catálogo, AGT-04). V1.0 no se declara liberada.
