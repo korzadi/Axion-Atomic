@@ -1,32 +1,47 @@
-# Contrato común de vectores de embeddings
+# Contrato común de vectores e identidad de embeddings
 
 ## Hallazgo ARC-01
 
-Los dos pipelines RAG consumen Ollama por transportes distintos: el indexador de repositorios usa `OllamaEmbedder` sobre `/api/embed`, mientras Studio usa `api.ollama.embed` sobre `/api/embeddings`. Ambos configuraban la dimensión, pero la validación no era equivalente: se comprobaba principalmente el tamaño del vector y la cardinalidad del lote dependía del transporte.
+Los dos pipelines RAG consumen Ollama por transportes distintos: el indexador de repositorios usa `OllamaEmbedder` sobre `/api/embed`, mientras Studio usa `api.ollama.embed` sobre `/api/embeddings`.
 
-Un vector con `NaN`, infinito, booleanos o componentes no numéricos podía superar validaciones parciales y fallar más tarde al persistirse o consultarse.
+Compartir la validación numérica no garantizaba que ambos transportes hubieran solicitado el mismo modelo o que un runtime devolviera el modelo esperado. Tampoco había un objeto común para comparar la identidad lógica de un espacio vectorial.
 
-## Corrección
+## Contrato de vectores
 
-Se añadió `rag/vector_contract.py` como contrato puro compartido:
+`rag/vector_contract.py`:
 
-- exige dimensión positiva;
-- valida dimensión exacta;
+- exige dimensión positiva y exacta;
+- valida cardinalidad de lotes;
 - acepta únicamente componentes numéricos reales, excluyendo booleanos;
 - rechaza valores no finitos (`NaN`, `+Inf`, `-Inf`);
-- normaliza componentes a `float`;
-- valida también la cantidad de vectores de cada lote.
+- normaliza componentes a `float`.
 
-`OllamaEmbedder` aplica el contrato a cada lote antes de entregarlo al indexador. El adaptador de Studio aplica el mismo contrato a respuestas remotas y a valores recuperados de caché, antes de guardar o devolver el vector.
+`OllamaEmbedder` y el adaptador de Studio aplican el contrato antes de entregar, guardar o devolver vectores.
+
+## Identidad del espacio vectorial
+
+Se añade `rag/embedding_identity.py`:
+
+- normaliza el alias Ollama sin etiqueta a la forma canónica `:latest`;
+- conserva tags explícitos distintos como identidades diferentes;
+- valida nombre de modelo y dimensión positiva;
+- ofrece `EmbeddingIdentity.compatible_with` y `require_compatible_embeddings`, que fallan de forma cerrada ante modelo o dimensión incompatibles.
+
+El indexador de repositorios expone la identidad configurada en `OllamaEmbedder.identity`. Studio construye la misma identidad a partir de `EMBED_MODEL` y `EMBED_DIMENSION`; sus claves de RCache usan el nombre canónico y la dimensión, evitando duplicar o confundir aliases.
+
+Cuando la respuesta de `/api/embed` o `/api/embeddings` incluye un campo `model`, el transporte/adaptador comprueba que coincide con el modelo solicitado. Una discrepancia se rechaza antes de entregar o cachear el vector. Si el servidor no incluye ese campo, la comprobación de identidad de runtime no es posible en esa respuesta y se conserva la validación de dimensión/tipo/finitez.
 
 ## Regresión
 
 - `tests/test_rag_vector_contract.py`: dimensión, cardinalidad, tipos, valores no finitos y normalización.
-- `tests/test_api_embedding_contract.py`: impide cachear una respuesta remota inválida y rechaza una entrada de caché inválida.
-- `tests/test_rag_store_http.py`: conserva las pruebas HTTP de dimensión y lotes del indexador.
+- `tests/test_api_embedding_contract.py`: vectores/caché inválidos, rechazo de modelo remoto distinto y clave canónica.
+- `tests/test_rag_embedding_identity.py`: alias, tags, dimensiones, compatibilidad y respuesta del transporte de repositorios.
+- `tests/test_rag_store_http.py`: regresiones HTTP del indexador y Qdrant.
 
 ## Compatibilidad y límites
 
-No se cambia el modelo configurado, dimensión, endpoint, colección, contenido persistido ni estrategia de chunking. Los vectores históricos de Qdrant no se reescriben. La validación se aplica en el límite de generación/lectura de caché para impedir que vectores malformados nuevos o cacheados lleguen a los consumidores.
+No se cambia el modelo configurado, dimensión, endpoint, colección, contenido persistido ni estrategia de chunking. Los vectores históricos de Qdrant no se reescriben y no se elimina ni recrea ninguna colección.
 
-Esta tarea fortalece el contrato de vectores, pero no conecta todavía `RepoIndexer` con las rutas HTTP de Studio ni unifica sus estrategias de chunking y recuperación.
+La identidad común permite comparar configuraciones y cada pipeline valida el modelo que solicita. Sin embargo, `RepoIndexer` sigue siendo una clase construida externamente y no está conectada al runtime HTTP de Studio; no se afirma que hoy exista una única fábrica de configuración que fuerce la paridad de ambas instancias. Antes de compartir una colección en producción, el punto de composición debe invocar `require_compatible_embeddings` con las dos identidades efectivas. Además, si Ollama omite el modelo en su respuesta, el cliente no puede demostrar qué artefacto respondió únicamente con ese payload.
+
+No se migran datos ni se cambia el contrato de payload para evitar mezclar silenciosamente puntos históricos con una identidad que no esté registrada en ellos.
