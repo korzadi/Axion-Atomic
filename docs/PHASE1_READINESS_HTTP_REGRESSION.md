@@ -38,3 +38,10 @@ Las rutas temporales se retiran al finalizar cada prueba. No se cambia la lógic
 
 - Implementación publicada en `agent/chatgpt`.
 - CI de `10b0f7a` (run `42497277051`): Python, imagen, Qdrant y browser E2E terminaron en success; el job PostgreSQL figura como `cancelled` pese a que sus pasos de migración e idempotencia aparecen completados. No se considera una ejecución 5/5 aprobada. CI del HEAD nuevo `857cad6`: pendiente de aparecer y revisarse.
+
+## Configuración OAuth/Qdrant — origen HTTPS estricto
+
+- `api/config.py:is_public_https_origin` rechaza ahora espacios, tabs, saltos de línea y controles ASCII dentro del origen antes de llamar a `urlsplit`.
+- Motivo: `urllib.parse.urlsplit` elimina tabs y saltos de línea incrustados; no se debe aceptar una cadena malformada normalizándola silenciosamente a otro hostname.
+- Regresiones en `tests/test_config.py` para tabs y saltos de línea en QDRANT_URL y OAUTH_PUBLIC_BASE_URL.
+- No se cambia el origen configurado válido ni se modifica ningún secreto.
