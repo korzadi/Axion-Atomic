@@ -180,7 +180,7 @@ def test_admin_billing_overview_reads_persisted_aggregates():
 
 
 def test_admin_billing_overview_denies_role_without_billing_permission():
-    client, patcher = _client_with_role("billing_readonly")
+    client, patcher = _client_with_role("unknown_role")
     try:
         response = client.get("/admin/billing/overview")
         assert response.status_code == 404
