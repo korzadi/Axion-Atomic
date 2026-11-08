@@ -112,13 +112,24 @@ class RepoIndexer:
                 except (AxionError, OSError, ValueError) as exc:
                     rep.errors.append(f"{gone}: {exc}")
         try:
-            rep.orphaned_removed = await self.reconcile_project(pid)
+            rep.orphaned_removed = await self._reconcile_project(pid)
         except (AxionError, OSError, ValueError) as exc:
             rep.errors.append(f"reconciliación de vectores huérfanos: {exc}")
         return rep
 
     async def reconcile_project(self, project_id: str) -> int:
-        """Elimina solo vectores del proyecto que ya no tienen fragmento SQL vigente."""
+        """Serializa la reconciliación con indexación y eliminación del mismo proyecto."""
+        if not project_id or not isinstance(project_id, str):
+            raise ValueError("project_id es obligatorio")
+        lock = self._locks.setdefault(project_id, asyncio.Lock())
+        async with lock:
+            return await self._reconcile_project(project_id)
+
+    async def _reconcile_project(self, project_id: str) -> int:
+        """Elimina solo vectores del proyecto que ya no tienen fragmento SQL vigente.
+
+        Método interno: el llamador debe poseer el lock del proyecto.
+        """
         if not project_id or not isinstance(project_id, str):
             raise ValueError("project_id es obligatorio")
         canonical_ids = await asyncio.to_thread(self.meta.list_project_chunk_ids, project_id)
