@@ -172,3 +172,16 @@ Los porcentajes heredados de la tabla anterior corresponden al orden anterior de
 
 ### Siguiente tarea
 - Conseguir una ejecución de CI reproducible para el HEAD actual y resolver fallos; después completar las pruebas de contrato/persistencia ARC-01, API-02 y DB-01 sin tocar datos ni servicios de producción.
+
+
+## Cobertura adicional de fallos de infraestructura — 2026-11-08
+
+- Se amplió `tests/test_api_health.py` con dos escenarios de fallo reproducibles: conexión PostgreSQL no disponible y respuesta de inventario de modelos Ollama malformada.
+- La prueba PostgreSQL exige que el chequeo marque `database=unavailable`, mantenga el diagnóstico de Ollama y responda HTTP 503.
+- La prueba de inventario malformado exige que Ollama pueda estar accesible, pero que ambos modelos requeridos se clasifiquen como no disponibles y readiness falle con HTTP 503.
+- Commit: `d28cd5b64dd90b30a470b8c707934885d44277be` — `test: cover database outage and malformed model inventory`.
+- Verificación de implementación: los dos casos y sus dobles están publicados en `main`; la lógica actual de `api/main.py` los maneja mediante el control de excepción de DB y la validación defensiva de `_ollama_model_names`.
+- Ejecución: no se pudo ejecutar pytest en esta sesión; no se marcan como aprobadas. Estado CI consultado para commits previos: sin runs/status publicados por el conector disponible; el HEAD nuevo aún requiere CI.
+- No se cambió código de producción ni se tocó PostgreSQL, Docker, VPS, frontend o servicios externos.
+
+**Siguiente tarea:** revisar y fortalecer la matriz de migraciones PostgreSQL en CI aislada, incluyendo idempotencia y contratos de esquema; no ejecutar migraciones sobre la base de producción.
