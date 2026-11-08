@@ -39,7 +39,7 @@ def test_collection_readiness_check_is_cached_across_concurrent_requests(monkeyp
         assert not thread.is_alive()
 
     assert fake.calls == 1
-    assert [item['field_name'] for item in fake.index_calls] == ['project_id', 'source_id']
+    assert [item['field_name'] for item in fake.index_calls] == ['project_id', 'source_id', 'embedding_model', 'embedding_dimension']
 
 
 def test_collection_readiness_check_revalidates_after_interval(monkeypatch):
@@ -60,4 +60,4 @@ def test_collection_readiness_check_revalidates_after_interval(monkeypatch):
     clock[0] += 2
     service.ensure_collection()
     assert fake.calls == 2
-    assert len(fake.index_calls) == 4
+    assert len(fake.index_calls) == 8

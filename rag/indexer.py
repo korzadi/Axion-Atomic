@@ -1,6 +1,7 @@
 """Indexador incremental de repositorios. Respeta .gitignore/.axionignore y archivos sensibles (vía Workspace),
 NO indexa archivos que contengan secretos, y elimina referencias obsoletas (archivos borrados o ahora con secretos)."""
 import asyncio
+from contextlib import asynccontextmanager
 import hashlib
 import uuid
 from dataclasses import dataclass, field
@@ -12,6 +13,7 @@ from agent.workspace import Workspace
 from core.errors import AxionError
 from rag.chunker import chunk_file
 from rag.embedder import Embedder
+from rag.embedding_identity import require_embedder_store_compatibility
 from rag.meta import MetaStore
 from rag.store import Point, VectorStore
 
@@ -32,6 +34,7 @@ class IndexReport:
     chunks: int = 0
     errors: list[str] = field(default_factory=list)
     truncated: bool = False
+    orphaned_removed: int = 0
 
 
 def embed_text(rel: str, symbol: str | None, text: str) -> str:
@@ -40,13 +43,25 @@ def embed_text(rel: str, symbol: str | None, text: str) -> str:
 
 class RepoIndexer:
     def __init__(self, embedder: Embedder, store: VectorStore, meta: MetaStore, max_files: int = 5000):
+        require_embedder_store_compatibility(embedder, store)
         self.embedder, self.store, self.meta, self.max_files = embedder, store, meta, max_files
         self._locks: dict[str, asyncio.Lock] = {}
 
+    @asynccontextmanager
+    async def _project_guard(self, project_id: str):
+        """Combina exclusión local con advisory lock si MetaStore usa PostgreSQL."""
+        lock = self._locks.setdefault(project_id, asyncio.Lock())
+        async with lock:
+            distributed_lock = getattr(self.meta, "project_lock", None)
+            if callable(distributed_lock):
+                async with distributed_lock(project_id):
+                    yield
+            else:
+                yield
+
     async def index_project(self, ws: Workspace) -> IndexReport:
         pid = ws.project_id
-        lock = self._locks.setdefault(pid, asyncio.Lock())
-        async with lock:
+        async with self._project_guard(pid):
             return await self._index(ws)
 
     async def _index(self, ws: Workspace) -> IndexReport:
@@ -85,22 +100,64 @@ class RepoIndexer:
                     continue
                 vectors = await self.embedder.embed([embed_text(rel, c.symbol, c.text) for c in chunks])   # primero embeber: si falla, no se toca nada
                 ids = [str(uuid.uuid5(NS, f"{pid}|{rel}|{sha}|{c.idx}")) for c in chunks]
-                await self.store.delete_path(pid, rel)
+                # Conservar la versión anterior hasta que la nueva esté publicada
+                # y sus metadatos hayan quedado confirmados en la transacción SQL.
+                old_ids = await asyncio.to_thread(self.meta.list_file_chunk_ids, pid, rel)
                 await self.store.upsert([Point(i, v, {"project_id": pid, "path": rel, "chunk_id": i, "sha256": sha})
                                          for i, v in zip(ids, vectors)])
                 await asyncio.to_thread(self.meta.replace_file, pid, rel, sha, revision, size, list(zip(ids, chunks)),
                                         datetime.now(timezone.utc).isoformat())
+                # Si la limpieza falla, los vectores anteriores quedan huérfanos
+                # pero el Retriever los descarta porque ya no existen en MetaStore.
+                await self.store.delete_ids(old_ids)
                 rep.indexed.append(rel); rep.chunks += len(chunks)
             except (AxionError, OSError, ValueError) as exc:
                 rep.errors.append(f"{rel}: {exc}")
                 seen.add(rel)                             # un error transitorio no debe borrar lo ya indexado
         if not rep.truncated:                             # con recorrido incompleto no se borra nada
             for gone in set(existing) - seen:
-                await self.store.delete_path(pid, gone)
-                await asyncio.to_thread(self.meta.delete_file, pid, gone)
-                rep.removed.append(gone)
+                try:
+                    old_ids = await asyncio.to_thread(self.meta.list_file_chunk_ids, pid, gone)
+                    # SQL es la fuente canónica: quitar primero los metadatos.
+                    # Si falla la limpieza vectorial, reconcile_project reintentará.
+                    await asyncio.to_thread(self.meta.delete_file, pid, gone)
+                    rep.removed.append(gone)
+                    await self.store.delete_ids(old_ids)
+                except (AxionError, OSError, ValueError) as exc:
+                    rep.errors.append(f"{gone}: {exc}")
+        try:
+            rep.orphaned_removed = await self._reconcile_project(pid)
+        except (AxionError, OSError, ValueError) as exc:
+            rep.errors.append(f"reconciliación de vectores huérfanos: {exc}")
         return rep
 
+    async def reconcile_project(self, project_id: str) -> int:
+        """Serializa la reconciliación con indexación y eliminación del mismo proyecto."""
+        if not project_id or not isinstance(project_id, str):
+            raise ValueError("project_id es obligatorio")
+        async with self._project_guard(project_id):
+            return await self._reconcile_project(project_id)
+
+    async def _reconcile_project(self, project_id: str) -> int:
+        """Elimina solo vectores del proyecto que ya no tienen fragmento SQL vigente.
+
+        Método interno: el llamador debe poseer el lock del proyecto.
+        """
+        if not project_id or not isinstance(project_id, str):
+            raise ValueError("project_id es obligatorio")
+        canonical_ids = await asyncio.to_thread(self.meta.list_project_chunk_ids, project_id)
+        vector_ids = await self.store.list_project_ids(project_id)
+        orphaned = sorted(vector_ids - canonical_ids)
+        if orphaned:
+            await self.store.delete_ids(orphaned)
+        return len(orphaned)
+
     async def remove_project(self, project_id: str) -> None:
-        await self.store.delete_project(project_id)
-        await asyncio.to_thread(self.meta.delete_project_index, project_id)
+        if not project_id or not isinstance(project_id, str):
+            raise ValueError("project_id es obligatorio")
+        async with self._project_guard(project_id):
+            # SQL es la fuente canónica: retirar primero la visibilidad del índice.
+            # Si Qdrant falla, los vectores quedan huérfanos e invisibles al Retriever;
+            # reconcile_project puede eliminarlos de forma segura más tarde.
+            await asyncio.to_thread(self.meta.delete_project_index, project_id)
+            await self.store.delete_project(project_id)

@@ -105,11 +105,28 @@ Garantías del script:
 - Usa `--no-owner --no-privileges --exit-on-error`, no elimina contenedores ni volúmenes y no imprime secretos.
 - Requiere la confirmación exacta `RESTORE <base>`.
 
-La prueba de restauración real debe ejecutarse en un contenedor/base efímeros y con autorización explícita. Crear el contenedor de prueba, restaurar y destruirlo es una operación de infraestructura separada del despliegue; este repositorio solo aporta y prueba el contrato del script con un Docker simulado.
+El script de restauración real debe ejecutarse siempre sobre un contenedor/base efímeros y con autorización explícita. El 2026-11-08 se ejecutó un simulacro completo sobre un contenedor PostgreSQL 16-alpine desechable y publicado solo en `127.0.0.1`: se restauró `backups/pre-frontend-upgrade-20261108T001710Z.dump` (41 tablas de usuario; `schema_migrations` hasta `021`) y después se aplicó la migración `022_agent_run_cancellation` con `python -m api.migrate` (`schema_migrations` quedó en 22, sin errores de checksum; una segunda ejecución no aplicó nada). El contenedor y la copia restaurada se eliminaron al finalizar. Producción no se tocó; el backup original permanece en `backups/`.
 
 ## Actualización segura de API y frontend
 
 `bash scripts/install_vps.sh --upgrade-frontend` exige confirmación exacta (`ACTUALIZAR AXYRON FRONTEND`), verifica que PostgreSQL, Redis, API y frontend pertenezcan al proyecto y estén en ejecución, crea un backup previo y un backup privado de PostgreSQL, y solo reconstruye/levanta API y frontend. No recrea PostgreSQL, Redis, volúmenes ni `.env`. Si la API no responde o falla la carga de la página principal o de sus assets, se detiene conservando el backup.
+
+## Si algo falla tras una actualización
+
+- Conserva el backup `pre-frontend-upgrade-*.dump` más reciente y no borres volúmenes.
+- Sirve un retorno de versión verificado en un contenedor desechable con `restore_postgres.sh`; no se implementa rollback destructivo automático.
+- Tras restaurar y verificar esquema y datos en el entorno aislado, diseña la vuelta al stack anterior como una operación separada y autorizada; no la improvises en producción.
+
+## Mantenimiento rutinario
+
+- **Backups:** los flujos `--deploy` y `--upgrade-frontend` crean `pg_dump` automáticamente antes de migrar/actualizar. Programa backups periódicos fuera de esos flujos (por ejemplo `pg_dump -Fc` desde el contenedor PostgreSQL) conservándolos con permisos 600 y cifrado en reposo.
+- **Simulacro de restauración:** al menos una vez por versión mayor, restaura el backup más reciente en un contenedor desechable (`restore_postgres.sh`) y verifica `schema_migrations` y el conteo de tablas; documenta el resultado.
+- **Health:** liveness `/health/live`; salud integral `/health` (DB, Ollama, modelos, Qdrant); preparación `/health/readiness` (estado booleano de AUTH/MFA/email/billing, sin secretos).
+- **Logs:** `docker compose --project-name axyron-atomic -f compose.yaml logs --tail=100 api` para diagnóstico; no pegues valores de `.env` en incidencias.
+- **Espacio y recursos:** vigila `df -h`, `docker system df` y el crecimiento de `workspace/` y `knowledge/`; no uses `docker system prune --volumes`.
+- **Migraciones:** solo mediante `python -m api.migrate` fuera de producción con autorización; nunca edites migraciones ya aplicadas (el checksum lo impide).
+- **Actualización de dependencias:** revisa `requirements.txt` (pines exactos, `cryptography` acotado), ejecuta `pip check` y `python3 -m pytest -q` antes de proponer cambios.
+- **Secretos:** rotación de `POSTGRES_PASSWORD`, `API_KEY`, tokens de Qdrant/MFA/QvaPay solo con un plan explícito; nunca en Git ni en tickets.
 
 ## Recuperación
 

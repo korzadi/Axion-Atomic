@@ -12,7 +12,7 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 
 | ID | Área | Criterio | Evidencia inspeccionada | Estado |
 |---|---|---|---|---|
-| ARC-01 | Arquitectura | Contratos API, frontend, DB y RAG coherentes | `api/main.py`, routers, Compose | Parcial |
+| ARC-01 | Arquitectura | Contratos API, frontend, DB y RAG coherentes | `api/main.py`, routers, Compose; contrato homogéneo `project_id`/`path` en stores RAG y validación de lote previa a escritura (commit `31d44e3`) | Parcial |
 | API-01 | API | Health DB/Ollama/modelos/Qdrant/Redis | VPS devolvió 6/6 OK el 07-11-2026 | Verificada en VPS en ese momento |
 | API-02 | API | Errores de capacidad/pool controlados | Handlers en `api/main.py` | Implementada; prueba HEAD pendiente |
 | STU-01 | Studio | Proyectos autenticados | `/auth/projects` y SPA | Parcial; AUTH desactivada operativamente |
@@ -30,17 +30,17 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | SEC-02 | Seguridad | MFA, keyring, recuperación y rotación probados | `api/mfa.py`, migración MFA | Bloqueada hasta pruebas E2E y plan de claves |
 | SEC-03 | Seguridad | OAuth GitHub/Google y correo probados | Rutas OAuth/email | Bloqueada por configuración y prueba externa |
 | SEC-04 | Seguridad | Matriz HTTP de roles por endpoint | `authorize_project`, workspace tests | Parcial |
-| DB-01 | Datos | Migraciones reproducibles en DB aislada | Migraciones y job PostgreSQL | CI histórica; HEAD pendiente |
-| DB-02 | Datos | Restauración real de backup en entorno aislado | Backup pre-migration documentado | Pendiente |
+| DB-01 | Datos | Migraciones reproducibles en DB aislada | Migraciones y job PostgreSQL | Verificada para `c41f490` (CI `42488024013` + migraciones 001→023 desde cero + simulacro de restauración y migración 022) |
+| DB-02 | Datos | Restauración real de backup en entorno aislado | `scripts/restore_postgres.sh` + simulacro ejecutado el 2026-11-08: backup real restaurado (41 tablas; `schema_migrations` 021) y migración 022 aplicada con el migrador real; contenedor desechable eliminado | Verificada (entorno desechable); falta ensayarla en staging |
 | BILL-01 | Facturación | Medición tokens en shadow mode | `inference_usage_events`; agregado por modelo en `/admin/billing/overview` | Implementada; no cobra con facturación desactivada |
 | BILL-02 | Facturación | Reservas, ledger, reversos e idempotencia conectados a inferencia | `workspace_chat`, ejecución durable, atestación, recuperación y reversión auditada de consumo liquidado | Implementada y probada con dobles; PostgreSQL real/Ollama pendiente |
-| PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada; contrato oficial de Lightning Address verificado; adaptador de cliente y pruebas unitarias implementados. Persistencia, sincronización y rutas de checkout pendientes | Parcial; activación bloqueada por token, catálogo/precios y sandbox |
-| ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación/conciliación y gestión de roles/estado auditadas con CSRF; E2E de navegador de la gestión de usuarios ejecutado localmente | Parcial; PostgreSQL/E2E de recuperación pendientes |
+| PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada; contrato oficial verificado; cliente adaptador; persistencia de invoices (migración 023) y conciliación paginada idempotente con pruebas unitarias y PostgreSQL | Parcial; checkout, rutas HTTP y cobros reales bloqueados por catálogo/precios y sandbox oficial |
+| ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación/conciliación y gestión de roles/estado auditadas con CSRF; pruebas PostgreSQL de gestión de usuarios y roles (CI verde); E2E de navegador de gestión de usuarios, reversión y recuperación de facturación (CI verde) | Verificada para `1db1d32` a nivel de backend/CI local; pendiente validación en staging |
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh` actualizado | Código publicado; CI pendiente |
 | OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución VPS pendiente |
-| OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador y documentación | Pendiente |
-| QA-01 | QA | Suite Python aprobada en HEAD evaluado | Rama `agent/opencode-vps`: `python3 -m pytest -q` → 898 pasan y 10 se omiten (PostgreSQL) con venv/local; CI del HEAD pendiente | Parcial; local aprobada, CI pendiente |
-| QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions | No confirmada para HEAD actual |
+| OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador, `restore_postgres.sh` y simulacro de restauración real; sección de mantenimiento añadida | Restore verificado; upgrade/rollback aún no ensayados aislados |
+| QA-01 | QA | Suite Python aprobada en HEAD evaluado | `agent/opencode-vps` `08b6e65`: `pytest -q` → 911 passed, 11 skipped; CI `42485697750` green en `5e55582` (python-tests incluido) | Verificada local y en CI para `c41f490` (run `42488024013`) |
+| QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions: `42485697750` sobre `5e55582` — studio-browser-e2e, container-image-build, postgres-migrations, qdrant-cloud-integration, python-tests: success | Verificada para `5e55582` y `c41f490` (run `42488024013`) |
 | DOC-01 | Docs | README, AGENTS, instalación, seguridad y usuario alineados | Documentación del repo | Parcial |
 | REL-01 | Lanzamiento | Todas las puertas críticas aprobadas | Esta matriz | Bloqueada |
 
@@ -179,3 +179,69 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Nuevas 13 pruebas en `tests/test_qvapay_lightning.py` con `httpx.MockTransport`; cubren errores sin filtrar el token, límites LNURL, callback malicioso, precio BTC, conversión y emparejamiento.
 - Configuración desactivada por defecto: `QVAPAY_ENABLED=false`, token `SecretStr`, dirección validada y timeout positivo. No se solicitó ni registró ningún token real.
 - Verificación local: **898 passed, 10 skipped**; `compileall`, sintaxis JS y `git diff --check` correctos. Persisten pendientes persistencia de invoices, sincronización, rutas HTTP, catálogo/precios y pruebas en sandbox oficial; no hay cobros habilitados.
+
+## Revisión incremental QA/QvaPay — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- CI del HEAD previo `5e55582690891a66a002852b29aa28ae7f54fb63` confirmada en verde (run `42485697750`): studio-browser-e2e, postgres-migrations, qdrant-cloud, container-image-build y python-tests. Sustituye la anotación anterior «CI no confirmada» **para ese SHA**.
+- Suite local sobre el árbol de trabajo: **911 passed, 11 skipped** (PostgreSQL omitidos localmente); `compileall`, sintaxis JS, `pip check` y `git diff --check` correctos.
+- **Simulacro de restauración real (DB-02):** contenedor PostgreSQL 16-alpine desechable publicado solo en `127.0.0.1`; `backups/pre-frontend-upgrade-20261108T001710Z.dump` restaurado con `scripts/restore_postgres.sh` (41 tablas de usuario, `schema_migrations` hasta `021`); migración `022_agent_run_cancellation` aplicada con `python -m api.migrate`; segunda ejecución del migrador aplicó nada; contenedor y copia eliminados al terminar. Producción intacta.
+- **QvaPay (PAY-01):** migración `023_qvapay_lightning_invoices.sql` (`payment_invoices`, una invoice abierta por orden, referencia LNURL unguessable, índice parcial) y `api/qvapay_settlement.py` (persistencia con supersede, paginación de 20 cobros por página con deduplicación y tope de páginas, conciliación que exige referencia + sats exactos + destinatario + `transaction_uuid` y delega en `confirm_verified_payment`). Pruebas unitarias (5) y PostgreSQL (8); el job `postgres-migrations` de CI ahora ejecuta `tests/test_qvapay_settlement_postgres.py` junto a las migraciones; matriz PostgreSQL completa verificada localmente en instancia desechable: **70 passed**.
+- Verificación de instalación reproducida localmente: migraciones 001→023 aplican limpiamente desde cero en PostgreSQL 16-alpine desechable; idempotencia confirmada.
+- REL-01 permanece **bloqueada**: AUTH/MFA sin habilitar en producción, sandbox sin daemon dedicado (AGT-04), catálogo/precios y sandbox oficial QvaPay, restauración/backup en staging, y validación manual en navegador pendientes. No se declara la V1.0 liberada.
+- No se ejecutaron pagos reales, despliegues, migraciones en producción, builds de imágenes ni cambios de infraestructura.
+
+## Revisión incremental administración y E2E — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- E2E de navegador ampliado (Playwright 1.58.2/Chromium): gestión de roles/estado, reversión auditada de consumo liquidado y recuperación auditada de liquidaciones, con confirmaciones y resultados accesibles; todo con backend simulado.
+- ADM-01 pasa a verificada a nivel backend/CI (PostgreSQL incluido); falta validación E2E contra staging real.
+- Herramientas: `/node_modules/` añadido a `.gitignore`; `npm install --no-save` local como en CI.
+- CI `42488531176` (`68ffa13`) y `42488645522` (`1db1d32`): los cinco jobs en verde.
+- Expiración automática de órdenes QvaPay pendientes vencidas y de sus invoices abiertas (evento `expired`, idempotente) verificada en instancia PostgreSQL desechable y en CI (`postgres-migrations`: 74 passed).
+
+## Revisión incremental RAG — contrato de payload y atomicidad de lote (8 de noviembre de 2026)
+
+- Hallazgo ARC-01: `InMemoryVectorStore.upsert` exigía `project_id` y `path`, mientras `QdrantStore.upsert` solo exigía `project_id`. Los dos backends aceptaban contratos distintos para la misma interfaz `VectorStore`.
+- Corrección en `rag/store.py`: validación común de `project_id` y `path` como cadenas no vacías, aplicada por ambos stores.
+- La validación ahora recorre el lote completo antes de mutar memoria o enviar cualquier batch HTTP a Qdrant. Un elemento inválido al final de un lote grande ya no deja publicados los primeros 64 puntos.
+- Regresiones en `tests/test_rag_store_http.py`: payload ausente/inválido, elemento inválido en el último segmento de un lote mayor de 64, ausencia de escrituras parciales y consistencia del backend en memoria.
+- Commits: `1aa749608e59402e0f7ccee7bd634b93b1b91fb9` (implementación) y `31d44e31238095c2af69d96063270f77d9685aa1` (regresiones).
+- Verificación: cambios publicados en `agent/chatgpt`; pytest y CI de estos commits todavía no se han ejecutado/confirmado. No se declara ARC-01 cerrado.
+- Alcance: no se cambió esquema SQL, migraciones, frontend, configuración externa ni datos de Qdrant; no se ejecutó ninguna operación contra servicios reales.
+
+
+## Protección de la versión RAG durante reindexación (8 de noviembre de 2026)
+
+- Hallazgo ARC-01: `RepoIndexer` borraba todos los vectores del archivo antes de publicar la versión nueva. Un error de Qdrant durante `upsert` podía dejar sin vectores el archivo aunque los metadatos SQL conservaran la versión anterior.
+- Corrección: la indexación obtiene los IDs anteriores por `project_id` y `path`, publica los nuevos vectores, confirma `MetaStore.replace_file` (transacción SQL) y solo entonces elimina los IDs sustituidos.
+- `VectorStore` incorpora `delete_ids`, implementado en memoria y Qdrant con selector explícito de IDs; el filtro de proyecto se mantiene en la creación/consulta y los IDs de limpieza provienen de una consulta SQL acotada al proyecto y ruta.
+- Regresiones: fallo de publicación conserva vectores y SHA anteriores; borrado selectivo de IDs probado en los dos backends; las pruebas de pipeline existentes siguen verificando reemplazo normal sin huérfanos.
+- Commits: `e8b14e9` (protocolo y backends), `a69947e` (consulta SQL de IDs), `73d7a98` (orden seguro de reemplazo), `7405270` y `5674b74` (regresiones).
+- CI del cambio: pendiente. La ejecución anterior del PR #6 (`42486774940`) aprobó todos los trabajos, pero no incluye estos commits posteriores.
+- Riesgo residual controlado: si falla la limpieza después de confirmar los metadatos nuevos, los vectores antiguos pueden quedar huérfanos; el Retriever los ignora al no existir sus IDs en `MetaStore`. No se borran datos vigentes ni se amplía el alcance fuera del proyecto/ruta.
+
+- Primera CI del reemplazo seguro (HEAD `073bca6`): 909 passed, 10 skipped y 1 fallida. El único fallo era una aserción del test simulado que comparaba la ruta HTTP sin contemplar `?wait=true`; la operación de borrado selectivo sí eliminó los IDs esperados. Ajuste de la aserción publicado en `b36fd8d`; nueva CI pendiente.
+
+- Regresión adicional `test_cleanup_failure_keeps_new_metadata_and_retriever_ignores_old_vectors` (`36a3b70`): simula fallo de limpieza posterior al commit SQL; verifica que los metadatos nuevos permanecen, que la recuperación señala las referencias obsoletas y que ningún fragmento antiguo llega al resultado. La CI de este commit queda pendiente.
+
+
+## Reconciliación de vectores huérfanos RAG (8 de noviembre de 2026)
+
+- Hallazgo ARC-01: la eliminación posterior a una reindexación podía fallar transitoriamente y dejar vectores huérfanos. El Retriever ya los ignoraba por falta de metadatos, pero no existía un mecanismo de reparación automática.
+- Implementación: `MetaStore.list_project_chunk_ids` obtiene los IDs SQL canónicos por proyecto; `VectorStore.list_project_ids` enumera los IDs vectoriales del mismo proyecto. Qdrant usa `POST /points/scroll` con filtro obligatorio `project_id`, paginación de 256 puntos y sin recuperar payloads ni vectores; memoria usa filtro equivalente.
+- `RepoIndexer.reconcile_project` calcula `vector_ids - canonical_ids` y elimina únicamente esos IDs. La reconciliación se ejecuta al final de cada indexación, incluso después de un fallo de limpieza por archivo, para reintentar huérfanos en la misma ejecución. Un fallo de enumeración/limpieza queda registrado en `IndexReport.errors`, sin borrar metadatos ni vectores canónicos.
+- Regresiones: paginación Qdrant en más de 256 puntos; filtro de proyecto; consulta SQL aislada; fallo de limpieza de una vez y reparación automática; Retriever sin advertencias de referencias obsoletas tras reparación.
+- Commits: `79de8af` (listado vectorial por proyecto), `592184a` (IDs canónicos SQL), `98ece52` (reconciliador), `6454335` (paginación Qdrant) y `87db339` (regresiones).
+- CI: la ejecución del HEAD previo `d5c6544` terminó correctamente; estos commits requieren una nueva CI. No se ejecutó Qdrant real.
+- Alcance de seguridad: reconciliación limitada a `project_id`; nunca elimina IDs de otro proyecto ni elimina IDs que sigan presentes en SQL.
+
+- Extensión de seguridad en borrado de archivos eliminados/ahora sensibles: el indexador captura primero los IDs antiguos, elimina los metadatos SQL canónicos y después solicita el borrado vectorial selectivo. Si la limpieza falla, la reconciliación del final de la indexación vuelve a intentarlo. Se añade `test_removed_file_cleanup_failure_is_reconciled` para verificar que no se conserva un vector sin archivo SQL. Commits `4150eea`, `0b28b25` y `2eb4bf5`.
+
+
+## Verificación CI y eliminación segura de proyectos RAG (8 de noviembre de 2026)
+
+- CI completa del HEAD `14fad519a0a381f8fee199741dab6dc3c6324242`, run `42487560721`: los cinco jobs terminaron `success` (Python tests, Qdrant Cloud integration, Studio browser E2E, PostgreSQL migrations y container image build). Esta evidencia corresponde exclusivamente a ese SHA.
+- Nueva revisión ARC-01: `RepoIndexer.remove_project` eliminaba primero los vectores y después los metadatos SQL. Si la operación SQL fallaba, el Retriever podía conservar fragmentos canónicos sin sus vectores correspondientes.
+- Corrección: serializar la eliminación del proyecto con el mismo lock por proyecto usado en indexación; eliminar primero el índice canónico SQL y luego los vectores. Si Qdrant falla, quedan vectores huérfanos invisibles para la recuperación y eliminables por `reconcile_project`.
+- Regresión `test_remove_project_metadata_first_and_reconcile_vector_failure`: simula fallo de borrado vectorial, verifica SQL vacío, ausencia de fragmentos recuperados y reparación posterior de los vectores huérfanos.
+- Commits: `1372289` (corrección), `7bc05e3` (prueba). CI del nuevo HEAD pendiente.
+- La Fase 1 continúa abierta; ARC-01 sigue parcial hasta revisar todos los criterios y la CI del HEAD vigente.

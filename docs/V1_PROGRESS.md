@@ -3,7 +3,7 @@
 **Rama de trabajo:** `agent/opencode-vps`
 **Fase activa:** 12 — QA y liberación V1.0 (desarrollo inverso 12 → 7)
 **Estado global:** EN DESARROLLO  
-**Implementación global estimada:** 64% (media simple de las 12 fases; no equivale a preparación productiva)
+**Implementación global estimada:** 68% (media simple de las 12 fases; no equivale a preparación productiva)
 **Preparación productiva:** 35% (requiere CI del HEAD, staging y configuración externa)
 
 > Regla: los porcentajes son estimaciones de implementación basadas en la matriz de aceptación. No certifican disponibilidad operativa. Solo se declara **verificada** una capacidad cuando existe una prueba reproducible aprobada para el HEAD indicado. Las fases 10 y 12 conservan bloqueos externos que impiden declarar la V1.0 liberada.
@@ -21,9 +21,9 @@
 | 7 | Archivos y sandbox | 65% | EN PROGRESO |
 | 8 | Administración | 80% | EN PROGRESO |
 | 9 | Créditos y facturación | 80% | EN PROGRESO |
-| 10 | Integración QvaPay | 35% | EN PROGRESO |
-| 11 | Instalación y documentación | 55% | EN PROGRESO |
-| 12 | QA y liberación V1.0 | 60% | EN PROGRESO |
+| 10 | Integración QvaPay | 50% | EN PROGRESO |
+| 11 | Instalación y documentación | 65% | EN PROGRESO |
+| 12 | QA y liberación V1.0 | 70% | EN PROGRESO |
 
 **Lectura de los porcentajes:** reflejan implementación y pruebas locales del código inspeccionado, no aceptación en staging. Las cifras heredadas del orden antiguo de fases se conservan solo como histórico en las secciones siguientes.
 
@@ -472,7 +472,7 @@ API-02 queda con cobertura de regresión ampliada, **pendiente de ejecución CI*
 - Se ajustó el parser para permitir como máximo un punto raíz DNS final y rechazar puntos finales repetidos.
 - Se añadieron regresiones para Qdrant y OAuth, conservando la aceptación/normalización de un único punto final.
 - Archivos: `api/config.py`, `tests/test_config.py`.
-- Implementación y pruebas publicadas en `agent/chatgpt`; ejecución local no disponible y CI del nuevo HEAD pendiente.
+- Implementación y pruebas publicadas en `agent/chatgpt`; ejecución local no disponible y CI del nuevo HEAD `c41f490` confirmada en verde (run `42488024013`).
 - CI del HEAD anterior `641210a948d2e97a8807ac68918a9aba119785a1`: 855 aprobadas, 9 omitidas y 2 fallidas, ambas en `tests/test_capacity_http.py` por llamar `.json()` directamente sobre `JSONResponse`. Studio E2E, Qdrant, build de imagen y migraciones PostgreSQL pasaron.
 - `tests/test_capacity_http.py` permanece sin cambios hasta coordinar con OpenCode. No se modificó su rama, VPS, producción ni datos.
 
@@ -484,7 +484,7 @@ API-02 queda con cobertura de regresión ampliada, **pendiente de ejecución CI*
 - Se añadieron regresiones para Qdrant y OAuth con puerto explícito vacío.
 - Archivos: `api/config.py`, `tests/test_config.py`.
 - Commits: `dfb4a6e39cc1ce49ebfb97a7b76c6fa21ad2bd0f` (corrección) y `9232a6f6b3e8bd533babf4ec70c35739e4227113` (regresiones).
-- No se ejecutó pytest local; CI del nuevo HEAD pendiente. CI del HEAD anterior `e83b71d7850ae171859f63e32b89060d01d1c218` terminó con 855 passed, 9 skipped y 2 fallos conocidos en `tests/test_capacity_http.py`; Studio E2E, Qdrant, migraciones y build de imagen pasaron.
+- No se ejecutó pytest local; CI del nuevo HEAD `c41f490` confirmada en verde (run `42488024013`). CI del HEAD anterior `e83b71d7850ae171859f63e32b89060d01d1c218` terminó con 855 passed, 9 skipped y 2 fallos conocidos en `tests/test_capacity_http.py`; Studio E2E, Qdrant, migraciones y build de imagen pasaron.
 - No se modificó el archivo compartido `tests/test_capacity_http.py`; no se integró la rama de OpenCode ni se realizaron operaciones VPS/producción.
 
 
@@ -497,3 +497,46 @@ API-02 queda con cobertura de regresión ampliada, **pendiente de ejecución CI*
 - Commits: `3f69d7330a85ad41bd5e01bf86c90ec5e9b9dad5` (contrato) y `20abc36b7988c7d7a5ded1251e53358d664f475b` (pruebas).
 - No se ejecutó pytest local; CI del HEAD vigente aún debe confirmarse. El workflow del HEAD anterior `1252a8e4c50d2aa0c99c8db8a1e29f2af8416d37` tenía Studio E2E, Qdrant Cloud y build de imagen aprobados; Python y migraciones PostgreSQL seguían ejecutándose al consultar.
 - No se modificaron archivos con solapamiento observado con `agent/opencode-vps`, ni se tocó VPS, producción, datos o secretos. La Fase 1 permanece abierta.
+
+## Checkpoint Fase 12 — CI confirmada y simulacro de restauración (2026-11-08, `agent/opencode-vps`)
+
+### Evidencia ejecutada
+- CI del SHA `5e55582690891a66a002852b29aa28ae7f54fb63` en verde (run `42485697750`): studio-browser-e2e, postgres-migrations, qdrant-cloud-integration, container-image-build, python-tests. Sustituye la anotación «CI no confirmada» para ese SHA.
+- Suite local: **911 passed, 11 skipped** (10/11 PostgreSQL omitidos localmente); `compileall`, `check_frontend_js.py`, `pip check` y `git diff --check` correctos.
+- **Simulacro DB-02 real:** contenedor PostgreSQL 16-alpine desechable en `127.0.0.1`; backup `backups/pre-frontend-upgrade-20261108T001710Z.dump` restaurado con `scripts/restore_postgres.sh` (41 tablas; `schema_migrations` hasta `021`); migración `022` aplicada con `python -m api.migrate` (quedó en 022; segunda ejecución: ninguna migración); contenedor eliminado. Migraciones 001→023 verificadas desde cero en instancia desechable; matriz PostgreSQL completa: **70 passed**.
+- Dependencias: `pip check` sin conflictos; `cryptography>=43,<47` es el único pin por rango (acotado).
+
+### Fase 10 — persistencia y conciliación de invoices (este bloque)
+- Migración `023_qvapay_lightning_invoices.sql`: tabla `payment_invoices` ligada a `payment_orders`; una invoice abierta por orden (índice parcial); referencia LNURL unguessable (`axy` + hex); sats exactos, precio BTC/USD, comisión, `transaction_uuid` y estado (`created`/`superseded`/`expired`/`paid`) auditados; `UNIQUE (provider, provider_transaction_id)`.
+- `api/qvapay_settlement.py`: `new_payment_reference`, `create_invoice_record` (valida orden pendiente, supersede la invoice abierta), `reconcile_lightning_payments` (confirma solo con referencia + sats exactos + destinatario + `transaction_uuid`; delega créditos en `confirm_verified_payment`; idempotente), `fetch_recent_payments` (paginación 20/página, deduplicación, tope configurable).
+- Checkout/rutas HTTP siguen sin implementarse; cobros y acreditación automática deshabilitados.
+- Pruebas: 5 unitarias (`tests/test_qvapay_settlement.py`) y 8 PostgreSQL (`tests/test_qvapay_settlement_postgres.py`, añadidas al job CI). Commit `08b6e65`.
+
+### Fase 11
+- `docs/VPS_INSTALLATION.md`: resultado real del simulacro de restauración y sección «Mantenimiento rutinario» (backups, simulacro anual/por versión, health, logs, espacio, migraciones, dependencias, secretos).
+
+### Pendiente / bloqueado
+- REL-01 sigue bloqueada: AUTH/MFA, sandbox dedicado (AGT-04), catálogo/precios QvaPay, sandbox oficial, backup en staging y validación web pendiente.
+- CI del nuevo HEAD (`08b6e65`): pendiente al redactar; debe confirmarse antes de declarar QA-01/QA-02 «Verificadas».
+- PostgreSQL local de esta sesión omitido; verificado en instancia desechable y en el job CI.
+
+### Fase 10 — expiración automática de órdenes y invoices (continuación)
+- `api/payment_manager.py`: `_expire_one` y `expire_overdue_orders` (pendientes vencidas → `expired`, cierre de invoice abierta, evento `expired` idempotente, `FOR UPDATE SKIP LOCKED`); `get_payment_order` expira de forma perezosa la orden solicitada si venció.
+- 4 pruebas PostgreSQL nuevas en `tests/test_qvapay_settlement_postgres.py` (expiración + cierre de invoice idempotente, órdenes frescas respetadas, expiración perezosa vía GET, validación de `limit`).
+- Verificado en instancia desechable: migraciones 001→023 y 54 pruebas PostgreSQL en verde; contenedor eliminado.
+
+### Siguiente tarea
+Confirmar CI del SHA publicado; después continuar Fase 11 (preflight/staging) y Fase 10 (rutas de checkout condicionadas a catálogo/precios aprobados).
+
+## Checkpoint Fase 8 — E2E de reversión y recuperación administrativas (2026-11-08, `agent/opencode-vps`)
+
+### Implementado y verificado
+- `tests/e2e/studio-browser.mjs` amplía la gestión administrativa: reversión auditada (`#billing-reversal-*`) y recuperación de liquidaciones (`#billing-recovery-run`) con respuestas simuladas y confirmaciones aceptadas.
+- ADM-01 pasa a verificada a nivel backend/CI: PostgreSQL (CI verde, 70→74 pruebas en `postgres-migrations` incluyendo QvaPay) y E2E de navegador de gestión de usuarios, reversión y recuperación.
+- `.gitignore` ignora `/node_modules/`; la instalación local replica el patrón `npm install --no-save` del job CI.
+- CI `42488531176` (`68ffa13`) y `42488645522` (`1db1d32`): cinco jobs en verde en ambos SHA.
+
+### Estado
+- Fase 8: ADM-01 verificada en backend/CI; pendiente E2E contra staging y validación manual del portal.
+- Fase 10: expiración automática de órdenes/invoices verificada (CI verde).
+- REL-01 sigue bloqueada (AUTH, sandbox, catálogo/precios, staging).
