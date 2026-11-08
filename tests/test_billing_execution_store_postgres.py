@@ -67,7 +67,7 @@ def test_execution_claim_is_unique_and_completed_ciphertext_is_recoverable():
     with pytest.raises(ExecutionAlreadyClaimed):
         persist_encrypted_result(
             engine=engine, user_id=user_id, execution_id=first.execution_id,
-            ciphertext=b"second-ciphertext", nonce=b"nonce-2", key_id="test-key-v1",
+            ciphertext=b"second-ciphertext", nonce=b"0123456789ab", key_id="test-key-v1",
         )
 
 
@@ -105,3 +105,38 @@ def test_unknown_reservation_cannot_claim_first_execution():
     mark_reservation_unknown(engine=engine, user_id=user_id, reservation_id=reservation_id)
     with pytest.raises(ExecutionStoreError, match="held"):
         claim_execution(engine=engine, user_id=user_id, reservation_id=reservation_id)
+
+
+
+@pytest.mark.parametrize(
+    ("ciphertext", "nonce"),
+    [
+        (b"", b"0123456789ab"),
+        (b"too-short", b"0123456789ab"),
+        (b"valid-auth-tag-length", b"short"),
+        (b"valid-auth-tag-length", b"0123456789abc"),
+    ],
+)
+def test_malformed_aes_gcm_result_is_rejected_before_marking_execution_completed(ciphertext, nonce):
+    user_id, reservation_id = _reservation(engine)
+    claim = claim_execution(engine=engine, user_id=user_id, reservation_id=reservation_id)
+
+    with pytest.raises(ValueError):
+        persist_encrypted_result(
+            engine=engine,
+            user_id=user_id,
+            execution_id=claim.execution_id,
+            ciphertext=ciphertext,
+            nonce=nonce,
+            key_id="test-key-v1",
+        )
+
+    with engine.connect() as conn:
+        state = conn.execute(text("""
+            SELECT state FROM billing_inference_executions
+            WHERE id=CAST(:id AS UUID)
+        """), {"id": claim.execution_id}).scalar_one()
+    assert state == "started"
+    assert load_encrypted_result(
+        engine=engine, user_id=user_id, reservation_id=reservation_id,
+    ) is None
