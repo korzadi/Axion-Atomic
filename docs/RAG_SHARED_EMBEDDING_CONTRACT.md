@@ -60,7 +60,7 @@ La ruta manual de Studio ahora escribe en cada punto dos campos de payload:
 - `embedding_model`: nombre Ollama canónico (incluye `:latest` cuando el alias no declara tag).
 - `embedding_dimension`: dimensión configurada del vector.
 
-La búsqueda manual filtra simultáneamente por `project_id`, `embedding_model` y `embedding_dimension`. Por tanto, dos modelos distintos con la misma dimensión no comparten resultados. La sustitución y eliminación de fuentes también se limitan a la identidad activa, evitando borrar puntos de otra identidad por compartir `source_id`.
+La búsqueda manual filtra simultáneamente por `project_id`, `embedding_model` y `embedding_dimension`. Por tanto, dos modelos distintos con la misma dimensión no comparten resultados. La sustitución y eliminación de fuentes se limitan a la propiedad `project_id` + `source_id`, no a la identidad de embeddings activa: así también retiran fragmentos históricos de modelos anteriores dentro del mismo proyecto, sin tocar otra fuente ni otro proyecto. La recuperación sigue filtrando por la identidad activa.
 
 ### Tratamiento de vectores históricos
 
@@ -103,3 +103,8 @@ Se añadieron regresiones para modelo vacío, dimensión booleana, cero y dimens
 ### Seguimiento de CI del endurecimiento
 
 La ejecución `42492913533` del HEAD `8d5a5b6` finalizó con cuatro jobs aprobados y un fallo en Python: `961 passed, 10 skipped, 1 failed`. El fallo no fue de la validación de identidad: la nueva prueba insertaba puntos en el doble Qdrant antes de crear su colección de prueba. Se corrigió inicializando la colección antes de insertar los casos malformados (commit `17586d9`). La nueva ejecución para ese commit debe confirmar la corrección; no se atribuye aprobación anticipada.
+
+
+### Limpieza de versiones históricas de una fuente
+
+Al sustituir o eliminar una fuente manual, la consulta de limpieza usa conjuntamente `project_id` y `source_id`. No añade `embedding_model` ni `embedding_dimension` al filtro de propiedad, porque esos campos describen el espacio vectorial de recuperación, no quién es dueño de la fuente. Esto evita dejar fragmentos huérfanos de una identidad de embeddings anterior. La regresión de integración crea el mismo `source_id` en dos proyectos, elimina la fuente de uno y comprueba que la del otro permanece intacta.

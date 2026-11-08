@@ -133,6 +133,8 @@ class IndexerTests(PipelineBase):
         new_sha = self.meta.list_files("p1")["src/tax.py"]
         self.assertNotEqual(new_sha, old_sha)
         self.assertTrue(any("src/tax.py" in error for error in report.errors))
+        self.assertEqual(report.indexed, ["src/tax.py"])
+        self.assertGreater(report.chunks, 0)
         self.assertGreaterEqual(failing_store.cleanup_calls, 2)  # reconciliación reintenta la limpieza
         self.assertGreater(report.orphaned_removed, 0)
         self.assertTrue(old_tax_ids.isdisjoint(failing_store.points))
