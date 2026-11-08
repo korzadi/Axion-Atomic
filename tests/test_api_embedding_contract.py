@@ -46,7 +46,7 @@ class ApiEmbeddingContractTests(unittest.IsolatedAsyncioTestCase):
             patch.object(ollama.settings, "embed_dimension", 2),
             patch.object(ollama, "get_embedding", new=AsyncMock(return_value=[0.1, float("inf")])),
             patch.object(ollama, "set_embedding", new=AsyncMock()) as cache_write,
-            patch.object(ollama.httpx, "AsyncClient", FakeAsyncClient) as http_client,
+            patch.object(ollama.httpx, "AsyncClient") as http_client,
         ):
             with self.assertRaisesRegex(ValueError, "no finito"):
                 await ollama.embed("texto")
