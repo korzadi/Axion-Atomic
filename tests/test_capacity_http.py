@@ -41,9 +41,8 @@ def test_database_pool_response_does_not_expose_driver_or_pool_details():
     assert "TimeoutError" not in body
 
 
-class CapacityHttpRouteTests:
+class CapacityHttpRouteTests(unittest.IsolatedAsyncioTestCase):
     async def _assert_registered_handler_response(self, exception, expected_retry_after, forbidden_text):
-        from fastapi import FastAPI
         import httpx
         from api.main import app
 
