@@ -58,7 +58,7 @@ El alcance de medición de tokens, cuotas, costes por modelo, créditos, suscrip
 ## Estado de implementación
 
 - [Matriz de aceptación y seguimiento V1.0](docs/V1_ACCEPTANCE_MATRIX.md)
-- **Estado verificado (2026-11-08):** `main = ad68953` con CI 6/6 en verde (run `42525211231`: python-tests, postgres-migrations, qdrant-cloud-integration, **qdrant-e2e**, container-image-build, studio-browser-e2e). Producción actualizada hasta `a2f41d0` con autenticación habilitada y readiness `ready`; cobros, QvaPay y sandbox siguen desactivados. La actualización de producción a `ad68953` corresponde al propietario. La V1.0 no se declara liberada (`REL-01` bloqueada).
+- **Estado verificado (2026-11-08):** `main = fa0a536` con CI 6/6 en verde (run `42526343714`: python-tests, postgres-migrations, qdrant-cloud-integration, **qdrant-e2e**, container-image-build, studio-browser-e2e). Producción actualizada hasta `a298344` con autenticación habilitada y readiness `ready` (el delta `fa0a536` son solo documentos). Cobros, QvaPay y sandbox siguen desactivados. La actualización de producción a `fa0a536` y los cambios de esta rama corresponden al propietario. La V1.0 no se declara liberada (`REL-01` bloqueada).
 
 Este repositorio está en desarrollo por fases. La presencia de una carpeta, documento o esquema no demuestra por sí sola que una capacidad esté integrada. Cada fase debe informar qué se implementó, qué pruebas se ejecutaron realmente y qué queda pendiente.
 

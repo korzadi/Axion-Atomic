@@ -1,11 +1,11 @@
 # AXYRON ATOMIC — Puerta de salida a producción inicial
 
-> **Estado actual verificado — 2026-11-08 (certificación QA-HEAD-001/002, rama `agent/opencode-vps`).**
+> **Estado actual verificado — 2026-11-08 (auditoría integral V1.0, rama `agent/opencode-vps`).**
 > Las secciones siguientes son un registro histórico y se conservan sin reescritura. Estado real comprobado ese día:
-> - `main = ad68953`; CI del SHA exacto en verde (run `42525211231`, los seis jobs, incluido `qdrant-e2e`).
-> - Producción sirve el código del `main` previo (`a2f41d0` al 2026-11-08); `ad68953` añade los fixes RAG fail-closed (PR #15), el E2E Qdrant real (PR #21) y documentación. El delta no contiene migraciones nuevas. La actualización de producción a `ad68953` corresponde al propietario.
+> - `main = fa0a536`; CI del SHA exacto en verde (run `42526343714`, los seis jobs, incluido `qdrant-e2e`). Delta `ad68953 → fa0a536`: la regresión unitaria de rollback de `replace_source` (`1867a11`) y documentos; `a298344 → fa0a536`: solo documentos.
+> - Producción sirve el código de `main = a298344` (desplegado con backup previo, rollback etiquetado y verificación real en `/health` 6/6 y readiness `ready`). `d33ca42` (aislamiento de la BD de pruebas frente a `.env`) es un cambio de pruebas/infra de suite, no de producto, y corresponde al propietario desplegarlo si corresponde.
 > - `AUTH_ENABLED=true` en producción (readiness `ready`; 401 sin sesión, 422 con payload inválido; sin cuentas ni correos reales de prueba todavía).
-> - Migraciones PostgreSQL `022` y `023` aplicadas en producción el 2026-11-08 con rehearsal previo en contenedor desechable; segunda ejecución del migrador: ninguna migración pendiente.
+> - Migraciones PostgreSQL `022` y `023` aplicadas en producción el 2026-11-08 con rehearsal previo en contenedor desechable; segunda ejecución del migrador: ninguna migración pendiente. Verificadas de nuevo en instancia desechable de esta auditoría (001→023 desde cero, re-ejecución idempotente, matriz PostgreSQL **77 passed**).
 > - `QVAPAY_ENABLED=false` (confirmado por presencia de flag `false`); `BILLING_ENFORCEMENT_ENABLED` no habilitado (sombra/`shadow`, confirmado en readiness); `SANDBOX_DOCKER_ENABLED` ausente → por defecto `false` y fail-closed.
 > - Rollback de aplicación ensayado en vivo (ida y vuelta, salud 6/6 y readiness `ready`); rollback completo de DB no ensayado (no fue necesario).
 > - Cobros, checkout, ledger en cobro real y sandbox **siguen desactivados**. `REL-01` bloqueada; la V1.0 no se declara liberada.

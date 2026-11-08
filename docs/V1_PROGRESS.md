@@ -3,10 +3,10 @@
 **Rama de trabajo:** `agent/opencode-vps`
 **Fase activa:** 12 — QA y liberación V1.0 (desarrollo inverso 12 → 7)
 **Estado global:** EN DESARROLLO  
-**Implementación global estimada:** 68% (media simple de las 12 fases; no equivale a preparación productiva)
-**Preparación productiva:** 35% (requiere CI del HEAD, staging y configuración externa)
+**Implementación global estimada:** ~90 % de criterios de aceptación con código presente (conteo textual de la matriz, 31 criterios)
+**Preparación productiva:** ~75 % (producción `a298344` con auth activa y readiness `ready`; CI 6/6 del HEAD; staging con buzón real, token/catálogo QvaPay y AGT-04 pendientes)
 
-> Regla: los porcentajes son estimaciones de implementación basadas en la matriz de aceptación. No certifican disponibilidad operativa. Solo se declara **verificada** una capacidad cuando existe una prueba reproducible aprobada para el HEAD indicado. Las fases 10 y 12 conservan bloqueos externos que impiden declarar la V1.0 liberada.
+> Regla: los porcentajes son estimaciones de implementación basadas en la matriz de aceptación. No certifican disponibilidad operativa. Solo se declara **verificada** una capacidad cuando existe una prueba reproducible aprobada para el HEAD indicado. Las fases 10 y 12 conservan bloqueos externos que impiden declarar la V1.0 liberada. La fuente de verdad de los conteos por criterio es `docs/V1_ACCEPTANCE_MATRIX.md`; las cifras de 68 %/35 % de revisiones anteriores quedan como histórico.
 
 ## Resumen oficial de las 12 fases
 
@@ -884,3 +884,31 @@ Conclusión: el procedimiento de rollback documentado funciona en producción re
 - Verificación real: `/health` 6/6 ok; `/health/readiness` `ready` (auth/email/cookie/origin/MFA true; billing `shadow`); `/auth/me` 401; dominio público 200; assets servidos == repo (`cmp`); logs sin errores.
 - Contenido respecto al despliegue anterior: rollback test `replace_source`, docs QA/reconciliación y demás archivos de PR #22. Sin cambios de esquema ni migraciones (022/023 intactas).
 - `REL-01` sigue bloqueada (buzón real, QvaPay token/catálogo, AGT-04). V1.0 no se declara liberada.
+
+## Auditoría integral V1.0 y cierre de suite hermética — 2026-11-08 (`agent/opencode-vps`)
+
+**HEAD de ramas al comenzar:** `fa0a5368e2e49409bb1d6de5d1f68fba97055c0a` en `main`, `agent/chatgpt` y `agent/opencode-vps`; árbol limpio. El SHA indicado en el prompt maestro (`ad68953`) está contenido en `fa0a536` (la rama avanzó con los merges de PR #22 `a298344` y PR #23 `fa0a536`).
+
+### Hallazgo y corrección de defecto
+- Sin `DATABASE_URL`, la suite ligaba el motor de `api.database` al `DATABASE_URL` real de `.env` (PostgreSQL de producción). Las pruebas RAG intentaban una conexión real y el traceback de psycopg mostró el diccionario de conexión con la contraseña en la salida de la herramienta.
+- Causa raíz: no existía aislamiento por defecto de la BD de pruebas y `api/config.py` lee `.env`.
+- Corrección: `tests/conftest.py` fuerza un SQLite temporal cuando el entorno no define `DATABASE_URL` (respeta `DATABASE_URL` explícita; p. ej. CI o PostgreSQL efímero); `tests/test_default_db_isolation.py` fija el contrato. Commit `d33ca42` — `test(pytest): isolate default test database from .env`.
+- Suite completa tras el fix: **1038 passed, 22 skipped**, tanto con `DATABASE_URL=sqlite` como sin ella. El prompt específico de `replace_source` con fallo inyectado: presente y verde en aislamiento (3 passed); es un unitario con doble en memoria, no un E2E.
+- Acción recomendada al propietario: rotación de la credencial de `.env` expuesta en la salida de herramienta durante esta auditoría (no está en git ni en archivos).
+
+### Verificación ejecutada en esta auditoría
+- CI del SHA exacto `fa0a536` (run `42526343714`): **6/6 jobs** — python-tests, postgres-migrations, qdrant-cloud-integration, qdrant-e2e, container-image-build, studio-browser-e2e.
+- `compileall`, `scripts/check_frontend_js.py`, `bash -n scripts/*.sh`, `pip check`, `git diff --check`: OK.
+- PostgreSQL desechable (`postgres:16-alpine`, `127.0.0.1`, contenedor/volumen anónimo eliminados): migraciones 001→023 desde cero; segunda ejecución del migrador: ninguna pendiente; matriz PostgreSQL de CI: **77 passed**.
+- Qdrant real efímero (`qdrant/qdrant:v1.15.4`, `commit=20db14f`): `tests/test_rag_qdrant_e2e.py` **9 passed**; contenedor eliminado. Qdrant Cloud: cubierto por CI (`qdrant-cloud-integration`).
+- E2E de navegador (Playwright 1.58.2/Chromium): **aprobado**. axe WCAG 2 A/AA: **0 violaciones** en landing, login administrativo, gestión y Studio autenticado. Auditoría de teclado: **0 problemas**.
+- Auditoría estática: sin `shell=True`/`eval`/`pickle`/`yaml.load` inseguros; sin secretos versionados; sin CORS permisivo; flags peligrosos fail-closed por defecto.
+- Producción: **sin cambios** en esta auditoría (solo sondas de consistencia documental; el stack sirve `a298344`). Deltas: `ad68953→fa0a536` = regresión rollback RAG + docs; `d33ca42` = pruebas/infra de suite, sin código de producto, sin migraciones.
+
+### Estado y límites
+- `REL-01` sigue **bloqueada**: (1) buzón real para registro/verificación/MFA E2E; (2) `QVAPAY_USER_TOKEN` y catálogo/precios aprobados; (3) AGT-04 (daemon dedicado con TLS e imágenes por digest). La V1.0 no se declara liberada.
+- CI del commit `d33ca42`: pendiente al redactar; debe confirmarse en el PR hacia `main`.
+- Porcentajes reconciliados (conteo textual de la matriz, 31 criterios): Verificadas 9 · Implementadas 9 · Parciales 12 · Bloqueada 1 → implementación ~90 %, pruebas verificadas ~80 %, preparación productiva ~75 %.
+
+### Siguiente paso
+PR hacia `main` con `d33ca42` + documentación; revisar los checks del PR; la integración corresponde al propietario. Sin cambios en AUTH/BILLING/QVAPAY/sandbox.
