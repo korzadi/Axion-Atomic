@@ -31,6 +31,7 @@ def test_dangerous_flags_are_disabled_in_the_template():
         "BILLING_ENFORCEMENT_ENABLED",
         "SANDBOX_DOCKER_ENABLED",
         "REDIS_CACHE_ENABLED",
+        "QVAPAY_ENABLED",
     }
     for key in dangerous:
         assert KV.get(key, "").lower() == "false", key
@@ -69,9 +70,18 @@ def test_template_declares_the_critical_baseline():
         "AUTH_COOKIE_SECURE",
         "BILLING_ENFORCEMENT_ENABLED",
         "SANDBOX_DOCKER_ENABLED",
+        "QVAPAY_ENABLED",
+        "QVAPAY_USER_TOKEN",
+        "QVAPAY_LIGHTNING_ADDRESS",
+        "QVAPAY_REQUEST_TIMEOUT_SECONDS",
     }
     missing = required - KV.keys()
     assert not missing, f"Variables ausentes en .env.example: {sorted(missing)}"
+
+
+def test_qvapay_template_holds_no_token():
+    assert KV["QVAPAY_USER_TOKEN"] == ""
+    assert KV["QVAPAY_LIGHTNING_ADDRESS"].endswith("@qvpay.me")
 
 
 def test_template_public_origins_are_https_and_not_localhost():

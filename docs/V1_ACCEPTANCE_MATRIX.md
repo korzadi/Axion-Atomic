@@ -37,7 +37,7 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada; contrato oficial verificado; cliente adaptador; persistencia de invoices (migración 023) y conciliación paginada idempotente con pruebas unitarias y PostgreSQL | Parcial; checkout, rutas HTTP y cobros reales bloqueados por catálogo/precios y sandbox oficial |
 | ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación/conciliación y gestión de roles/estado auditadas con CSRF; pruebas PostgreSQL de gestión de usuarios y roles (CI verde); E2E de navegador de gestión de usuarios, reversión y recuperación de facturación (CI verde) | Verificada para `1db1d32` a nivel de backend/CI local; pendiente validación en staging |
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh`; contrato probado por `test_vps_installer_contract.py` (23 pruebas) | Código publicado y CI en verde; falta ensayo sobre stack ocupado en staging (ejecución `--check` real confirma cierre seguro: puerto 8070 ocupado, no se detiene el servicio) |
-| OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución real en VPS pendiente de autorización del operador |
+| OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado; ejecutado en el host el 2026-11-08 (stack `axyron-atomic` sano; legado `axion-atomic` ausente; sin `.env` impreso) | Ejecutada en el host (2026-11-08); pendiente revisión operativa del operador previa a cualquier actualización |
 | OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador, `restore_postgres.sh` y simulacro de restauración real; sección de mantenimiento añadida | Restore verificado en entorno desechable con backup real; upgrade/rollback sin ensayar en staging |
 | QA-01 | QA | Suite Python aprobada en HEAD evaluado | `agent/opencode-vps` `08b6e65`: `pytest -q` → 911 passed, 11 skipped; CI `42485697750` green en `5e55582` (python-tests incluido) | Verificada local y en CI para `c41f490` (run `42488024013`) |
 | QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions: `42485697750` sobre `5e55582` — studio-browser-e2e, container-image-build, postgres-migrations, qdrant-cloud-integration, python-tests: success | Verificada para `5e55582` y `c41f490` (run `42488024013`) |
@@ -276,3 +276,16 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - CI del HEAD `76c5356e0bd0001b659db0aa10eb2a51191256b2` (run `42496765302`, al redactar): **5/5 jobs en verde** — `python-tests` 1006 passed / 11 skipped; `postgres-migrations` 74 passed; `studio-browser-e2e` aprobado (incluye conciliación QvaPay en el portal); `container-image-build` y `qdrant-cloud-integration` success.
 - `QA-01` y `QA-02`: evidencia en verde para `76c5356`. `ADM-01`: el endpoint `POST /admin/billing/qvapay/reconcile` queda cubierto por CI (python-tests + e2e browser). Sigue pendiente la validación en staging.
 - `REL-01` sigue **bloqueada** (AUTH/MFA sin habilitar, AGT-04, catálogo/precios QvaPay, staging). No se declara la V1.0 liberada.
+
+## Fase 11 — inventario ejecutado con autorización — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- `scripts/inspect_vps_state.sh` ejecutado en el host real (HEAD `4508226`): stack `axyron-atomic` presente y sano (api/frontend Up 16 h; postgres y redis healthy); volumen `axyron_atomic_pgdata` presente y referenciado; proyecto legado `axion-atomic` sin contenedores/volumen/redes; listeners `127.0.0.1:8070` y `127.0.0.1:5433`. Sin lectura ni impresión de `.env`, sin cambios en recursos. **OPS-02: ejecutado en el host**; pendiente la revisión operativa del operador como control de cualquier actualización.
+- `install_vps.sh --check`: falla segura de nuevo (exit 1, puerto 8070 ocupado, stack intacto). `--prepare/--check/--deploy/--upgrade-frontend` en staging siguen pendientes de autorización interactiva sobre el stack.
+- `OPS-03`: el restore aislado conserva su evidencia del 2026-11-08 (sin repetirla sin cambios en migraciones/scripts); upgrade/rollback sin ensayar en stack real.
+- No se desplegó, reinició, construyó ni reconfiguró nada; `main` intacto. `REL-01` sigue bloqueada.
+
+## Fase 11 — integridad de backups y validación de configuración — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Los tres backups `pre-frontend-upgrade-*.dump` verificados con `pg_restore --list`: 274 objetos cada uno (lectura, sin restaurar). El dump `pre-migration` de 834 B/0 objetos es coherente con un snapshot pre-migración de una base vacía; no es un fallo.
+- `docker compose config --quiet` sobre el stack real: validación OK (exit 0), sin imprimir `.env`.
+- `DB-02` conserva su evidencia de restore aislado del 2026-11-08; `OPS-03` pendiente de ensayo en staging/autorización interactiva para `--deploy/--upgrade-frontend`. `REL-01` sigue bloqueada.
