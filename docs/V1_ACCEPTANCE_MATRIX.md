@@ -35,7 +35,7 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | BILL-01 | Facturación | Medición tokens en shadow mode | `inference_usage_events` | Implementada; no cobra con facturación desactivada |
 | BILL-02 | Facturación | Reservas, ledger, reversos e idempotencia conectados a inferencia | `workspace_chat`, ejecución durable, atestación, recuperación administrativa | Implementada y probada con dobles; E2E PostgreSQL/Ollama pendiente |
 | PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada por propietario; integración técnica por validar | Bloqueada |
-| ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación y conciliación auditadas, con CSRF, permisos y controles en el portal | Parcial; E2E browser de la recuperación pendiente |
+| ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación/conciliación y gestión de roles/estado auditadas con CSRF; E2E de navegador de la gestión de usuarios ejecutado localmente | Parcial; PostgreSQL/E2E de recuperación pendientes |
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh` actualizado | Código publicado; CI pendiente |
 | OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución VPS pendiente |
 | OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador y documentación | Pendiente |
@@ -145,3 +145,9 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Administración: añadidas pruebas PostgreSQL para concesión/revocación de roles, protección del último `platform_admin`, revocación de sesiones y activación solo con correo verificado; el job PostgreSQL de CI las ejecutará.
 - QA local: **875 passed, 9 skipped** antes de las nuevas pruebas PostgreSQL; `compileall`, sintaxis JS y `git diff --check` correctos.
 - OPS-03 y DB-02 siguen **Pendientes** hasta ejecutar una restauración real en un entorno aislado autorizado. AGT-04 sigue **Parcial**. QA-02 y REL-01 siguen bloqueadas por CI/staging.
+
+## E2E de navegador ejecutado — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Se ejecutó `tests/e2e/studio-browser.mjs` con Playwright 1.58.2 y Chromium headless en un entorno temporal: **aprobado**.
+- El recorrido cubre landing, ausencia de sesión ficticia, apertura de registro/login, portal administrativo, MFA y la nueva sección de gestión de usuarios/roles/estado con respuestas simuladas del backend.
+- Es evidencia local del frontend, no del job CI ni de un backend real. QA-02 sigue sin confirmar Docker, PostgreSQL y Qdrant del HEAD; REL-01 sigue bloqueada.

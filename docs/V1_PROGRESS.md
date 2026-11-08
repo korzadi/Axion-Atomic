@@ -273,3 +273,8 @@ Continuar con Fase 11 (instalación y documentación): revisar preflight del ins
 ### Bloqueos de Fase 10 y Fase 9
 - QvaPay: no se implementa adaptador, webhook ni consulta de transacción porque el contrato oficial de Lightning Address sigue sin confirmación escrita. No se inventan endpoints ni firmas. Solo existe el gestor interno de órdenes y su verificación server-side preparada.
 - Facturación: el catálogo comercial es `preview_only`, sin precios ni paquetes aprobados; no se activan cobros. La deuda pendiente es de producto/negocio, no de código inventable.
+
+### E2E de navegador (Fase 12)
+- `tests/e2e/studio-browser.mjs` ampliado para cubrir la gestión administrativa de usuarios.
+- Ejecutado localmente con Playwright 1.58.2/Chromium: landing, MFA del portal y concesión/cambio de estado de usuario **aprobados**.
+- No sustituye el job CI ni valida PostgreSQL/Docker/Qdrant reales.
