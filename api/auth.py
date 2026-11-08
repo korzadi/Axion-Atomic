@@ -157,7 +157,11 @@ def verify_credentials(email: str, password: str) -> dict:
     if row is None:
         _passwords.hash("invalid-login-placeholder-password")
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
-    if row["status"] != "active" or not verify_password(row["password_hash"], password):
+    # Verificar siempre el hash antes de evaluar el estado de la cuenta.
+    # Evita que cuentas deshabilitadas tengan una ruta temporal más rápida que
+    # una cuenta activa con contraseña incorrecta.
+    password_valid = verify_password(row["password_hash"], password)
+    if not password_valid or row["status"] != "active":
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     return {"id": row["id"], "email": row["email"], "display_name": row["display_name"]}
 
