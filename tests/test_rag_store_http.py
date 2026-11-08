@@ -113,11 +113,30 @@ class QdrantTests(Base):
         self.assertEqual(set(S["cols"]["col"]["points"]), {"c"})
         with self.assertRaises(ValueError): await st.delete_project("")
 
-    async def test_upsert_requires_project_payload_and_http_errors_propagate(self):
+    async def test_upsert_requires_complete_payload_before_any_http_write(self):
         st = QdrantStore(self.url, "col", 4); await st.ensure()
-        with self.assertRaises(ValueError): await st.upsert([Point("a", [1, 0, 0, 0], {"path": "x"})])
-        with self.assertRaises(TransportError): await st.upsert([Point("a", [1, 0], {"project_id": "p1", "path": "x"})])   # dimensión 400
-        with self.assertRaises(TransportError): await QdrantStore("http://127.0.0.1:1", "c", 4, timeout=1).ensure()
+        writes_before = sum(1 for request in S["requests"] if request[0] == "PUT" and "/points" in request[1])
+        invalid_payloads = (
+            {"path": "x.py"},
+            {"project_id": "p1"},
+            {"project_id": " ", "path": "x.py"},
+            {"project_id": "p1", "path": ""},
+            {"project_id": 7, "path": "x.py"},
+        )
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload), self.assertRaises(ValueError):
+                await st.upsert([Point("bad", [1, 0, 0, 0], payload)])
+        # Un lote >64 con un elemento inválido tampoco debe publicar el primer batch.
+        batch = self.pts() * 22
+        batch[-1] = Point("invalid-last", [1, 0, 0, 0], {"project_id": "p1"})
+        with self.assertRaises(ValueError):
+            await st.upsert(batch)
+        writes_after = sum(1 for request in S["requests"] if request[0] == "PUT" and "/points" in request[1])
+        self.assertEqual(writes_after, writes_before)
+        with self.assertRaises(TransportError):
+            await st.upsert([Point("bad-dimension", [1, 0], {"project_id": "p1", "path": "x.py"})])
+        with self.assertRaises(TransportError):
+            await QdrantStore("http://127.0.0.1:1", "c", 4, timeout=1).ensure()
 
 
 class InMemoryStoreTests(unittest.IsolatedAsyncioTestCase):
@@ -128,6 +147,14 @@ class InMemoryStoreTests(unittest.IsolatedAsyncioTestCase):
         await st.delete_path("p1", "x.py")
         self.assertEqual({h.id for h in await st.search("p1", [1, 0, 0, 0], 5)}, {"b"})
         with self.assertRaises(ValueError): await st.search("", [1], 1)
+
+    async def test_upsert_validates_entire_batch_before_mutation(self):
+        st = InMemoryVectorStore()
+        valid = Point("valid", [1, 0, 0, 0], {"project_id": "p1", "path": "ok.py"})
+        invalid = Point("invalid", [1, 0, 0, 0], {"project_id": "p1"})
+        with self.assertRaises(ValueError):
+            await st.upsert([valid, invalid])
+        self.assertEqual(st.points, {})
 
 
 class EmbedderTests(Base):
