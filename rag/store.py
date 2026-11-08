@@ -169,8 +169,15 @@ class QdrantStore:
             result = data.get("result") or {}
             ids.update(str(point["id"]) for point in result.get("points", []))
             next_offset = result.get("next_page_offset")
-            if next_offset is None or next_offset == offset:
+            if next_offset is None:
                 break
+            if next_offset == offset:
+                # No declarar una enumeración incompleta como correcta: el
+                # reconciliador podría dejar huérfanos sin detectar.
+                raise TransportError(
+                    "Qdrant devolvió un cursor de paginación repetido",
+                    retryable=True,
+                )
             offset = next_offset
         return ids
 
