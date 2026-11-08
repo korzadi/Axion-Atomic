@@ -58,3 +58,22 @@ def auth_readiness() -> dict:
         "checks": checks,
         "billing": billing,
     }
+
+
+def combine_readiness_report(auth_report: dict, dependency_checks: dict) -> dict:
+    """Combina controles de configuración con dependencias verificadas en vivo."""
+    required = ("database", "ollama", "chat_model", "embedding_model", "qdrant")
+    dependencies_ready = all(dependency_checks.get(name) == "ok" for name in required)
+    ready = auth_report.get("status") == "ready" and dependencies_ready
+    return {
+        **auth_report,
+        "status": "ready" if ready else "blocked",
+        "dependencies": {
+            name: dependency_checks.get(name, "unavailable")
+            for name in required
+        },
+        "optional": {
+            name: value for name, value in dependency_checks.items()
+            if name not in required
+        },
+    }
