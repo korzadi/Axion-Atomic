@@ -735,3 +735,25 @@ Fase 11 pasa de 75 % a **80 %**: el inventario de solo lectura se ejecutó en el
 - CI del commit combinado `6553036` (run `42498413465`): **5/5 en verde** — python-tests 1027/1027, postgres-migrations 74 passed, studio-browser-e2e aprobado, container-image-build y qdrant-cloud-integration success.
 - GitHub cerró el PR #9 como MERGED al contener la candidata ambas ramas; sigue sin fusionarse nada a `main`.
 - `REL-01` sigue bloqueada por AUTH/MFA en staging, AGT-04, catálogo/precios QvaPay y sandbox oficial; la V1.0 no está liberada.
+
+## Despliegue controlado en el stack real — 2026-11-08 (autorizado por el propietario, `agent/opencode-vps`)
+
+El propietario autorizó cerrar la Fase 11 en producción con un despliegue controlado de las imágenes construidas desde `agent/opencode-vps` (HEAD al desplegar: `d447482`).
+
+### Procedimiento ejecutado
+1. Backup previo: `backups/pre-release-20261108T161250Z.dump` (pg_dump CUSTOM vía `docker exec`, 0600) — válido, 274 objetos; idéntico contenido al de 2026-11-08 (sin escrituras de usuarios desde el último dump).
+2. Imágenes etiquetadas para rollback: `axyron-atomic-api:rollback-20261108` (22faebefbabe) y `axyron-atomic-frontend:rollback-20261108` (2fd6d7a6e48f).
+3. `docker compose --project-name axyron-atomic -f compose.yaml --env-file .env build api frontend` — build OK (api → 120f6f6a023f, frontend → 4136ef24def8).
+4. `docker compose ... up -d --no-deps api frontend` — contenedores recreados; postgres y redis **sin cambios**.
+
+### Verificación posterior (real)
+- `/health`: 6/6 ok (database, ollama, chat_model, embedding_model, qdrant, redis).
+- `/health/readiness`: 503 `blocked` como se esperaba (AUTH desactivada; clave MFA no configurada); modo facturación `shadow`.
+- Landing y assets (`/`, `/studio.js`, `/admin.js`): 200 OK. `admin.js` servido incluye la sección «Conciliación de cobros QvaPay» (`billing-qvapay-run` presente).
+- `POST /admin/billing/qvapay/reconcile`: 503 (fail-closed, auth desactivada) — comportamiento correcto; no ejecuta llamadas externas.
+- Logs de la API sin errores de arranque.
+- El stack legado `axion-atomic` sigue ausente; el volumen de producción `axyron_atomic_pgdata` no fue modificado ni recreado.
+
+### Límites
+- La V1.0 **no** está liberada: `REL-01` sigue bloqueada (AUTH/MFA es Fase 2 del flujo del propietario y requiere verificación en vivo con SMTP/MFA reales; AGT-04 daemon; catálogo/precios QvaPay; cobros). Lo desplegado es el código de la rama de desarrollo con las puertas seguras intactas (AUTH/BILLING/QVAPAY desactivados por defecto).
+- Rollback ensayado de facto solo en el procedimiento (imagen previa etiquetada y salud verificada tras el cambio); el rollback completo de DB no fue necesario.

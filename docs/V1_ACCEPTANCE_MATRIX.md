@@ -289,3 +289,10 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Los tres backups `pre-frontend-upgrade-*.dump` verificados con `pg_restore --list`: 274 objetos cada uno (lectura, sin restaurar). El dump `pre-migration` de 834 B/0 objetos es coherente con un snapshot pre-migración de una base vacía; no es un fallo.
 - `docker compose config --quiet` sobre el stack real: validación OK (exit 0), sin imprimir `.env`.
 - `DB-02` conserva su evidencia de restore aislado del 2026-11-08; `OPS-03` pendiente de ensayo en staging/autorización interactiva para `--deploy/--upgrade-frontend`. `REL-01` sigue bloqueada.
+
+## Despliegue controlado del candidato en el stack real — 8 de noviembre de 2026 (rama `agent/opencode-vps`, autorización del propietario)
+
+- Procedimiento seguro ejecutado: backup previo válido (`pre-release-20261108T161250Z.dump`, 274 objetos), imágenes previas etiquetadas `rollback-20261108`, build `api`/`frontend` correcto, `up -d --no-deps api frontend`; postgres y redis intactos.
+- Verificación posterior real: `/health` 6/6 ok; `/health/readiness` 503 (AUTH off, MFA key ausente) como contrato diseñado; landing/assets 200; `admin.js` servido incluye la conciliación QvaPay; `POST /admin/billing/qvapay/reconcile` 503 fail-closed.
+- `OPS-03`: actualización y verificación de salud ensayadas en el host real; el rollback completo de DB sigue sin ensayarse (no fue necesario). `OPS-01`: preflight fail-closed re-verificado. `DOC-01`: alineado con el despliegue documentado.
+- `REL-01` permanece **bloqueada**: la V1.0 no se declara liberada. AUTH/MFA en vivo, AGT-04, catálogo/precios QvaPay y sandbox oficial siguen pendientes; no se habilitó AUTH, BILLING ni QVAPAY.
