@@ -68,6 +68,29 @@ const routeAdminMocks = (page) => {
   });
 };
 
+const keyboardAudit = async (page, label, maxTabs = 30) => {
+  const issues = [];
+  const stops = [];
+  for (let i = 0; i < maxTabs; i++) {
+    await page.keyboard.press("Tab");
+    const info = await page.evaluate(() => {
+      const el = document.activeElement;
+      if (!el) return { sig: "none", ok: false, desc: "sin elemento activo" };
+      const tag = el.tagName.toLowerCase();
+      const id = el.id ? `#${el.id}` : "";
+      const interactive = el.closest("a[href],area[href],button,input,select,textarea,summary,audio[controls],video[controls],[tabindex]:not([tabindex='-1'])") !== null;
+      const visible = !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+      return { sig: `${tag}${id}`, ok: interactive && visible && tag !== "body" && tag !== "html", desc: `${tag}${id}` };
+    });
+    stops.push(info.desc);
+    if (info.desc === "body" || info.desc === "html") break;
+    if (!info.ok) issues.push(`Tab ${i + 1}: foco en elemento no interactivo o invisible: ${info.desc}`);
+  }
+  console.log(`\n=== teclado ${label} — ${stops.length} paradas, ${issues.length} problemas ===`);
+  for (const issue of issues) console.log(`- ${issue}`);
+  return issues.length;
+};
+
 try {
   for (const hash of ["#app/inicio", "#app/facturacion"]) {
     const studioPage = await browser.newPage();
@@ -107,6 +130,30 @@ try {
     console.log(`- [${v.impact}] ${v.id}: ${v.description} (${v.nodes} nodos) ${v.target.join(" | ")}`);
   }
   await managePage.close();
+
+  let keyboardIssues = 0;
+  {
+    const kbManage = await browser.newPage();
+    routeAdminMocks(kbManage);
+    await kbManage.goto(baseUrl + "/admin-test");
+    await kbManage.getByRole("heading", { name: "Gestión de usuarios y roles" }).waitFor();
+    await kbManage.waitForLoadState("networkidle");
+    keyboardIssues += await keyboardAudit(kbManage, "/admin-test (gestión, mock)");
+    await kbManage.close();
+  }
+  for (const path of ["/", "/admin-test"]) {
+    const page = await browser.newPage();
+    await page.goto(baseUrl + path);
+    await page.waitForLoadState("networkidle");
+    keyboardIssues += await keyboardAudit(page, path);
+    await page.close();
+  }
+  if (keyboardIssues > 0) {
+    console.log(`\nAUDITORÍA DE TECLADO: ${keyboardIssues} problema(s) detectado(s)`);
+    process.exitCode = 1;
+  } else {
+    console.log("\nAUDITORÍA DE TECLADO: sin problemas en las vistas auditadas");
+  }
 
   for (const path of ["/", "/admin-test"]) {
     const page = await browser.newPage();
