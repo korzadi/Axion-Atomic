@@ -304,3 +304,10 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - `main = e383621` (merge de la candidata; push EXITOSO; CI `42499947946` **5/5 verde**). Producción reconstruida y recreada desde `main`; frontend idéntico (no recreado); `/health` 6/6; dominio público 200; `admin.js` con conciliación QvaPay presente.
 - Rollback disponible: imágenes etiquetadas `pre-main-20261108` y `rollback-20261108`; `.env` previo en `/tmp/.env.rollback-20261108`.
 - Siguen desactivados por diseño: `BILLING_ENFORCEMENT_ENABLED`, `QVAPAY_ENABLED`, `SANDBOX_DOCKER_ENABLED` (faltan catálogo/precios, token QvaPay, daemon sandbox). `REL-01` no se declara liberada: falta ensayo de registro/verificación/MFA con buzón real y checkout real.
+
+## Rehearsal de rollback y assets verificados — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Assets servidos por el frontend en producción verificados byte a byte contra el repositorio (`cmp`): idénticos.
+- Rollback de aplicación ensayado en vivo: imágenes `rollback-20261108` en servicio saludable (6/6) contra la DB migrada (023); re-forward a `main-20261108` verificado (readiness `ready`, `/health` 6/6, assets 200). `OPS-03`: rollback de aplicación y de instalación ensayados; el rollback completo de DB sigue sin ensayarse (no fue necesario).
+- Producción == `main` (`aad1f48`): código desplegado == documentación de `main` == `agent/opencode-vps` (docs). CI `main` `42500057110`: 5/5 verde.
+- `REL-01` permanece bloqueada por (1) token/catálogo QvaPay, (2) ensayo con buzón real, (3) AGT-04. No se declara la V1.0 liberada.
