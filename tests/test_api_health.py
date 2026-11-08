@@ -1,5 +1,7 @@
 import json
 import unittest
+
+import httpx
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -168,6 +170,74 @@ class ApiHealthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'"status":"ready"', response.body)
         self.assertIn(b'"redis":"degraded"', response.body)
+
+
+    async def test_readiness_http_route_returns_blocked_503_with_safe_dependency_details(self):
+        failed_health = HTTPException(
+            status_code=503,
+            detail={"status": "degraded", "checks": {
+                "database": "ok", "ollama": "ok", "chat_model": "unavailable",
+                "embedding_model": "ok", "qdrant": "ok",
+            }},
+        )
+        auth_report = {
+            "status": "blocked",
+            "checks": {"authentication_enabled": False},
+            "billing": {"mode": "shadow"},
+        }
+        with patch.object(main, "health", side_effect=failed_health), patch.object(
+            main, "auth_readiness", return_value=auth_report
+        ):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=main.app),
+                base_url="http://test",
+            ) as client:
+                response = await client.get("/health/readiness")
+
+        self.assertEqual(response.status_code, 503)
+        payload = response.json()
+        self.assertEqual(payload["status"], "blocked")
+        self.assertEqual(payload["checks"], auth_report["checks"])
+        self.assertEqual(payload["dependencies"]["chat_model"], "unavailable")
+        self.assertNotIn("database unavailable", response.text)
+
+    async def test_readiness_http_route_returns_200_when_required_controls_are_ready(self):
+        dependency_health = {"status": "degraded", "checks": {
+            "database": "ok", "ollama": "ok", "chat_model": "ok",
+            "embedding_model": "ok", "qdrant": "ok", "redis": "degraded",
+        }}
+        auth_report = {
+            "status": "ready",
+            "checks": {"authentication_enabled": True},
+            "billing": {"mode": "shadow"},
+        }
+        with patch.object(main, "health", return_value=dependency_health), patch.object(
+            main, "auth_readiness", return_value=auth_report
+        ):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=main.app),
+                base_url="http://test",
+            ) as client:
+                response = await client.get("/health/readiness")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "ready")
+        self.assertEqual(payload["optional"]["redis"], "degraded")
+
+
+    async def test_liveness_http_route_stays_available_without_dependency_checks(self):
+        with patch.object(
+            main, "health", side_effect=AssertionError("liveness must not probe dependencies")
+        ):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=main.app),
+                base_url="http://test",
+            ) as client:
+                response = await client.get("/health/live")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "alive"})
 
 
 if __name__ == "__main__":
