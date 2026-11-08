@@ -129,5 +129,12 @@ class RepoIndexer:
         return len(orphaned)
 
     async def remove_project(self, project_id: str) -> None:
-        await self.store.delete_project(project_id)
-        await asyncio.to_thread(self.meta.delete_project_index, project_id)
+        if not project_id or not isinstance(project_id, str):
+            raise ValueError("project_id es obligatorio")
+        lock = self._locks.setdefault(project_id, asyncio.Lock())
+        async with lock:
+            # SQL es la fuente canónica: retirar primero la visibilidad del índice.
+            # Si Qdrant falla, los vectores quedan huérfanos e invisibles al Retriever;
+            # reconcile_project puede eliminarlos de forma segura más tarde.
+            await asyncio.to_thread(self.meta.delete_project_index, project_id)
+            await self.store.delete_project(project_id)
