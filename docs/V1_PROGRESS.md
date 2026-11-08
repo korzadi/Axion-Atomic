@@ -645,3 +645,47 @@ El propietario autorizó el trabajo en `agent/opencode-vps` (no en `agent/chatgp
 
 ### Pendiente
 - Decisiones del propietario (pesos de créditos, tarifa por modelo versionada en BD, confirmación por escrito de comisión QvaPay, atribución de costes, términos legales) antes de habilitar comercialización.
+
+## Checkpoint Fase 10 — conciliación administrativa QvaPay (2026-11-08, `agent/opencode-vps`)
+
+### Implementado
+- `POST /admin/billing/qvapay/reconcile`: consulta administrativa (solo con `billing.manage` y CSRF) de los últimos cobros del titular vía `QvaPayLightningClient` y conciliación con invoices abiertas vía `reconcile_lightning_payments`. Falla cerrado (503) cuando `QVAPAY_ENABLED=false` o falta el token; nunca expone el token ni detalles internos del proveedor; la auditoría global se registra antes de la llamada externa.
+- Reutiliza íntegramente las reglas existentes: coincidencia por referencia + sats exactos + destinatario + `transaction_uuid`, y acreditación vía `confirm_verified_payment` (idempotente). No cobra a nadie, no crea órdenes ni habilita checkout.
+- `frontend/admin.js`: sección «Conciliación de cobros QvaPay» en «Operaciones de créditos y facturación» (visible con `billing.manage`), con confirmación explícita y resultado accesible (`aria-live`).
+- `tests/e2e/studio-browser.mjs`: mock y clic en el botón de conciliación; verificado «Cobros consultados: 4».
+- `tests/test_admin_qvapay_reconcile.py`: 6 pruebas de contrato HTTP (autorización, fail-closed sin flag/token, auditoría previa a la llamada externa, error del proveedor ocultado, resumen de outcomes sin detalles de pago, límites de `max_pages`).
+
+### Verificación
+- `DATABASE_URL=sqlite:///./ci-test.db .venv/bin/python -m pytest -q` — **1006 passed, 11 skipped**.
+- `.venv/bin/python -m compileall`, `scripts/check_frontend_js.py`, `pip check`, `git diff --check` — OK.
+- E2E de navegador (Playwright 1.58.2/Chromium) — **aprobado** con la nueva sección.
+- `node tests/e2e/a11y-scan.mjs` — 0 violaciones WCAG 2 A/AA (sin cambios).
+- CI del HEAD resultante: pendiente al redactar; debe confirmarse antes de declarar QA-01/QA-02 verificadas para este SHA.
+
+### Límites
+- No habilita cobros, checkout ni acreditación automática. Catálogo/precios siguen pendientes del producto; sandbox oficial pendiente. REL-01 sigue bloqueada.
+
+## Checkpoint Fase 12 — auditoría de teclado (STU-04) (2026-11-08, `agent/opencode-vps`)
+
+- `tests/e2e/a11y-scan.mjs` incorpora `keyboardAudit`: recorre con Tab la landing, el portal administrativo estático y la vista de gestión autenticada (mock). Resultado: **25 paradas (gestión), 30 (landing), 5 (admin login); 0 problemas**: foco siempre en elemento interactivo y visible; la secuencia termina en `body` tras la última parada (sin trampa ni pérdida de foco). El script sale con código 1 si detecta problemas.
+- STU-04 pasa a: vistas escaneadas con axe (0 violaciones) + navegación por teclado sin trampas ni foco perdido en las mismas vistas. Siguen sin verificar lectores de pantalla reales y el backend en staging.
+
+## Estado de fases tras este bloque (sin cambios de porcentaje por estas pruebas)
+
+- Fase 7 (Archivos y sandbox): sin cambios funcionales nuevos; suite y snapshot/Docker tests siguen en verde. AGT-04 bloqueada (daemon/TLS/digest/E2E real).
+- Fase 8 (Administración): ADM-01 conserva su verificación previa; el nuevo endpoint queda pendiente de CI para este SHA.
+- Fase 9 (Créditos y facturación): sin cambios; cobros desactivados; catálogo `preview_only`.
+- Fase 10 (QvaPay): conciliación administrativa implementada y probada; checkout/rutas HTTP/catálogo de cobro siguen bloqueados por decisiones comerciales.
+- Fase 11 (Instalación y documentación): sin cambios; pendiente staging con autorización del operador.
+- Fase 12 (QA): teclado auditado; suite 1006/1006 (SQLite); REL-01 sigue bloqueada.
+
+## Evidencia CI del bloque anterior — 2026-11-08 (`agent/opencode-vps`)
+
+- CI del HEAD `76c5356e0bd0001b659db0aa10eb2a51191256b2` (run `42496765302` al redactar; rama `agent/opencode-vps`): los cinco jobs en verde:
+  - `python-tests`: **1006 passed, 11 skipped** (con `DATABASE_URL=sqlite:///./ci-test.db`).
+  - `postgres-migrations`: **74 passed** (PostgreSQL efímero, migraciones 001→023 + doble ejecución del migrador).
+  - `studio-browser-e2e`: aprobado con la nueva sección «Conciliación de cobros QvaPay».
+  - `container-image-build`: success. `qdrant-cloud-integration`: success.
+- QA-01/QA-02 pueden considerarse verificadas **para este SHA** (no para staging ni para producción). REL-01 sigue bloqueada por AUTH/sandbox/catálogo/staging.
+
+- CI `42496918230` sobre `704f6d3` (commit documental): 5/5 en verde. La evidencia de código corresponde a `76c5356` (CI `42496765302`).

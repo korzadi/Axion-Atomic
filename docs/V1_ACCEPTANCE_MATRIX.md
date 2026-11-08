@@ -261,3 +261,18 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - `scripts/install_vps.sh --check` ejecutado en el host: detección fail-closed correcta (`[ERROR] Puerto 8070 ocupado; no se detendrá el servicio existente.`), exit 1, sin tocar el stack ni imprimir secretos. `test_vps_installer_contract.py`: **23 passed**.
 - `docs/VPS_INSTALLATION.md`: simulacro real de restauración documentado y sección «Mantenimiento rutinario»; README corregido.
 - Pendiente: ejecución `--prepare/--check/--deploy` en staging con autorización del operador; `--upgrade-frontend` y rollback sin ensayar aislados; inventario real (OPS-02) requiere operador.
+
+## Revisión incremental QvaPay/teclado — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Nuevo `POST /admin/billing/qvapay/reconcile`: exige `billing.manage` y CSRF; falla cerrado (503) con `QVAPAY_ENABLED=false` o sin token; audita `billing.qvapay.reconcile` antes de llamar a QvaPay; devuelve resumen (`examined_open_invoices`, `payments_fetched`, `outcomes`) sin exponer token, bolt11, referencias ni `transaction_uuid`. `max_pages` limitado a 5. La acreditación sigue delegada en `confirm_verified_payment` (reglas ya probadas). Botón «Conciliar QvaPay» en el portal (visible con `billing.manage`). Pruebas: 6 de contrato HTTP (`tests/test_admin_qvapay_reconcile.py`); E2E de navegador ampliado (mock «Cobros consultados: 4») ejecutado y **aprobado**.
+- `PAY-01` permanece **Parcial**: checkout, rutas HTTP y cobro real bloqueados por catálogo/precios aprobados y sandbox oficial. La conciliación manual ya es operable en staging cuando el propietario habilite `QVAPAY_ENABLED`.
+- `tests/e2e/a11y-scan.mjs` añade auditoría de teclado (Tab) sobre landing, portal estático y vista de gestión autenticada (mock): 0 problemas; la secuencia termina en `body` sin trampa ni foco perdido; el script sale con código 1 ante cualquier problema. En curso la cobertura de lectores de pantalla reales.
+- `STU-04` continúa **Parcial**, pero con navegación completa por teclado verificada en las vistas escaneadas.
+- Suite local (SQLite): **1006 passed, 11 skipped**; `compileall`, `check_frontend_js.py`, `pip check` y `git diff --check` correctos. CI del HEAD resultante pendiente al redactar; no se declara ninguna puerta verificada para este SHA.
+- `ADM-01` conserva su verificación previa para `1db1d32`; el endpoint nuevo requiere CI propio. `REL-01` sigue **bloqueada**. No se ejecutaron pagos, cobros, despliegues ni cambios de infraestructura.
+
+## Confirmación CI del bloque QvaPay/teclado — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- CI del HEAD `76c5356e0bd0001b659db0aa10eb2a51191256b2` (run `42496765302`, al redactar): **5/5 jobs en verde** — `python-tests` 1006 passed / 11 skipped; `postgres-migrations` 74 passed; `studio-browser-e2e` aprobado (incluye conciliación QvaPay en el portal); `container-image-build` y `qdrant-cloud-integration` success.
+- `QA-01` y `QA-02`: evidencia en verde para `76c5356`. `ADM-01`: el endpoint `POST /admin/billing/qvapay/reconcile` queda cubierto por CI (python-tests + e2e browser). Sigue pendiente la validación en staging.
+- `REL-01` sigue **bloqueada** (AUTH/MFA sin habilitar, AGT-04, catálogo/precios QvaPay, staging). No se declara la V1.0 liberada.
