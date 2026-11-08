@@ -226,8 +226,8 @@ class AuthRouteGateTests(unittest.TestCase):
         request = Mock(spec=Request)
         request.client.host = "198.51.100.33"
         req = EmailAddressRequest(email="  Person@Example.com ")
-        with patch("api.auth_recovery_routes.settings.auth_enabled", True), \\
-             patch("api.auth_recovery_routes._limit") as limiter, \\
+        with patch("api.auth_recovery_routes.settings.auth_enabled", True), \
+             patch("api.auth_recovery_routes._limit") as limiter, \
              patch("api.auth_recovery_routes.email_delivery_configured", return_value=False):
             asyncio.run(resend_verification(req, request))
             asyncio.run(forgot_password(req, request))
@@ -245,8 +245,8 @@ class AuthRouteGateTests(unittest.TestCase):
         from api.schemas import EmailAddressRequest
         request = Mock(spec=Request)
         request.client.host = "198.51.100.34"
-        with patch("api.auth_recovery_routes.settings.auth_enabled", True), \\
-             patch("api.auth_recovery_routes._limit", side_effect=HTTPException(status_code=429, detail="Demasiadas solicitudes")) as limiter, \\
+        with patch("api.auth_recovery_routes.settings.auth_enabled", True), \
+             patch("api.auth_recovery_routes._limit", side_effect=HTTPException(status_code=429, detail="Demasiadas solicitudes")) as limiter, \
              patch("api.auth_recovery_routes._resend_verification_if_pending") as delivery:
             with self.assertRaises(HTTPException) as raised:
                 asyncio.run(resend_verification(
