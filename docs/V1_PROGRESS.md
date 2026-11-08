@@ -1,29 +1,31 @@
 # AXYRON ATOMIC V1.0 — Registro de progreso
 
-**Rama:** `main`  
-**Fase activa:** 1 — Autenticación y cuentas  
+**Rama de trabajo:** `agent/opencode-vps`
+**Fase activa:** 12 — QA y liberación V1.0 (desarrollo inverso 12 → 7)
 **Estado global:** EN DESARROLLO  
-**Implementación global:** 69% (referencia inicial; no se incrementa sin evidencia integral)  
-**Preparación productiva:** 35% (requiere validación en staging y configuración externa)
+**Implementación global estimada:** 60% (media simple de las 12 fases; no equivale a preparación productiva)
+**Preparación productiva:** 35% (requiere CI del HEAD, staging y configuración externa)
 
-> Regla: trabajar en una sola fase a la vez. No iniciar la siguiente hasta demostrar los criterios críticos de la fase activa. Los porcentajes no equivalen a disponibilidad operativa en el VPS.
+> Regla: los porcentajes son estimaciones de implementación basadas en la matriz de aceptación. No certifican disponibilidad operativa. Solo se declara **verificada** una capacidad cuando existe una prueba reproducible aprobada para el HEAD indicado. Las fases 10 y 12 conservan bloqueos externos que impiden declarar la V1.0 liberada.
 
-## Resumen de las 12 fases
+## Resumen oficial de las 12 fases
 
-| Fase | Área | Estado | Avance |
-|---:|---|---|---:|
-| 1 | Autenticación y cuentas | EN CURSO | 75% |
-| 2 | Seguridad y MFA | PENDIENTE | 60% |
-| 3 | AXYRON Studio | PENDIENTE | 82% |
-| 4 | Agente AXYRON | PENDIENTE | 50% |
-| 5 | Modelos de IA | PENDIENTE | 65% |
-| 6 | Memoria y RAG | PENDIENTE | 75% |
-| 7 | Archivos y workspaces | PENDIENTE | 60% |
-| 8 | Créditos y facturación | PENDIENTE | 70% |
-| 9 | Administración | PENDIENTE | 53% |
-| 10 | Infraestructura e instalación | PENDIENTE | 74% |
-| 11 | Experiencia de usuario | PENDIENTE | 74% |
-| 12 | Documentación y entrega V1.0 | PENDIENTE | 70% |
+| Fase | Módulo | Avance | Estado |
+| ---: | --- | ---: | --- |
+| 1 | Estabilización y arquitectura | 70% | EN PROGRESO |
+| 2 | Autenticación y MFA | 60% | EN PROGRESO |
+| 3 | Axyron Studio | 50% | EN PROGRESO |
+| 4 | Modelos de IA | 65% | EN PROGRESO |
+| 5 | Agente AXYRON | 75% | EN PROGRESO |
+| 6 | Memoria y RAG | 70% | EN PROGRESO |
+| 7 | Archivos y sandbox | 60% | EN PROGRESO |
+| 8 | Administración | 70% | EN PROGRESO |
+| 9 | Créditos y facturación | 75% | EN PROGRESO |
+| 10 | Integración QvaPay | 25% | BLOQUEADA |
+| 11 | Instalación y documentación | 45% | EN PROGRESO |
+| 12 | QA y liberación V1.0 | 50% | EN PROGRESO |
+
+**Lectura de los porcentajes:** reflejan implementación y pruebas locales del código inspeccionado, no aceptación en staging. Las cifras heredadas del orden antiguo de fases se conservan solo como histórico en las secciones siguientes.
 
 ## Fase 1 — Autenticación y cuentas
 
@@ -203,3 +205,27 @@ Los porcentajes heredados de la tabla anterior corresponden al orden anterior de
 
 ### Próxima tarea de Fase 1
 - Completar cobertura del contrato del migrador en PostgreSQL aislado: confirmar que una segunda ejecución no aplica migraciones nuevas, que un checksum histórico alterado provoca aborto y que los cambios transaccionales fallidos no dejan una versión registrada. Mantener toda prueba destructiva confinada al PostgreSQL efímero de CI.
+
+---
+
+## Checkpoint Fase 12 — QA local reproducible (2026-11-08, rama `agent/opencode-vps`)
+
+### Cambios de esta sesión
+- Corregido `sandbox/backends.py`: el backend local resuelve `python`/`python3` al intérprete que ejecuta la API (`sys.executable`) en lugar de exigir un alias o una ruta presente en el `PATH` restringido del sandbox. Elimina los 9 fallos por `exit_code=127` en sistemas donde solo existe `python3` o un venv.
+- Añadida regresión en `tests/test_sandbox_exec.py` que verifica la resolución del intérprete sin depender del entorno del host.
+- Añadidas 4 pruebas de contrato en `tests/test_payment_orders_http.py`: aislamiento por usuario en listado y detalle de órdenes, orden ajena/inexistente indistinguible (404), rechazo de UUID inválido antes de tocar la base de datos y no filtración de campos del proveedor ni de detalles internos.
+
+### Verificación ejecutada (mismo árbol de trabajo)
+- `python3 -m compileall -q api agent core rag sandbox audit tests scripts` — OK.
+- `python3 -m pytest -q` — **855 passed, 9 skipped, 3 warnings** (los 9 omitidos son pruebas PostgreSQL que exigen `DATABASE_URL`).
+- `python3 scripts/check_frontend_js.py` — sintaxis válida en los 3 scripts inline, `workspace.js`, `studio.js` y `admin.js`.
+- `git diff --check` — limpio.
+- Cobertura local (`coverage run --branch -m pytest -q`): 84% total. Los módulos con menor cobertura son dependientes de PostgreSQL (`billing_reservations`, `mfa_store`, `payment_manager`, `password_reset`, `email_verification`) y se omiten localmente por diseño.
+
+### Pendiente / bloqueado
+- CI del HEAD de esta rama: no ejecutada en esta sesión; no se declara aprobada.
+- PostgreSQL real, Playwright/Chromium, Docker smoke y Qdrant Cloud: no ejecutados localmente; dependen de CI o de infraestructura externa.
+- Restauración de backup en entorno aislado (DB-02) y despliegue: siguen pendientes.
+
+### Siguiente tarea
+Continuar con Fase 11 (instalación y documentación): revisar preflight del instalador, validación de configuración y procedimiento de actualización/restauración reproducible sin tocar producción.

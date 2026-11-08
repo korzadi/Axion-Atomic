@@ -39,7 +39,7 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh` actualizado | Código publicado; CI pendiente |
 | OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución VPS pendiente |
 | OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador y documentación | Pendiente |
-| QA-01 | QA | Suite Python aprobada en HEAD evaluado | Ejecución local con venv y dobles | Parcial; 812 pasan y 9 se omiten con `python` disponible; sin ese binario, 791 pasan al excluir 21 pruebas de sandbox local; CI del HEAD pendiente |
+| QA-01 | QA | Suite Python aprobada en HEAD evaluado | Rama `agent/opencode-vps`: `python3 -m pytest -q` → 855 pasan y 9 se omiten (PostgreSQL) con venv/local; CI del HEAD pendiente | Parcial; local aprobada, CI pendiente |
 | QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions | No confirmada para HEAD actual |
 | DOC-01 | Docs | README, AGENTS, instalación, seguridad y usuario alineados | Documentación del repo | Parcial |
 | REL-01 | Lanzamiento | Todas las puertas críticas aprobadas | Esta matriz | Bloqueada |
@@ -119,3 +119,12 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Se añadió `POST /workspace/agent/runs/{run_id}/cancel` para owner/admin: solo cancela ejecuciones en `awaiting_approval`, invalida aprobaciones pendientes o aprobadas y acciones pendientes, limpia la cola y audita la operación en la misma transacción. La migración 022 habilita el estado `cancelled`.
 - Verificación local: 812 pruebas pasan y 9 se omiten (las 9 son PostgreSQL) usando un enlace temporal no versionado `python` -> `python3`. Sin ese enlace, 791 pasan al excluir las 21 pruebas de `test_sandbox_exec.py`/`test_agent_sandbox.py`, que requieren el binario `python`; no son defectos de la lógica modificada.
 - No se ejecutaron pruebas PostgreSQL reales ni E2E contra Ollama; CI del HEAD actual sigue sin confirmarse. La facturación de pago y el checkout permanecen desactivados.
+
+## Revisión incremental QA — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Se reprodujo la suite completa sobre el árbol de trabajo: 9 fallos iniciales por `python` no instalado en el host (solo existía `python3`/venv). No eran defectos de la lógica de sandbox, pero impedían una verificación reproducible.
+- Corregido el backend local para ejecutar el mismo intérprete que la API; añadida prueba de regresión.
+- Añadidas pruebas de contrato para las consultas privadas de órdenes de pago: aislamiento por usuario, 404 indistinguible para órdenes ajenas/inexistentes, validación previa de UUID y ausencia de campos del proveedor o detalles internos en la respuesta.
+- Verificación real: `compileall` OK; `pytest -q` → **855 passed, 9 skipped**; `check_frontend_js.py` OK; `git diff --check` limpio.
+- QA-01 pasa a **Parcial (local aprobada)**. QA-02 (browser, Docker, PostgreSQL y Qdrant) continúa **no confirmada para este HEAD**; REL-01 sigue bloqueada. No se declara la V1.0 liberada.
+- No se ejecutaron migraciones reales, pagos, despliegues, reinicios, builds ni cambios de infraestructura.

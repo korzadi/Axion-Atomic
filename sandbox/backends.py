@@ -6,6 +6,7 @@ import resource
 import shutil
 import stat
 import subprocess
+import sys
 import tarfile
 import tempfile
 import uuid
@@ -168,6 +169,13 @@ class LocalBackend:
                 "No se pudo aislar la red con un namespace; ejecución local sin red rechazada. "
                 "Solo pruebas/desarrollo pueden habilitar AXION_ALLOW_UNSAFE_LOCAL_NETWORK=1."
             )
+
+        # En sistemas modernos el intérprete del proyecto puede llamarse python3
+        # o vivir en un entorno virtual fuera del PATH restringido del sandbox.
+        # El backend local solo se usa en desarrollo: usamos el mismo intérprete
+        # que ejecuta la API en lugar de exigir un alias o una ruta concreta.
+        if argv and argv[0] in ("python", "python3"):
+            argv = [sys.executable, *argv[1:]]
 
         def limit():
             mem = limits.memory_mb * 1024 * 1024
