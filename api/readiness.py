@@ -1,11 +1,15 @@
 """Comprobaciones seguras de preparación para el lanzamiento."""
 
-from api.config import settings
+from api.config import is_public_https_origin, settings
 from api.email_delivery import email_delivery_configured
 from api.mfa import EnvironmentMfaKeyProvider, MfaError
 from api.billing_result_crypto import EnvironmentResultKeyProvider, ResultEncryptionError
 from api.runtime_attestation import runtime_attestation_configured
 
+
+def _is_public_https_origin(value: object) -> bool:
+    """Use the same public-origin contract as application configuration."""
+    return is_public_https_origin(value)
 
 def auth_readiness() -> dict:
     """Expone solo estados booleanos/modos; nunca devuelve secretos."""
@@ -13,7 +17,7 @@ def auth_readiness() -> dict:
         "authentication_enabled": bool(settings.auth_enabled),
         "transactional_email": email_delivery_configured(settings),
         "https_cookie": bool(settings.auth_cookie_secure),
-        "public_https_origin": bool(settings.oauth_public_base_url),
+        "public_https_origin": _is_public_https_origin(settings.oauth_public_base_url),
         "mfa_encryption_key": False,
     }
     if settings.auth_enabled:
