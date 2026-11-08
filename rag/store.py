@@ -31,6 +31,7 @@ class VectorStore(Protocol):
     async def ensure(self) -> None: ...
     async def upsert(self, points: list[Point]) -> None: ...
     async def delete_path(self, project_id: str, path: str) -> None: ...
+    async def delete_ids(self, ids: list[str]) -> None: ...
     async def delete_project(self, project_id: str) -> None: ...
     async def search(self, project_id: str, vector: list[float], limit: int) -> list[Hit]: ...
 
@@ -71,6 +72,12 @@ class InMemoryVectorStore:
     async def delete_path(self, project_id, path):
         _require(project_id)
         self.points = {k: p for k, p in self.points.items() if not (p.payload["project_id"] == project_id and p.payload["path"] == path)}
+
+    async def delete_ids(self, ids):
+        wanted = set(ids)
+        if not wanted:
+            return
+        self.points = {key: point for key, point in self.points.items() if key not in wanted}
 
     async def delete_project(self, project_id):
         _require(project_id)
@@ -130,6 +137,11 @@ class QdrantStore:
 
     async def delete_path(self, project_id, path):
         await self._req("POST", "/points/delete?wait=true", {"filter": self._filter(project_id, path)})
+
+    async def delete_ids(self, ids):
+        if not ids:
+            return
+        await self._req("POST", "/points/delete?wait=true", {"points": list(ids)})
 
     async def delete_project(self, project_id):
         await self._req("POST", "/points/delete?wait=true", {"filter": self._filter(project_id)})
