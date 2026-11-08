@@ -114,3 +114,28 @@ class AuthReadinessTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LiveDependencyReadinessTests(unittest.TestCase):
+    def test_readiness_requires_all_critical_live_dependencies(self):
+        from api.readiness import combine_readiness_report
+        auth = {"status": "ready", "checks": {"authentication_enabled": True}}
+        deps = {
+            "database": "ok", "ollama": "ok", "chat_model": "ok",
+            "embedding_model": "ok", "qdrant": "unavailable", "redis": "degraded",
+        }
+        report = combine_readiness_report(auth, deps)
+        self.assertEqual(report["status"], "blocked")
+        self.assertEqual(report["dependencies"]["qdrant"], "unavailable")
+        self.assertEqual(report["optional"]["redis"], "degraded")
+
+    def test_readiness_is_ready_when_critical_dependencies_are_live(self):
+        from api.readiness import combine_readiness_report
+        auth = {"status": "ready", "checks": {"authentication_enabled": True}}
+        deps = {
+            "database": "ok", "ollama": "ok", "chat_model": "ok",
+            "embedding_model": "ok", "qdrant": "ok", "redis": "degraded",
+        }
+        report = combine_readiness_report(auth, deps)
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["optional"]["redis"], "degraded")
