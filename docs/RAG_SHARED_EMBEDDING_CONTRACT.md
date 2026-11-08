@@ -74,3 +74,16 @@ Esto preserva los datos históricos, pero significa que los proyectos que ya ten
 - Dos modelos de igual dimensión se indexan con identidades distintas y la recuperación de B no devuelve los textos de A.
 - Los puntos legacy sin identidad bloquean la recuperación de forma explícita, sin eliminarlos.
 - La integración de carga, listado, recuperación y aislamiento por proyecto continúa cubierta.
+
+
+## Corrección tras CI del 8 de noviembre de 2026
+
+La primera ejecución del contrato persistente (run `42492628012`) detectó siete fallos de regresión, con 954 pruebas aprobadas y 10 omitidas. La causa fue principalmente que los dobles antiguos no simulaban el nuevo preflight de lectura de Qdrant ni esperaban los índices y filtros adicionales. También había dos errores en las nuevas pruebas de integración (uso asíncrono de una función síncrona y una aserción demasiado amplia sobre puntos de ambos modelos).
+
+Se actualizaron los contratos de prueba para:
+- Simular explícitamente el scroll de preflight cuando se prueba la búsqueda aislada, sin depender de un Qdrant remoto.
+- Verificar los campos de identidad incluidos en filtros de borrado.
+- Esperar los cuatro índices de payload, incluido el índice INTEGER de dimensión.
+- Comprobar directamente la identidad del punto del modelo B y la conservación del fallo cerrado para puntos legacy.
+
+No se ha relajado el control de identidad ni se ha cambiado el tratamiento fail-closed de datos históricos. La nueva CI de estos ajustes debe aprobar antes de considerar validada ARC-01.
