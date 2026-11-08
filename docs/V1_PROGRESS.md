@@ -540,3 +540,15 @@ Confirmar CI del SHA publicado; después continuar Fase 11 (preflight/staging) y
 - Fase 8: ADM-01 verificada en backend/CI; pendiente E2E contra staging y validación manual del portal.
 - Fase 10: expiración automática de órdenes/invoices verificada (CI verde).
 - REL-01 sigue bloqueada (AUTH, sandbox, catálogo/precios, staging).
+
+## Checkpoint Fase 12 — integración ChatGPT+OpenCode preparada y validada (2026-11-08)
+
+### Integración
+- `agent/chatgpt` avanzó hasta `f6636fe` (reconciliación RAG, contrato de payload, lock por proyecto); `agent/opencode-vps` hasta `cd8f1cc`.
+- Conflicto único `docs/V1_ACCEPTANCE_MATRIX.md`, resuelto en `integration/chatgpt-opencode-20261108b` conservando los dos bloques completos (OpenCode primero, después RAG de ChatGPT). Sin conflictos funcionales: no hay solape en API, seguridad, base de datos ni migraciones.
+- Árbol combinado verificado: **933 passed, 11 skipped**; `compileall` y `check_frontend_js.py` OK; matriz PostgreSQL 74 passed en instancia desechable (migraciones 001→023 + doble ejecución del migrador).
+- PR **#7** abierto hacia `main` (sin merge; control del propietario). CI completa en verde sobre `8318af6` (run `42488953926`): studio-browser-e2e, container-image-build, postgres-migrations, python-tests, qdrant-cloud-integration.
+- La rama de integración es una rama nueva; no se modificó `agent/chatgpt` ni `main`, no hubo force-push ni reset.
+
+### Estado
+- REL-01 sigue bloqueada (AUTH, sandbox, catálogo/precios, staging). La V1.0 no se declara liberada.
