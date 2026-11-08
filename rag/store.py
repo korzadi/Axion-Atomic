@@ -40,6 +40,18 @@ def _require(project_id: str) -> None:
         raise ValueError("project_id es obligatorio")
 
 
+def _validate_point_payload(payload: dict) -> None:
+    """Exige el mismo contrato de aislamiento y trazabilidad en todos los stores."""
+    if not isinstance(payload, dict):
+        raise ValueError("payload debe ser un objeto")
+    project_id = payload.get("project_id")
+    path = payload.get("path")
+    if not isinstance(project_id, str) or not project_id.strip():
+        raise ValueError("payload.project_id debe ser una cadena no vacía")
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError("payload.path debe ser una cadena no vacía")
+
+
 class InMemoryVectorStore:
     """Implementación real (fuerza bruta, coseno) para desarrollo y pruebas; no persiste."""
 
@@ -49,10 +61,12 @@ class InMemoryVectorStore:
     async def ensure(self) -> None: ...
 
     async def upsert(self, points):
-        for p in points:
-            if not p.payload.get("project_id") or "path" not in p.payload:
-                raise ValueError("payload sin project_id/path")
-            self.points[p.id] = p
+        # Validar el lote completo antes de mutar el almacén: un punto inválido
+        # no debe dejar una ingesta parcial en memoria.
+        for point in points:
+            _validate_point_payload(point.payload)
+        for point in points:
+            self.points[point.id] = point
 
     async def delete_path(self, project_id, path):
         _require(project_id)
@@ -98,11 +112,12 @@ class QdrantStore:
             await self._req("PUT", "/index", {"field_name": field, "field_schema": "keyword"})
 
     async def upsert(self, points):
+        # La validación precede a cualquier petición para impedir que un lote
+        # parcialmente inválido publique sus primeros fragmentos.
+        for point in points:
+            _validate_point_payload(point.payload)
         for i in range(0, len(points), 64):
             batch = points[i:i + 64]
-            for p in batch:
-                if not p.payload.get("project_id"):
-                    raise ValueError("payload sin project_id")
             await self._req("PUT", "/points?wait=true", {"points": [{"id": p.id, "vector": p.vector, "payload": p.payload} for p in batch]})
 
     @staticmethod
