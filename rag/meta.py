@@ -68,6 +68,11 @@ class MetaStore:
         )
         return [row[0] for row in rows]
 
+    def list_project_chunk_ids(self, project_id: str) -> set[str]:
+        """Devuelve todos los IDs de fragmentos SQL vigentes de un proyecto."""
+        rows = self._q("SELECT id FROM rag_chunks WHERE project_id = ?", (project_id,))
+        return {row[0] for row in rows}
+
     def replace_file(self, project_id: str, path: str, sha: str, revision: str | None, size: int,
                      chunks: list[tuple[str, Chunk]], now_iso: str) -> None:
         with self._tx() as cur:
