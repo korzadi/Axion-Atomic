@@ -70,6 +70,31 @@ class WorkspaceKnowledgeUploadRagIntegrationTests(unittest.IsolatedAsyncioTestCa
         self.assertNotIn("Guía privada de despliegue AXION", isolated)
 
 
+    async def test_delete_source_removes_all_embedding_versions_only_in_own_project(self):
+        source_id = "12345678-1234-5678-1234-567812345678"
+        await service.ingest_text(
+            "Contenido privado del proyecto A.", "a.txt", "project-a", source_id
+        )
+        await service.ingest_text(
+            "Contenido privado del proyecto B.", "b.txt", "project-b", source_id
+        )
+
+        before = list(self.client.points.values())
+        self.assertEqual(
+            {point.payload["project_id"] for point in before},
+            {"project-a", "project-b"},
+        )
+        self.assertTrue(all(point.payload["source_id"] == source_id for point in before))
+
+        await service.delete_source(source_id, "project-a")
+
+        remaining = list(self.client.points.values())
+        self.assertTrue(remaining)
+        self.assertTrue(all(point.payload["project_id"] == "project-b" for point in remaining))
+        self.assertTrue(all(point.payload["source_id"] == source_id for point in remaining))
+        self.assertTrue(all("proyecto B" in point.payload["text"] for point in remaining))
+
+
     async def test_retrieval_never_mixes_models_with_equal_dimensions(self):
         await service.ingest_text("Contenido del modelo A.", "a.txt", "project-models")
         model_a = service.settings.embed_model
