@@ -38,8 +38,8 @@ def test_verification_token_is_hashed_single_use_and_activates_user():
         status = conn.execute(text("SELECT status FROM users WHERE id=:id"), {"id": user_id}).scalar_one()
     assert stored != issued.token
     assert status == "pending_verification"
-    assert consume_email_verification_token(engine=engine, token=issued.token) is True
-    assert consume_email_verification_token(engine=engine, token=issued.token) is False
+    assert consume_email_verification_token(engine=engine, token=issued.token) == user_id
+    assert consume_email_verification_token(engine=engine, token=issued.token) is None
     with engine.connect() as conn:
         row = conn.execute(text("""
             SELECT status,email_verified_at FROM users WHERE id=:id
@@ -52,8 +52,8 @@ def test_new_token_invalidates_previous_open_token():
     user_id = _pending_user()
     first = issue_email_verification_token(engine=engine, user_id=user_id)
     second = issue_email_verification_token(engine=engine, user_id=user_id)
-    assert consume_email_verification_token(engine=engine, token=first.token) is False
-    assert consume_email_verification_token(engine=engine, token=second.token) is True
+    assert consume_email_verification_token(engine=engine, token=first.token) is None
+    assert consume_email_verification_token(engine=engine, token=second.token) is not None
 
 
 def test_expired_token_cannot_activate_account():
@@ -62,7 +62,7 @@ def test_expired_token_cannot_activate_account():
     issued = issue_email_verification_token(
         engine=engine, user_id=user_id, now=instant - timedelta(hours=1)
     )
-    assert consume_email_verification_token(engine=engine, token=issued.token, now=instant) is False
+    assert consume_email_verification_token(engine=engine, token=issued.token, now=instant) is None
     with engine.connect() as conn:
         status = conn.execute(text("SELECT status FROM users WHERE id=:id"), {"id": user_id}).scalar_one()
     assert status == "pending_verification"
@@ -73,12 +73,12 @@ def test_disabled_account_cannot_be_activated_by_token():
     issued = issue_email_verification_token(engine=engine, user_id=user_id)
     with engine.begin() as conn:
         conn.execute(text("UPDATE users SET status='disabled' WHERE id=:id"), {"id": user_id})
-    assert consume_email_verification_token(engine=engine, token=issued.token) is False
+    assert consume_email_verification_token(engine=engine, token=issued.token) is None
     with engine.connect() as conn:
         status = conn.execute(text("SELECT status FROM users WHERE id=:id"), {"id": user_id}).scalar_one()
     assert status == "disabled"
 
 
 def test_malformed_tokens_are_rejected():
-    assert consume_email_verification_token(engine=engine, token="short") is False
-    assert consume_email_verification_token(engine=engine, token="ñ" * 30) is False
+    assert consume_email_verification_token(engine=engine, token="short") is None
+    assert consume_email_verification_token(engine=engine, token="ñ" * 30) is None

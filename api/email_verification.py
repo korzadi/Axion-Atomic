@@ -64,15 +64,20 @@ def issue_email_verification_token(
 
 
 def consume_email_verification_token(
-    *, engine: Engine, token: str, now: datetime | None = None,
-) -> bool:
-    """Consume atómicamente token vigente y activa exclusivamente cuenta pendiente."""
+    *, engine: Engine, token: str, now: datetime | None = None, on_activate=None,
+) -> str | None:
+    """Consume atómicamente token vigente y activa exclusivamente cuenta pendiente.
+
+    Devuelve el ``user_id`` activado o ``None`` si el token no es válido. ``on_activate``,
+    si se proporciona, se invoca DENTRO de la misma transacción con
+    ``(conn, user_id)``: una excepción aborta la activación completa.
+    """
     if not isinstance(token, str) or not 20 <= len(token) <= 256:
-        return False
+        return None
     try:
         digest = _token_hash(token)
     except UnicodeEncodeError:
-        return False
+        return None
     instant = _now(now)
     with engine.begin() as conn:
         row = conn.execute(text("""
@@ -81,7 +86,7 @@ def consume_email_verification_token(
             FOR UPDATE
         """), {"digest": digest, "now": instant}).mappings().first()
         if row is None:
-            return False
+            return None
         updated = conn.execute(text("""
             UPDATE users
             SET status='active', email_verified_at=:now, updated_at=:now
@@ -89,11 +94,13 @@ def consume_email_verification_token(
         """), {"user_id": row["user_id"], "now": instant})
         if updated.rowcount != 1:
             # No consumir un token si la cuenta fue deshabilitada o ya cambió de estado.
-            return False
+            return None
         consumed = conn.execute(text("""
             UPDATE email_verification_tokens SET consumed_at=:now
             WHERE id=CAST(:id AS UUID) AND consumed_at IS NULL
         """), {"id": str(row["id"]), "now": instant})
         if consumed.rowcount != 1:
             raise RuntimeError("No se pudo confirmar el consumo único del token")
-    return True
+        if on_activate is not None:
+            on_activate(conn, str(row["user_id"]))
+    return str(row["user_id"])

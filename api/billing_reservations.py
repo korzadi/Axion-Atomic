@@ -623,3 +623,57 @@ def reconcile_confirmed_no_execution(
             raise ReservationStateError("El estado de la reserva cambió durante la conciliación")
 
     return ReconciliationResult(reservation_uuid, "released")
+
+
+def _grant_verification_credits_conn(
+    conn, *, user_id: str, credits: int, instant: datetime,
+) -> bool:
+    reference = f"free-verify:{user_id}"
+    user = conn.execute(text("""
+        SELECT id FROM users WHERE id=:user_id FOR UPDATE
+    """), {"user_id": user_id}).scalar_one_or_none()
+    if user is None:
+        raise ValueError("La cuenta no existe")
+    existing = conn.execute(text("""
+        SELECT id FROM billing_credit_lots
+        WHERE user_id=:user_id AND source='promotion' AND source_reference=:reference
+    """), {"user_id": user_id, "reference": reference}).scalar_one_or_none()
+    if existing is not None:
+        return False
+    lot_id = str(uuid.uuid4())
+    conn.execute(text("""
+        INSERT INTO billing_credit_lots
+            (id, user_id, source, source_reference, granted_credits, available_credits)
+        VALUES (CAST(:id AS UUID), :user_id, 'promotion', :reference, :credits, :credits)
+    """), {"id": lot_id, "user_id": user_id, "reference": reference, "credits": credits})
+    conn.execute(text("""
+        INSERT INTO billing_credit_ledger
+            (id, user_id, credit_lot_id, event_type, available_delta,
+             reserved_delta, consumed_delta, idempotency_key, reason)
+        VALUES (CAST(:id AS UUID), :user_id, CAST(:lot_id AS UUID), 'grant',
+                :credits, 0, 0, :ledger_key, :reason)
+    """), {
+        "id": str(uuid.uuid4()), "user_id": user_id, "lot_id": lot_id,
+        "credits": credits, "ledger_key": f"free-grant:{user_id}",
+        "reason": "Concesión FREE de créditos por verificación de correo",
+    })
+    return True
+
+
+def grant_verification_credits(
+    *, engine: Engine, user_id: str, credits: int = 50, now: datetime | None = None,
+) -> bool:
+    """Concesión única FREE de créditos al verificar el correo.
+
+    Idempotente por diseño: la clave ``UNIQUE (source, source_reference)`` en
+    ``billing_credit_lots`` (``promotion`` + ``free-verify:{user_id}``) impide
+    una segunda concesión aunque el llamador reintente o haya doble concurrencia.
+    Devuelve ``True`` si la concesión se aplicó en esta llamada.
+    """
+    if not isinstance(user_id, str) or not user_id.strip():
+        raise ValueError("user_id es obligatorio")
+    if isinstance(credits, bool) or not isinstance(credits, int) or not 1 <= credits <= 1000:
+        raise ValueError("credits debe ser un entero entre 1 y 1000")
+    instant = _aware(now or datetime.now(timezone.utc), "now")
+    with engine.begin() as conn:
+        return _grant_verification_credits_conn(conn, user_id=user_id, credits=credits, instant=instant)

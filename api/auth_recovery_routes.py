@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy import text
@@ -7,6 +7,7 @@ from api.config import settings
 from api.database import engine
 from api.email_delivery import email_delivery_configured, send_password_reset_email, send_verification_email
 from api.email_verification import issue_email_verification_token, consume_email_verification_token
+from api.billing_reservations import _grant_verification_credits_conn
 from api.password_reset import issue_password_reset_token, consume_password_reset_token
 from api.rate_limit import consume_rate_limit, rate_limit_key
 from api.schemas import EmailTokenRequest, PasswordResetRequest, EmailAddressRequest
@@ -49,11 +50,27 @@ def _send_password_reset_if_active(email: str) -> None:
         send_password_reset_email(settings=settings, recipient=email, token=issued.token)
 
 
+def _activate_and_grant(conn, user_id: str) -> None:
+    """Concesión FREE única dentro de la MISMA transacción que activa la cuenta.
+
+    Si la concesión falla, la verificación también se deshace (rollback total).
+    """
+    _grant_verification_credits_conn(
+        conn, user_id=user_id, credits=50,
+        instant=datetime.now(timezone.utc),
+    )
+
+
 @router.post("/verify-email")
 async def verify_email(req: EmailTokenRequest, request: Request):
     _gate()
     await run_in_threadpool(_limit, request, "auth:verify-email:ip", 20, timedelta(minutes=10))
-    if not await run_in_threadpool(consume_email_verification_token, engine=engine, token=req.token):
+
+    activated = await run_in_threadpool(
+        consume_email_verification_token, engine=engine, token=req.token,
+        on_activate=_activate_and_grant,
+    )
+    if not activated:
         raise HTTPException(status_code=400, detail="El enlace no es válido o ha caducado.")
     return {"status": "verified", "message": "Correo verificado. Ya puedes iniciar sesión."}
 

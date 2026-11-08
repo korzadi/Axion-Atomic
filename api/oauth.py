@@ -173,6 +173,7 @@ def provider_profile(provider: str, code: str, nonce: str, settings) -> dict:
 
 def resolve_user(engine: Engine, provider: str, profile: dict, *, terms_accepted: bool) -> dict:
     from api.auth import hash_password
+    from api.billing_reservations import _grant_verification_credits_conn
     import uuid
     if terms_accepted is not True:
         raise ValueError("Consentimiento legal requerido")
@@ -214,5 +215,9 @@ def resolve_user(engine: Engine, provider: str, profile: dict, *, terms_accepted
             VALUES(:id,:user_id,:provider,:subject,:email,:now,:now)
         """), {"id": str(uuid.uuid4()), "user_id": user_id, "provider": provider,
                "subject": profile["subject"], "email": profile["email"], "now": now})
+        # Concesión FREE única (idempotente) dentro de la misma transacción:
+        # si falla, la activación/alta completa se revierte.
+        if linked is None:
+            _grant_verification_credits_conn(conn, user_id=user_id, credits=50, instant=now)
         return {"id": user_id, "email": profile["email"],
                 "display_name": display_name, "status": "active"}
