@@ -98,6 +98,29 @@ class OllamaClientTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(RuntimeError, "no terminó"):
                 await ollama.chat([{"role": "user", "content": "hola"}])
 
+    def test_chat_response_normalizes_only_latest_alias_for_configured_model(self):
+        result = ollama.parse_chat_response(
+            {
+                "model": "atomic-code:latest",
+                "done": True,
+                "message": {"content": "respuesta"},
+            },
+            requested_model="atomic-code",
+        )
+        self.assertEqual(result.requested_model, "atomic-code")
+        self.assertEqual(result.returned_model, "atomic-code")
+
+    def test_chat_response_does_not_normalize_a_different_model(self):
+        result = ollama.parse_chat_response(
+            {
+                "model": "atomic-reasoning:latest",
+                "done": True,
+                "message": {"content": "respuesta"},
+            },
+            requested_model="atomic-code",
+        )
+        self.assertEqual(result.returned_model, "atomic-reasoning:latest")
+
     async def test_model_availability_requires_exact_configured_ollama_tag(self):
         with patch.object(ollama, "settings") as settings, patch.object(
             ollama.httpx, "AsyncClient", FakeTagsClient
