@@ -101,7 +101,7 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
             ])
 
         embed = AsyncMock(return_value=[0.1, 0.2, 0.3, 0.4])
-        with patch.object(service, "ensure_collection"), patch.object(service, "embed", embed), patch.object(service.client, "query_points", side_effect=query_points):
+        with patch.object(service, "ensure_collection"), patch.object(service.client, "scroll", return_value=([], None)), patch.object(service, "embed", embed), patch.object(service.client, "query_points", side_effect=query_points):
             context = await service.retrieve("consulta", "project-a")
 
         self.assertIn("contenido propio", context)
@@ -140,7 +140,10 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
         kwargs = delete.call_args.kwargs
         conditions = kwargs["points_selector"].filter.must
         self.assertEqual([(item.key, item.match.value) for item in conditions], [
-            ("project_id", "project-a"), ("source_id", source_id)
+            ("project_id", "project-a"),
+            ("embedding_model", service.EmbeddingIdentity.from_settings(service.settings).model),
+            ("embedding_dimension", service.settings.embed_dimension),
+            ("source_id", source_id),
         ])
         self.assertTrue(kwargs["wait"])
 
@@ -293,6 +296,7 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
         response = SimpleNamespace(points=[SimpleNamespace(payload=payload)])
         with (
             patch.object(service, "ensure_collection"),
+            patch.object(service.client, "scroll", return_value=([], None)),
             patch.object(service, "embed", new=AsyncMock(return_value=[0.1, 0.2, 0.3, 0.4])),
             patch.object(service.client, "query_points", return_value=response) as query,
         ):
