@@ -66,7 +66,8 @@ def test_billing_view_uses_real_checkout_contract_when_enabled():
     source = (FRONTEND / "studio.js").read_text(encoding="utf-8")
     assert 'api("/billing/checkout/orders",{method:"POST"' in source
     assert '"/verify",{method:"POST"}' in source
-    assert 'data-buy=' in source
+    assert 'href="#app/comprar?product_code=' in source
+    assert "Crear factura y pagar" in source
     assert "catalog.checkout_enabled===true" in source
 
 

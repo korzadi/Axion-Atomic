@@ -216,8 +216,12 @@ try {
   await billingPage.goto(baseUrl + "/#app/facturacion");
   await billingPage.getByRole("heading", { name: "Facturación" }).waitFor();
   await billingPage.getByText("Checkout habilitado").waitFor();
-  await billingPage.getByRole("button", { name: "Comprar" }).click();
+  await billingPage.getByRole("link", { name: "Comprar" }).click();
+  await billingPage.waitForURL(/#app\/comprar\?product_code=starter_300/);
+  await billingPage.getByRole("heading", { name: "Comprar Axyron Atomic STARTER" }).waitFor();
+  await billingPage.getByRole("button", { name: "Crear factura y pagar" }).click();
   await billingPage.getByRole("heading", { name: "Factura Lightning para tu pago" }).waitFor();
+  await billingPage.getByRole("button", { name: "Copiar factura" }).click();
   await billingPage.getByRole("button", { name: "Confirmar pago" }).click();
   await billingPage.getByText("Pago confirmado.").waitFor();
   await billingPage.close();
