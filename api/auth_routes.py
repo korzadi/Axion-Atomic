@@ -115,6 +115,7 @@ async def register(req: RegisterRequest, request: Request):
         except Exception:
             # Mantener respuesta indistinguible de una dirección ya registrada.
             # El usuario puede solicitar el reenvío desde /resend-verification.
+            pass
     return {"status": "pending_verification",
             "message": "Si los datos son válidos, recibirás un correo con los pasos para activar tu cuenta."}
 
