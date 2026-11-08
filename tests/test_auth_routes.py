@@ -121,6 +121,23 @@ class AuthRouteGateTests(unittest.TestCase):
         issue.assert_called_once()
         create.assert_not_called()
 
+    def test_logout_revokes_session_and_clears_both_auth_cookies(self):
+        from api.auth_routes import logout
+        request = Mock(spec=Request)
+        response = Response()
+        user = {"id": "user-logout", "email": "logout@example.com"}
+        with patch("api.auth_routes.settings.auth_enabled", True), \
+             patch("api.auth_routes.revoke_session") as revoke:
+            result = asyncio.run(logout(
+                request=request, response=response, user=user,
+                axion_session="opaque-session-token",
+            ))
+        revoke.assert_called_once_with("opaque-session-token")
+        self.assertEqual(result, {"status": "logged_out"})
+        cookies = response.headers.getlist("set-cookie")
+        self.assertTrue(any(cookie.startswith("axion_session=") and "Max-Age=0" in cookie for cookie in cookies))
+        self.assertTrue(any(cookie.startswith("axion_csrf=") and "Max-Age=0" in cookie for cookie in cookies))
+
     def test_oauth_provider_discovery_exposes_only_availability_flags(self):
         from api.auth_routes import oauth_providers
         with patch("api.auth_routes.configured", side_effect=lambda settings, provider: provider == "google"):
