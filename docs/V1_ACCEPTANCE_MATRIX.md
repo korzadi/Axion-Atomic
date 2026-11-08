@@ -190,3 +190,14 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Commits: `1aa749608e59402e0f7ccee7bd634b93b1b91fb9` (implementación) y `31d44e31238095c2af69d96063270f77d9685aa1` (regresiones).
 - Verificación: cambios publicados en `agent/chatgpt`; pytest y CI de estos commits todavía no se han ejecutado/confirmado. No se declara ARC-01 cerrado.
 - Alcance: no se cambió esquema SQL, migraciones, frontend, configuración externa ni datos de Qdrant; no se ejecutó ninguna operación contra servicios reales.
+
+
+## Protección de la versión RAG durante reindexación (8 de noviembre de 2026)
+
+- Hallazgo ARC-01: `RepoIndexer` borraba todos los vectores del archivo antes de publicar la versión nueva. Un error de Qdrant durante `upsert` podía dejar sin vectores el archivo aunque los metadatos SQL conservaran la versión anterior.
+- Corrección: la indexación obtiene los IDs anteriores por `project_id` y `path`, publica los nuevos vectores, confirma `MetaStore.replace_file` (transacción SQL) y solo entonces elimina los IDs sustituidos.
+- `VectorStore` incorpora `delete_ids`, implementado en memoria y Qdrant con selector explícito de IDs; el filtro de proyecto se mantiene en la creación/consulta y los IDs de limpieza provienen de una consulta SQL acotada al proyecto y ruta.
+- Regresiones: fallo de publicación conserva vectores y SHA anteriores; borrado selectivo de IDs probado en los dos backends; las pruebas de pipeline existentes siguen verificando reemplazo normal sin huérfanos.
+- Commits: `e8b14e9` (protocolo y backends), `a69947e` (consulta SQL de IDs), `73d7a98` (orden seguro de reemplazo), `7405270` y `5674b74` (regresiones).
+- CI del cambio: pendiente. La ejecución anterior del PR #6 (`42486774940`) aprobó todos los trabajos, pero no incluye estos commits posteriores.
+- Riesgo residual controlado: si falla la limpieza después de confirmar los metadatos nuevos, los vectores antiguos pueden quedar huérfanos; el Retriever los ignora al no existir sus IDs en `MetaStore`. No se borran datos vigentes ni se amplía el alcance fuera del proyecto/ruta.
