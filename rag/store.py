@@ -32,6 +32,7 @@ class VectorStore(Protocol):
     async def upsert(self, points: list[Point]) -> None: ...
     async def delete_path(self, project_id: str, path: str) -> None: ...
     async def delete_ids(self, ids: list[str]) -> None: ...
+    async def list_project_ids(self, project_id: str) -> set[str]: ...
     async def delete_project(self, project_id: str) -> None: ...
     async def search(self, project_id: str, vector: list[float], limit: int) -> list[Hit]: ...
 
@@ -78,6 +79,10 @@ class InMemoryVectorStore:
         if not wanted:
             return
         self.points = {key: point for key, point in self.points.items() if key not in wanted}
+
+    async def list_project_ids(self, project_id):
+        _require(project_id)
+        return {key for key, point in self.points.items() if point.payload.get("project_id") == project_id}
 
     async def delete_project(self, project_id):
         _require(project_id)
@@ -142,6 +147,23 @@ class QdrantStore:
         if not ids:
             return
         await self._req("POST", "/points/delete?wait=true", {"points": list(ids)})
+
+    async def list_project_ids(self, project_id):
+        flt = self._filter(project_id)
+        ids = set()
+        offset = None
+        while True:
+            body = {"filter": flt, "limit": 256, "with_payload": False, "with_vectors": False}
+            if offset is not None:
+                body["offset"] = offset
+            data = await self._req("POST", "/points/scroll", body)
+            result = data.get("result") or {}
+            ids.update(str(point["id"]) for point in result.get("points", []))
+            next_offset = result.get("next_page_offset")
+            if next_offset is None or next_offset == offset:
+                break
+            offset = next_offset
+        return ids
 
     async def delete_project(self, project_id):
         await self._req("POST", "/points/delete?wait=true", {"filter": self._filter(project_id)})
