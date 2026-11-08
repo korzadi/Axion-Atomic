@@ -580,6 +580,14 @@ Confirmar CI del SHA publicado; después continuar Fase 11 (preflight/staging) y
 ### Estado
 - Fase 12: QA local y CI en verde para el HEAD; REL-01 sigue bloqueada por dependencias externas.
 
+## Checkpoint Fase 12 — actualización de integración (corrección) (2026-11-08)
+
+**Corrección del checkpoint anterior.** La anotación «bloqueada por CI roja en agent/chatgpt» era errónea: las 3 pruebas fallidas solo lo hacían sin `DATABASE_URL` local, porque el dialect por defecto es PostgreSQL y el código nuevo intenta una conexión real. El job `python-tests` de CI ejecuta con `DATABASE_URL=sqlite:///./ci-test.db`; en ese entorno `agent/chatgpt` (cbdb5f4) da 932 passed y el árbol combinado 942 passed. El hallazgo correcto: CI de python-tests usa SQLite para desarrollo y CI; producción sigue siendo PostgreSQL.
+
+- `integration/chatgpt-opencode-20261108b` actualizada a `53781b3` (merge de `cbdb5f4`, CI del PR #7: 5/5 en verde, run `42490644871`).
+- Matriz PostgreSQL desechable del árbol combinado: **82 passed** (incluye `test_sqlalchemy_meta_store.py`).
+- PR #7 conversación registra la corrección. Sin conflictos; `main` y `agent/chatgpt` sin modificar.
+
 ## Checkpoint Fase 12 — actualización de integración bloqueada por CI roja en agent/chatgpt (2026-11-08)
 
 - `origin/agent/chatgpt` avanzó a `acf37a6` (14 commits: serialización de mutaciones RAG y redacción de secretos legacy).
