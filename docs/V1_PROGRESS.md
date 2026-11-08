@@ -687,3 +687,5 @@ El propietario autorizó el trabajo en `agent/opencode-vps` (no en `agent/chatgp
   - `studio-browser-e2e`: aprobado con la nueva sección «Conciliación de cobros QvaPay».
   - `container-image-build`: success. `qdrant-cloud-integration`: success.
 - QA-01/QA-02 pueden considerarse verificadas **para este SHA** (no para staging ni para producción). REL-01 sigue bloqueada por AUTH/sandbox/catálogo/staging.
+
+- CI `42496918230` sobre `704f6d3` (commit documental): 5/5 en verde. La evidencia de código corresponde a `76c5356` (CI `42496765302`).
