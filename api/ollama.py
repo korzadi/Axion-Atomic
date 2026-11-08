@@ -6,6 +6,7 @@ import httpx
 from api.config import settings
 from api.capacity import BoundedInferenceGate
 from api.rcache import get_embedding, set_embedding
+from rag.vector_contract import validate_embedding_vector
 
 # Un solo turno pesado a la vez protege la RAM/CPU del VPS inicial.
 ollama_gate = BoundedInferenceGate(
@@ -113,8 +114,11 @@ async def embed(value: str):
             )
             response.raise_for_status()
             vector = response.json()["embedding"]
-    if not isinstance(vector, list) or len(vector) != settings.embed_dimension:
-        raise ValueError("Ollama devolvió una dimensión de embedding inesperada")
+    try:
+        vector = validate_embedding_vector(vector, settings.embed_dimension)
+    except ValueError:
+        # No cachear vectores malformados ni permitir que lleguen a Qdrant.
+        raise
     await set_embedding(settings.embed_model, settings.embed_dimension, value, vector)
     return vector
 
