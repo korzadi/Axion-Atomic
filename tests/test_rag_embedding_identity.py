@@ -56,5 +56,18 @@ class OllamaTransportIdentityTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await transport.embed("nomic-embed-text", ["texto"]), [[0.1, 0.2]])
 
 
+    def test_api_and_repository_embedder_share_settings_identity(self):
+        from rag.embedder import OllamaEmbedder
+
+        class Settings:
+            embed_model = "nomic-embed-text"
+            embed_dimension = 768
+
+        api_identity = EmbeddingIdentity.from_settings(Settings())
+        repository_embedder = OllamaEmbedder.from_settings(object(), Settings())
+        self.assertEqual(repository_embedder.identity, api_identity)
+        self.assertEqual(repository_embedder.dimension, api_identity.dimension)
+
+
 if __name__ == "__main__":
     unittest.main()
