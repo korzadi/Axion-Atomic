@@ -141,8 +141,6 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
         conditions = kwargs["points_selector"].filter.must
         self.assertEqual([(item.key, item.match.value) for item in conditions], [
             ("project_id", "project-a"),
-            ("embedding_model", service.EmbeddingIdentity.from_settings(service.settings).model),
-            ("embedding_dimension", service.settings.embed_dimension),
             ("source_id", source_id),
         ])
         self.assertTrue(kwargs["wait"])
@@ -195,9 +193,14 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
     async def test_replace_source_publishes_new_chunks_then_retires_old_ids(self):
         from types import SimpleNamespace
         source_id = "12345678-1234-5678-1234-567812345678"
-        old = SimpleNamespace(id="old-point", payload={"project_id": "project-a", "source_id": source_id})
+        old = SimpleNamespace(id="old-point", payload={
+            "project_id": "project-a", "source_id": source_id,
+            "embedding_model": "previous-embedding-model", "embedding_dimension": 384,
+        })
         calls = []
+        scroll_filters = []
         def scroll(**kwargs):
+            scroll_filters.append(kwargs["scroll_filter"])
             return ([old], None)
         def upsert(**kwargs):
             calls.append(("upsert", kwargs))
@@ -208,6 +211,10 @@ class ManualIngestSecurityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(count, 1)
         self.assertEqual([call[0] for call in calls], ["upsert", "delete"])
         self.assertEqual(calls[1][1]["points_selector"].points, ["old-point"])
+        self.assertEqual(
+            [(condition.key, condition.match.value) for condition in scroll_filters[0].must],
+            [("project_id", "project-a"), ("source_id", source_id)],
+        )
 
     async def test_replace_source_keeps_old_chunks_when_embedding_fails(self):
         from types import SimpleNamespace
