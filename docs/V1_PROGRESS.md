@@ -563,3 +563,19 @@ Confirmar CI del SHA publicado; después continuar Fase 11 (preflight/staging) y
 
 ### Fase 11
 - Preflight, validación de configuración, `restore_postgres.sh` con simulacro real, sección de mantenimiento y contrato de `.env.example` completados; falta verificación contra VPS real/staging (autorización pendiente). Fase 11 pasa a 70%.
+
+## Checkpoint Fase 12 — contrato frontend-backend y accesibilidad (2026-11-08, `agent/opencode-vps`)
+
+### Cambios
+- README: corregida afirmación obsoleta sobre la API administrativa.
+- `tests/e2e/a11y-scan.mjs`: escaneo axe WCAG 2 A/AA; **0 violaciones** en la carga inicial de la landing, el login administrativo y la vista autenticada de gestión (mock). Studio autenticado y navegación completa por teclado sin cubrir.
+- `tests/test_workspace_path_confinement.py`: 3 regresiones nuevas contra traversal exotic (backslashes, segmentos vacíos/dobles, `.` inicial y traversal codificado `..%2f`; el archivo externo permanece intacto).
+- `tests/test_frontend_backend_routes.py`: contrato estático frontend→FastAPI; cada literal API de los cuatro archivos del frontend corresponde a una ruta registrada (exacta, prefijo o sufijo-fragmento).
+- CI `42489658918` (`a6b9c0c`): los cinco jobs en verde (studio-browser-e2e, container-image-build, postgres-migrations, python-tests, qdrant-cloud-integration).
+
+### Verificación
+- `.venv/bin/python -m pytest -q` → **920 passed, 11 skipped**.
+- `compileall`, sintaxis JS, `git diff --check` correctos.
+
+### Estado
+- Fase 12: QA local y CI en verde para el HEAD; REL-01 sigue bloqueada por dependencias externas.
