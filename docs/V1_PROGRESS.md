@@ -22,7 +22,7 @@
 | 8 | Administración | 80% | EN PROGRESO |
 | 9 | Créditos y facturación | 80% | EN PROGRESO |
 | 10 | Integración QvaPay | 50% | EN PROGRESO |
-| 11 | Instalación y documentación | 80% | EN PROGRESO |
+| 11 | Instalación y documentación | 85% | EN PROGRESO |
 | 12 | QA y liberación V1.0 | 70% | EN PROGRESO |
 
 **Lectura de los porcentajes:** reflejan implementación y pruebas locales del código inspeccionado, no aceptación en staging. Las cifras heredadas del orden antiguo de fases se conservan solo como histórico en las secciones siguientes.
@@ -757,3 +757,6 @@ El propietario autorizó cerrar la Fase 11 en producción con un despliegue cont
 ### Límites
 - La V1.0 **no** está liberada: `REL-01` sigue bloqueada (AUTH/MFA es Fase 2 del flujo del propietario y requiere verificación en vivo con SMTP/MFA reales; AGT-04 daemon; catálogo/precios QvaPay; cobros). Lo desplegado es el código de la rama de desarrollo con las puertas seguras intactas (AUTH/BILLING/QVAPAY desactivados por defecto).
 - Rollback ensayado de facto solo en el procedimiento (imagen previa etiquetada y salud verificada tras el cambio); el rollback completo de DB no fue necesario.
+
+### Ajuste de tabla (segundo)
+Fase 11 pasa de 80 % a **85 %**: actualización controlada ejecutada y verificada en el host real (backup previo, rollback etiquetado, build, recreación y salud post-deploy). El 15 % restante corresponde a AUTH/MFA (Fase 2), rollback DB completo y REL-01.
