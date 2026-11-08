@@ -29,6 +29,15 @@ class EmbeddingIdentity:
         if isinstance(self.dimension, bool) or not isinstance(self.dimension, int) or self.dimension <= 0:
             raise ValueError("La dimensión de embeddings debe ser un entero positivo")
 
+    @classmethod
+    def from_settings(cls, settings) -> "EmbeddingIdentity":
+        """Construye la identidad desde el contrato de configuración compartido.
+
+        Acepta objetos de settings compatibles sin importar módulos de API,
+        manteniendo este contrato independiente de la capa HTTP.
+        """
+        return cls(settings.embed_model, settings.embed_dimension)
+
     def compatible_with(self, other: "EmbeddingIdentity") -> bool:
         return isinstance(other, EmbeddingIdentity) and (
             self.model == other.model and self.dimension == other.dimension
