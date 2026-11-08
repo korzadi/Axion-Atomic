@@ -27,7 +27,7 @@ Se añade `rag/embedding_identity.py`:
 - valida nombre de modelo y dimensión positiva;
 - ofrece `EmbeddingIdentity.compatible_with` y `require_compatible_embeddings`, que fallan de forma cerrada ante modelo o dimensión incompatibles.
 
-El indexador de repositorios expone la identidad configurada en `OllamaEmbedder.identity`. Studio construye la misma identidad a partir de `EMBED_MODEL` y `EMBED_DIMENSION`; sus claves de RCache usan el nombre canónico y la dimensión, evitando duplicar o confundir aliases.
+El indexador de repositorios expone la identidad configurada en `OllamaEmbedder.identity`. Studio y el indexador pueden construir la identidad desde el mismo objeto de configuración mediante `EmbeddingIdentity.from_settings(settings)` y `OllamaEmbedder.from_settings(transport, settings)`. La API usa el mismo constructor de identidad. Sus claves de RCache usan el nombre canónico y la dimensión, evitando duplicar o confundir aliases.
 
 Cuando la respuesta de `/api/embed` o `/api/embeddings` incluye un campo `model`, el transporte/adaptador comprueba que coincide con el modelo solicitado. Una discrepancia se rechaza antes de entregar o cachear el vector. Si el servidor no incluye ese campo, la comprobación de identidad de runtime no es posible en esa respuesta y se conserva la validación de dimensión/tipo/finitez.
 
