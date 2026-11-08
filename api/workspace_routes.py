@@ -13,7 +13,7 @@ import hashlib
 from api.auth import current_user, authorize_project, require_csrf, COOKIE_NAME, CSRF_COOKIE
 from api.config import settings
 from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest, AgentReconcileRequest, AgentCancelRequest
-from api.ollama import chat_with_usage
+from api.ollama import chat_with_usage, configured_chat_model_available
 from api.billing_budget import (
     ContextBudgetExceeded,
     SUPPORTED_TOKENIZER_CONTRACT,
@@ -436,6 +436,31 @@ def _save_chat_history(user_id: str, project_id: str, messages: list[dict]):
             {"user_id": user_id, "project_id": project_id, "messages": payload},
         ).first()
     return row.updated_at
+
+
+@router.get("/models/availability")
+async def workspace_model_availability(
+    project_id: str = Query(min_length=1, max_length=200),
+    user=Depends(_enabled_user),
+):
+    """Expone disponibilidad real del único modelo público, sin revelar modelos internos."""
+    await run_in_threadpool(_project_role, user, project_id, ("owner", "admin", "editor", "viewer"))
+    await run_in_threadpool(
+        _enforce_workspace_limit, user["id"], project_id, "model_availability",
+        user_limit=30, project_limit=60, window=timedelta(minutes=1),
+    )
+    try:
+        available = await configured_chat_model_available()
+    except Exception:
+        logger.warning("No se pudo consultar la disponibilidad del modelo configurado en Ollama")
+        raise HTTPException(status_code=503, detail="No se pudo verificar la disponibilidad del modelo") from None
+    return {
+        "models": [{
+            "code": "atomic-code",
+            "available": available,
+            "runtime_model": settings.chat_model if available else None,
+        }]
+    }
 
 
 @router.get("/chat/history")
