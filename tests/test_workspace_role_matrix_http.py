@@ -38,7 +38,8 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
     def _post(self, path, payload):
         return self.client.post(path, json=payload)
 
-    def test_viewer_can_chat_but_cannot_ingest_or_create_tasks(self):
+    def test_editor_can_chat_and_cannot_decide_approval(self):
+        self.role = "editor"
         with (
             patch("api.workspace_routes._project_role", side_effect=enforce_role),
             patch("api.workspace_routes.settings.chat_model", "atomic-code"),
@@ -84,7 +85,22 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
             })
             self.assertEqual(denied_task.status_code, 404)
 
+    def test_viewer_cannot_chat_or_trigger_rag_or_inference(self):
+        with (
+            patch("api.workspace_routes._project_role", side_effect=enforce_role),
+            patch("api.workspace_routes.retrieve", return_value="") as retrieve,
+            patch("api.workspace_routes.chat_with_usage", new_callable=AsyncMock) as chat,
+        ):
+            response = self._post("/workspace/chat/completions", {
+                "project_id": "project-a",
+                "messages": [{"role": "user", "content": "hola"}],
+            })
+        self.assertEqual(response.status_code, 404)
+        retrieve.assert_not_awaited()
+        chat.assert_not_awaited()
+
     def test_chat_succeeds_even_if_shadow_logging_and_warning_fail(self):
+        self.role = "editor"
         result = InferenceResult(
             content="respuesta segura", requested_model="atomic-code",
             returned_model="atomic-code", done=True, prompt_eval_count=3,
@@ -111,6 +127,7 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
         self.assertEqual(response.json()["choices"][0]["message"]["content"], "respuesta segura")
 
     def test_rejected_model_identity_is_not_persisted_as_usage(self):
+        self.role = "editor"
         result = InferenceResult(
             content="respuesta de modelo inesperado", requested_model="atomic-code",
             returned_model="unexpected-model", done=True, prompt_eval_count=3,
@@ -135,6 +152,7 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
         save_history.assert_not_called()
 
     def test_incomplete_inference_is_not_persisted_as_usage(self):
+        self.role = "editor"
         result = InferenceResult(
             content="respuesta parcial", requested_model="atomic-code",
             returned_model="atomic-code", done=False, prompt_eval_count=3,
@@ -350,6 +368,7 @@ class WorkspaceRoleHttpTests(unittest.TestCase):
         self.assertEqual(conn.execute.call_args.args[1], {"project_id": "project-a", "limit": 20})
 
     def test_chat_retrieval_receives_authorized_project_id(self):
+        self.role = "editor"
         with (
             patch("api.workspace_routes._project_role", side_effect=enforce_role),
             patch("api.workspace_routes.settings.chat_model", "atomic-code"),
