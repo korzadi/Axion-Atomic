@@ -24,9 +24,8 @@ FORBIDDEN_TEXT = [
     re.compile(r"\bsk-live_[A-Za-z0-9]{10,}\b"),
 ]
 
-# tests/test_agent_run_store.py incluye una clave AKIA falsa como fixture del
-# propio detector de secretos del agente. No es una credencial real.
-TEXT_SCAN_ALLOWLIST = {"tests/test_agent_run_store.py"}
+# Estos tests contienen patrones/valores ficticios para probar detectores; no son credenciales.
+TEXT_SCAN_ALLOWLIST = {"tests/test_agent_run_store.py", "tests/test_rag_service_distributed_lock.py"}
 
 
 def _tracked_files() -> list[str]:
