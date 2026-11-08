@@ -1,6 +1,7 @@
 """Indexador incremental de repositorios. Respeta .gitignore/.axionignore y archivos sensibles (vía Workspace),
 NO indexa archivos que contengan secretos, y elimina referencias obsoletas (archivos borrados o ahora con secretos)."""
 import asyncio
+from contextlib import asynccontextmanager
 import hashlib
 import uuid
 from dataclasses import dataclass, field
@@ -44,10 +45,21 @@ class RepoIndexer:
         self.embedder, self.store, self.meta, self.max_files = embedder, store, meta, max_files
         self._locks: dict[str, asyncio.Lock] = {}
 
+    @asynccontextmanager
+    async def _project_guard(self, project_id: str):
+        """Combina exclusión local con advisory lock si MetaStore usa PostgreSQL."""
+        lock = self._locks.setdefault(project_id, asyncio.Lock())
+        async with lock:
+            distributed_lock = getattr(self.meta, "project_lock", None)
+            if callable(distributed_lock):
+                async with distributed_lock(project_id):
+                    yield
+            else:
+                yield
+
     async def index_project(self, ws: Workspace) -> IndexReport:
         pid = ws.project_id
-        lock = self._locks.setdefault(pid, asyncio.Lock())
-        async with lock:
+        async with self._project_guard(pid):
             return await self._index(ws)
 
     async def _index(self, ws: Workspace) -> IndexReport:
@@ -121,8 +133,7 @@ class RepoIndexer:
         """Serializa la reconciliación con indexación y eliminación del mismo proyecto."""
         if not project_id or not isinstance(project_id, str):
             raise ValueError("project_id es obligatorio")
-        lock = self._locks.setdefault(project_id, asyncio.Lock())
-        async with lock:
+        async with self._project_guard(project_id):
             return await self._reconcile_project(project_id)
 
     async def _reconcile_project(self, project_id: str) -> int:
@@ -142,8 +153,7 @@ class RepoIndexer:
     async def remove_project(self, project_id: str) -> None:
         if not project_id or not isinstance(project_id, str):
             raise ValueError("project_id es obligatorio")
-        lock = self._locks.setdefault(project_id, asyncio.Lock())
-        async with lock:
+        async with self._project_guard(project_id):
             # SQL es la fuente canónica: retirar primero la visibilidad del índice.
             # Si Qdrant falla, los vectores quedan huérfanos e invisibles al Retriever;
             # reconcile_project puede eliminarlos de forma segura más tarde.
