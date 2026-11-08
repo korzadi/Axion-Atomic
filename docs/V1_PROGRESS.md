@@ -22,7 +22,7 @@
 | 8 | Administración | 80% | EN PROGRESO |
 | 9 | Créditos y facturación | 80% | EN PROGRESO |
 | 10 | Integración QvaPay | 50% | EN PROGRESO |
-| 11 | Instalación y documentación | 80% | EN PROGRESO |
+| 11 | Instalación y documentación | 90% | EN PROGRESO |
 | 12 | QA y liberación V1.0 | 70% | EN PROGRESO |
 
 **Lectura de los porcentajes:** reflejan implementación y pruebas locales del código inspeccionado, no aceptación en staging. Las cifras heredadas del orden antiguo de fases se conservan solo como histórico en las secciones siguientes.
@@ -727,3 +727,67 @@ Fase 11 pasa de 75 % a **80 %**: el inventario de solo lectura se ejecutó en el
 - `.env.example` añade `QVAPAY_ENABLED=false`, `QVAPAY_USER_TOKEN=` (vacío), `QVAPAY_LIGHTNING_ADDRESS=axionatomic@qvpay.me` y `QVAPAY_REQUEST_TIMEOUT_SECONDS=10.0`, con comentarios de seguridad: sin catálogo/precios firmados no se activa; no hay webhook firmado (conciliación por consulta); el token se custodia fuera de Git. La instalación reproducible (`install_vps.sh --prepare` copia la plantilla y randomiza secretos) queda coherente: el `.env` generado incluye la integración desactivada.
 - `tests/test_env_example_contract.py`: exige `QVAPAY_ENABLED=false`, presencia de las 4 claves y token vacío/dirección `@qvpay.me`. 6 pruebas OK. Suite completa: **1007 passed, 11 skipped**.
 - Sin lecturas ni cambios sobre el `.env` real, el stack, PostgreSQL ni servicios.
+
+## Integración de candidato (segunda actualización) — 2026-11-08 (`agent/opencode-vps`)
+
+- `origin/agent/chatgpt` avanzó a `c010da6` (14 commits: endurecimiento de orígenes HTTPS, nuevas regresiones de readiness y de capacidad vía ASGI, docs de traspaso de Fase 1).
+- `integration/chatgpt-opencode-20261108b` actualizada: merge de `c010da6` y merge de `origin/agent/opencode-vps` (`6553036`). Árbol combinado verificado: **1027 passed, 11 skipped**; `compileall`, `check_frontend_js.py` OK; E2E de navegador aprobado.
+- CI del commit combinado `6553036` (run `42498413465`): **5/5 en verde** — python-tests 1027/1027, postgres-migrations 74 passed, studio-browser-e2e aprobado, container-image-build y qdrant-cloud-integration success.
+- GitHub cerró el PR #9 como MERGED al contener la candidata ambas ramas; sigue sin fusionarse nada a `main`.
+- `REL-01` sigue bloqueada por AUTH/MFA en staging, AGT-04, catálogo/precios QvaPay y sandbox oficial; la V1.0 no está liberada.
+
+## Despliegue controlado en el stack real — 2026-11-08 (autorizado por el propietario, `agent/opencode-vps`)
+
+El propietario autorizó cerrar la Fase 11 en producción con un despliegue controlado de las imágenes construidas desde `agent/opencode-vps` (HEAD al desplegar: `d447482`).
+
+### Procedimiento ejecutado
+1. Backup previo: `backups/pre-release-20261108T161250Z.dump` (pg_dump CUSTOM vía `docker exec`, 0600) — válido, 274 objetos; idéntico contenido al de 2026-11-08 (sin escrituras de usuarios desde el último dump).
+2. Imágenes etiquetadas para rollback: `axyron-atomic-api:rollback-20261108` (22faebefbabe) y `axyron-atomic-frontend:rollback-20261108` (2fd6d7a6e48f).
+3. `docker compose --project-name axyron-atomic -f compose.yaml --env-file .env build api frontend` — build OK (api → 120f6f6a023f, frontend → 4136ef24def8).
+4. `docker compose ... up -d --no-deps api frontend` — contenedores recreados; postgres y redis **sin cambios**.
+
+### Verificación posterior (real)
+- `/health`: 6/6 ok (database, ollama, chat_model, embedding_model, qdrant, redis).
+- `/health/readiness`: 503 `blocked` como se esperaba (AUTH desactivada; clave MFA no configurada); modo facturación `shadow`.
+- Landing y assets (`/`, `/studio.js`, `/admin.js`): 200 OK. `admin.js` servido incluye la sección «Conciliación de cobros QvaPay» (`billing-qvapay-run` presente).
+- `POST /admin/billing/qvapay/reconcile`: 503 (fail-closed, auth desactivada) — comportamiento correcto; no ejecuta llamadas externas.
+- Logs de la API sin errores de arranque.
+- El stack legado `axion-atomic` sigue ausente; el volumen de producción `axyron_atomic_pgdata` no fue modificado ni recreado.
+
+### Límites
+- La V1.0 **no** está liberada: `REL-01` sigue bloqueada (AUTH/MFA es Fase 2 del flujo del propietario y requiere verificación en vivo con SMTP/MFA reales; AGT-04 daemon; catálogo/precios QvaPay; cobros). Lo desplegado es el código de la rama de desarrollo con las puertas seguras intactas (AUTH/BILLING/QVAPAY desactivados por defecto).
+- Rollback ensayado de facto solo en el procedimiento (imagen previa etiquetada y salud verificada tras el cambio); el rollback completo de DB no fue necesario.
+
+### Ajuste de tabla (segundo)
+Fase 11 pasa de 80 % a **85 %**: actualización controlada ejecutada y verificada en el host real (backup previo, rollback etiquetado, build, recreación y salud post-deploy). El 15 % restante corresponde a AUTH/MFA (Fase 2), rollback DB completo y REL-01.
+
+## RELEASE CANDIDATE EN PRODUCCIÓN — 2026-11-08 (autorización total del propietario, rama `agent/opencode-vps`)
+
+### Base de datos
+- El backup `pre-release-20261108T161250Z.dump` (restored + migrado en contenedor desechable) confirmó producción en `schema_migrations=021`.
+- Migrador real aplicado sobre producción (`docker exec axyron-atomic-api-1 python -m api.migrate`): **022** (`agent_runs_status_check` + estado `cancelled`) y **023** (`payment_invoices` + índices). Segunda ejecución: ninguna migración pendiente. Sin pérdida de datos; backups previos intactos.
+- Rehearsal completo (restore → migrate → doble ejecución → borrado): OK.
+
+### Autenticación habilitada en producción
+- SMTP validado sin enviar correo: `smtp.gmail.com:587` STARTTLS + autenticación OK (credenciales del `.env`, nunca impresas).
+- OAuth Google/GitHub configurado en `.env` (presencia verificada, valores no leídos).
+- `AUTH_ENABLED=true` aplicado y contenedor API recreado. `/health/readiness` → **`ready`**: authentication_enabled/transactional_email/https_cookie/public_https_origin/mfa_encryption_key todos `true`.
+- Verificación conductual: `/auth/projects` sin sesión → 401; `chat/completions` → 401; `admin/billing/qvapay/reconcile` → 401; `auth/register` con payload inválido → 422 (antes de tocar SMTP). No se crearon cuentas ni se enviaron correos.
+- MFA real (claves `runtime-v1` de 32 B ya presentes en `.env`, keyring vacío) — login MFA no ensayado con cuenta real.
+- Rollback de configuración disponible: `.env` previo en `/tmp/.env.rollback-20261108` (0600) y restauración simplemente reaplicando `AUTH_ENABLED=false` + recrear.
+
+### main fusionado y desplegado
+- `integration/chatgpt-opencode-20261108b` → **PR #9 cerrado MERGED** (auto-marcado por GitHub al quedar contenido).
+- `main`: fast-forward local → `origin/main` (`e671347`) y merge `--no-ff` de la candidata → **`main = e383621`**, push EXITOSO.
+- Imágenes etiquetadas `pre-main-20261108` (api `120f6f6a023f`, frontend `4136ef24def8`); `rollback-20261108` conserva la imagen previa al upgrade de hoy.
+- Rebuild desde `main` y recreación: api `b374e97df9cd`, frontend sin cambios (mismo contenido, no se recreó). `/health` 6/6 ok, `/health/readiness` **ready**, landing/assets 200, `/admin.js` con sección QvaPay presente, dominio público `https://axyronatomic.com/health` → 200.
+- CI de `main` (`42499947946`, `e383621`): **5/5 en verde** — python-tests 1027/1027, postgres-migrations 74, studio-browser-e2e, container-image-build, qdrant-cloud-integration.
+
+### Lo que NO se activó y por qué
+- `BILLING_ENFORCEMENT_ENABLED=false`: sin catálogo/precios aprobados; el modo `shadow` sigue midiendo.
+- `QVAPAY_ENABLED=false` y sin token: no existen `QVAPAY_USER_TOKEN` ni catálogo de cobros aprobados; no se inventan credenciales. El flujo queda listo para activación cuando el propietario los entregue.
+- Sandbox Docker (`SANDBOX_DOCKER_ENABLED=false`): requiere daemon dedicado no privilegiado + imágenes por digest + TLS (AGT-04).
+- `REL-01` sigue NO LIBERADA como declaración formal: falta ensayo de registro/verificación/MFA con buzón real, checkout QvaPay con catálogo, sandbox y validación E2E en producción. Infraestructura y puertas operativas sí están cerradas para todo lo que depende de este host.
+
+### Fase 11
+- 85 % → **90 %**: actualización en producción ensayada y verificada; migraciones reales aplicadas con rehearsal previo; inventario ejecutado; configuración validada; rollback documentado.
