@@ -6,6 +6,12 @@ from api.config import settings
 async def require_api_key(authorization: str | None = Header(default=None),
                           x_api_key: str | None = Header(default=None)):
     # La clave compartida no representa a un usuario ni autoriza un project_id concreto.
+    # Nunca permitir que la API legacy evite reservas/liquidación del ledger.
+    if settings.billing_enforcement_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Legacy API is unavailable while credit enforcement is enabled",
+        )
     if not settings.legacy_api_enabled:
         raise HTTPException(status_code=503, detail="Legacy API is disabled")
     configured = settings.api_key
