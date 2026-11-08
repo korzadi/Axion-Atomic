@@ -89,6 +89,15 @@ def _enforce_rate_limit(request: Request, *, namespace: str, limit: int, window:
             headers={"Retry-After": str(decision.retry_after_seconds)},
         )
 
+def _oauth_redirect(destination: str, *, status_code: int = 303) -> RedirectResponse:
+    """Evita cachear redirecciones OAuth y filtrar el contexto mediante Referer."""
+    result = RedirectResponse(destination, status_code=status_code)
+    result.headers["Cache-Control"] = "no-store"
+    result.headers["Pragma"] = "no-cache"
+    result.headers["Referrer-Policy"] = "no-referrer"
+    return result
+
+
 
 @router.post("/register", status_code=202)
 async def register(req: RegisterRequest, request: Request):
@@ -165,7 +174,7 @@ async def oauth_start(provider: str, request: Request, terms_accepted: bool = Fa
                         limit=10, window=timedelta(minutes=10))
     try:
         destination, oauth_state = await run_in_threadpool(begin, engine, provider, settings, terms_accepted=terms_accepted)
-        result = RedirectResponse(destination, status_code=302)
+        result = _oauth_redirect(destination, status_code=302)
         result.set_cookie(key="axion_oauth_state", value=oauth_state, max_age=600,
                           httponly=True, secure=settings.auth_cookie_secure,
                           samesite="lax", path="/auth/oauth")
@@ -187,7 +196,7 @@ async def oauth_callback(provider: str, request: Request, code: str | None = Non
         limit=20, window=timedelta(minutes=10),
     )
     if error or not code or not state or not browser_state or not secrets.compare_digest(state, browser_state):
-        result = RedirectResponse("/?oauth_error=cancelled", status_code=303)
+        result = _oauth_redirect("/?oauth_error=cancelled")
         result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
         return result
     try:
@@ -197,15 +206,14 @@ async def oauth_callback(provider: str, request: Request, code: str | None = Non
         profile = await run_in_threadpool(provider_profile, provider, code, state_data["nonce"], settings)
         user = await run_in_threadpool(resolve_user, engine, provider, profile, terms_accepted=state_data["terms_accepted"])
     except Exception:
-        result = RedirectResponse("/?oauth_error=failed", status_code=303)
+        result = _oauth_redirect("/?oauth_error=failed")
         result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
         return result
     if await run_in_threadpool(is_mfa_enabled, engine=engine, user_id=user["id"]):
         challenge = await run_in_threadpool(
             issue_login_challenge, engine=engine, user_id=user["id"], purpose="oauth",
         )
-        result = RedirectResponse("/?mfa_required=1", status_code=303)
-        result.headers["Cache-Control"] = "no-store"
+        result = _oauth_redirect("/?mfa_required=1")
         result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
         result.set_cookie(
             key="axion_mfa_challenge", value=challenge, max_age=300, httponly=True,
@@ -214,7 +222,7 @@ async def oauth_callback(provider: str, request: Request, code: str | None = Non
         )
         return result
     session, csrf = await run_in_threadpool(create_session, user_id=user["id"])
-    result = RedirectResponse("/?oauth=success", status_code=303)
+    result = _oauth_redirect("/?oauth=success")
     result.delete_cookie("axion_oauth_state", path="/auth/oauth", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
     result.set_cookie(key=COOKIE_NAME, value=session, max_age=SESSION_MAX_AGE,
                       httponly=True, secure=settings.auth_cookie_secure,

@@ -9,8 +9,13 @@ def is_public_https_origin(value: object) -> bool:
     """Return whether value is a syntactically valid public HTTPS origin."""
     if not isinstance(value, str) or not value.strip():
         return False
+    candidate = value.strip()
+    # urlsplit silently strips embedded tabs/newlines; reject all internal whitespace
+    # and ASCII controls rather than normalizing a malformed configured origin.
+    if any(char.isspace() or ord(char) < 0x20 or ord(char) == 0x7F for char in candidate):
+        return False
     try:
-        parsed = urlsplit(value.strip())
+        parsed = urlsplit(candidate)
         _ = parsed.port  # Also rejects non-numeric and out-of-range ports.
         # urlsplit accepts an empty explicit port (example.com:); reject it.
         authority_host = parsed.netloc.rsplit("@", 1)[-1]

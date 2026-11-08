@@ -22,7 +22,7 @@
 | 8 | Administración | 80% | EN PROGRESO |
 | 9 | Créditos y facturación | 80% | EN PROGRESO |
 | 10 | Integración QvaPay | 50% | EN PROGRESO |
-| 11 | Instalación y documentación | 75% | EN PROGRESO |
+| 11 | Instalación y documentación | 80% | EN PROGRESO |
 | 12 | QA y liberación V1.0 | 70% | EN PROGRESO |
 
 **Lectura de los porcentajes:** reflejan implementación y pruebas locales del código inspeccionado, no aceptación en staging. Las cifras heredadas del orden antiguo de fases se conservan solo como histórico en las secciones siguientes.
@@ -645,3 +645,85 @@ El propietario autorizó el trabajo en `agent/opencode-vps` (no en `agent/chatgp
 
 ### Pendiente
 - Decisiones del propietario (pesos de créditos, tarifa por modelo versionada en BD, confirmación por escrito de comisión QvaPay, atribución de costes, términos legales) antes de habilitar comercialización.
+
+## Checkpoint Fase 10 — conciliación administrativa QvaPay (2026-11-08, `agent/opencode-vps`)
+
+### Implementado
+- `POST /admin/billing/qvapay/reconcile`: consulta administrativa (solo con `billing.manage` y CSRF) de los últimos cobros del titular vía `QvaPayLightningClient` y conciliación con invoices abiertas vía `reconcile_lightning_payments`. Falla cerrado (503) cuando `QVAPAY_ENABLED=false` o falta el token; nunca expone el token ni detalles internos del proveedor; la auditoría global se registra antes de la llamada externa.
+- Reutiliza íntegramente las reglas existentes: coincidencia por referencia + sats exactos + destinatario + `transaction_uuid`, y acreditación vía `confirm_verified_payment` (idempotente). No cobra a nadie, no crea órdenes ni habilita checkout.
+- `frontend/admin.js`: sección «Conciliación de cobros QvaPay» en «Operaciones de créditos y facturación» (visible con `billing.manage`), con confirmación explícita y resultado accesible (`aria-live`).
+- `tests/e2e/studio-browser.mjs`: mock y clic en el botón de conciliación; verificado «Cobros consultados: 4».
+- `tests/test_admin_qvapay_reconcile.py`: 6 pruebas de contrato HTTP (autorización, fail-closed sin flag/token, auditoría previa a la llamada externa, error del proveedor ocultado, resumen de outcomes sin detalles de pago, límites de `max_pages`).
+
+### Verificación
+- `DATABASE_URL=sqlite:///./ci-test.db .venv/bin/python -m pytest -q` — **1006 passed, 11 skipped**.
+- `.venv/bin/python -m compileall`, `scripts/check_frontend_js.py`, `pip check`, `git diff --check` — OK.
+- E2E de navegador (Playwright 1.58.2/Chromium) — **aprobado** con la nueva sección.
+- `node tests/e2e/a11y-scan.mjs` — 0 violaciones WCAG 2 A/AA (sin cambios).
+- CI del HEAD resultante: pendiente al redactar; debe confirmarse antes de declarar QA-01/QA-02 verificadas para este SHA.
+
+### Límites
+- No habilita cobros, checkout ni acreditación automática. Catálogo/precios siguen pendientes del producto; sandbox oficial pendiente. REL-01 sigue bloqueada.
+
+## Checkpoint Fase 12 — auditoría de teclado (STU-04) (2026-11-08, `agent/opencode-vps`)
+
+- `tests/e2e/a11y-scan.mjs` incorpora `keyboardAudit`: recorre con Tab la landing, el portal administrativo estático y la vista de gestión autenticada (mock). Resultado: **25 paradas (gestión), 30 (landing), 5 (admin login); 0 problemas**: foco siempre en elemento interactivo y visible; la secuencia termina en `body` tras la última parada (sin trampa ni pérdida de foco). El script sale con código 1 si detecta problemas.
+- STU-04 pasa a: vistas escaneadas con axe (0 violaciones) + navegación por teclado sin trampas ni foco perdido en las mismas vistas. Siguen sin verificar lectores de pantalla reales y el backend en staging.
+
+## Estado de fases tras este bloque (sin cambios de porcentaje por estas pruebas)
+
+- Fase 7 (Archivos y sandbox): sin cambios funcionales nuevos; suite y snapshot/Docker tests siguen en verde. AGT-04 bloqueada (daemon/TLS/digest/E2E real).
+- Fase 8 (Administración): ADM-01 conserva su verificación previa; el nuevo endpoint queda pendiente de CI para este SHA.
+- Fase 9 (Créditos y facturación): sin cambios; cobros desactivados; catálogo `preview_only`.
+- Fase 10 (QvaPay): conciliación administrativa implementada y probada; checkout/rutas HTTP/catálogo de cobro siguen bloqueados por decisiones comerciales.
+- Fase 11 (Instalación y documentación): sin cambios; pendiente staging con autorización del operador.
+- Fase 12 (QA): teclado auditado; suite 1006/1006 (SQLite); REL-01 sigue bloqueada.
+
+## Evidencia CI del bloque anterior — 2026-11-08 (`agent/opencode-vps`)
+
+- CI del HEAD `76c5356e0bd0001b659db0aa10eb2a51191256b2` (run `42496765302` al redactar; rama `agent/opencode-vps`): los cinco jobs en verde:
+  - `python-tests`: **1006 passed, 11 skipped** (con `DATABASE_URL=sqlite:///./ci-test.db`).
+  - `postgres-migrations`: **74 passed** (PostgreSQL efímero, migraciones 001→023 + doble ejecución del migrador).
+  - `studio-browser-e2e`: aprobado con la nueva sección «Conciliación de cobros QvaPay».
+  - `container-image-build`: success. `qdrant-cloud-integration`: success.
+- QA-01/QA-02 pueden considerarse verificadas **para este SHA** (no para staging ni para producción). REL-01 sigue bloqueada por AUTH/sandbox/catálogo/staging.
+
+- CI `42496918230` sobre `704f6d3` (commit documental): 5/5 en verde. La evidencia de código corresponde a `76c5356` (CI `42496765302`).
+
+## Integración de candidato — 2026-11-08 (rama `agent/opencode-vps`)
+
+- `origin/agent/chatgpt` avanzó a `d420ef4` (`feat(maintenance): bounded rate-limit cleanup command`, `fix(auth): OAuth response hardening`).
+- `integration/chatgpt-opencode-20261108b` actualizada directamente: primero fast-forward a `d420ef4` (verificado local: **1015 passed, 11 skipped**, compileall y check_frontend_js OK) y luego merge de `origin/agent/opencode-vps` (`000393c`). Árbol combinado verificado: **1021 passed, 11 skipped**; E2E de navegador aprobado; `check_frontend_js.py` OK.
+- CI del commit combinado `000393c` (run `42497299420`): **5/5 en verde** — python-tests 1021/1021, postgres-migrations 74 passed, studio-browser-e2e aprobado, container-image-build y qdrant-cloud-integration success.
+- GitHub marcó el PR #9 (agent/opencode-vps → integration/chatgpt-opencode-20261108b) como **MERGED** de forma automática al quedar todas las ramas integradas en la candidata; no se fusionó nada a `main` ni se modificó `agent/chatgpt`. `main` permanece sin tocar; la integración final corresponde al propietario.
+- La candidata de integración sigue cubriendo las mismas puertas REL-01: AUTH/MFA en staging, AGT-04 (daemon/TLS/digests), catálogo/precios QvaPay y sandbox oficial de QvaPay. V1.0 no se declara liberada.
+
+## Fase 11 — autorización del operador: inventario ejecutado (2026-11-08, `agent/opencode-vps`)
+
+El propietario autorizó el alcance de la Fase 11. Se ejecutaron las verificaciones de solo lectura permitidas:
+
+- `bash scripts/inspect_vps_state.sh` (HEAD `4508226`): inventario completado sin modificar nada ni mostrar secretos:
+  - Proyecto Compose `axyron-atomic`: frontend, api (Up 16 h), postgres 16-alpine (healthy), redis 7.4-alpine (healthy); volumen `axyron_atomic_pgdata` presente (driver `local`) y referenciado por `axyron-atomic-postgres-1`; red `axyron-atomic_default`.
+  - Proyecto legado `axion-atomic`: sin contenedores; volumen `axion_atomic_pgdata` inexistente; sin redes.
+  - Puertos en escucha: `127.0.0.1:8070` (API) y `127.0.0.1:5433` (PostgreSQL).
+  - El script no leyó ni imprimió `.env`, no inspeccionó contenedores ajenos y no modificó recursos.
+- `bash scripts/install_vps.sh --check`: vuelve a fallar de forma segura (`Puerto 8070 ocupado; no se detendrá el servicio existente.`, exit 1). No se detuvo ni alteró el stack; no se ejecutó `--deploy` ni `--upgrade-frontend` (requieren intervención interactiva del operador sobre el stack en vivo).
+- Se eliminó un artefacto de pruebas local (`ci-test.db`) que quedó como no rastreado tras una corrida de la suite; el árbol de trabajo queda limpio.
+- La restauración de backup en entorno desechable (DB-02) ya tiene evidencia válida (2026-11-08, migraciones 001→023 + doble ejecución del migrador; contenedor eliminado). No se repite sin cambios en migraciones o scripts de restauración.
+- `inspect_vps_state.sh` de OPS-02 pasa a **ejecutado en el host** (evidencia reproducible); sigue pendiente la revisión operativa por parte del operador como control previo a cualquier actualización.
+- No se desplegó, reinició, construyó ni reconfiguró nada; PostgreSQL, Redis, API y frontend siguen como estaban.
+
+## Fase 11 — verificación de backups y configuración (misma sesión autorizada)
+
+- Integridad de dumps (lectura, `pg_restore --list`, sin restauración): los tres `pre-frontend-upgrade-*.dump` (2026-11-07/08) son válidos con 274 objetos cada uno y contentura idéntica. `pre-migration-20261107T204351Z.dump` (834 B, 0 objetos, formato CUSTOM, PostgreSQL 16.15) corresponde a un snapshot previo a la primera migración sobre base vacía: coherente, no un dump corrupto.
+- `docker compose --project-name axyron-atomic -f compose.yaml --env-file .env config --quiet` → exit 0 (la configuración valida; no se imprimieron valores de `.env`).
+- No se ejecutó restauración, `--deploy` ni `--upgrade-frontend`; el stack en vivo permanece sin cambios.
+
+### Ajuste de tabla
+Fase 11 pasa de 75 % a **80 %**: el inventario de solo lectura se ejecutó en el host con autorización (OPS-02), la validación de configuración (`compose config --quiet`) quedó verificada y la integridad de los dumps (274 objetos ×3) confirmada. No sube más porque `--deploy/--upgrade-frontend` en stack real y el ensayo de rollback siguen pendientes de autorización interactiva del operador.
+
+## Fase 11 — plantilla .env completa para QvaPay (2026-11-08, `agent/opencode-vps`)
+
+- `.env.example` añade `QVAPAY_ENABLED=false`, `QVAPAY_USER_TOKEN=` (vacío), `QVAPAY_LIGHTNING_ADDRESS=axionatomic@qvpay.me` y `QVAPAY_REQUEST_TIMEOUT_SECONDS=10.0`, con comentarios de seguridad: sin catálogo/precios firmados no se activa; no hay webhook firmado (conciliación por consulta); el token se custodia fuera de Git. La instalación reproducible (`install_vps.sh --prepare` copia la plantilla y randomiza secretos) queda coherente: el `.env` generado incluye la integración desactivada.
+- `tests/test_env_example_contract.py`: exige `QVAPAY_ENABLED=false`, presencia de las 4 claves y token vacío/dirección `@qvpay.me`. 6 pruebas OK. Suite completa: **1007 passed, 11 skipped**.
+- Sin lecturas ni cambios sobre el `.env` real, el stack, PostgreSQL ni servicios.

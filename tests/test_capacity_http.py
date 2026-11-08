@@ -1,5 +1,6 @@
 import asyncio
 import json
+import unittest
 
 from sqlalchemy.exc import TimeoutError as SQLAlchemyPoolTimeout
 
@@ -39,3 +40,57 @@ def test_database_pool_response_does_not_expose_driver_or_pool_details():
     body = response.body.decode("utf-8")
     assert "internal pool connection details" not in body
     assert "TimeoutError" not in body
+
+
+class CapacityHttpRouteTests(unittest.IsolatedAsyncioTestCase):
+    async def _assert_registered_handler_response(self, exception, expected_retry_after, forbidden_text):
+        import httpx
+        from api.main import app
+
+        route_name = f"capacity-regression-{type(exception).__name__}"
+        path = f"/__test/{route_name}"
+
+        async def raise_capacity_error():
+            raise exception
+
+        app.add_api_route(path, raise_capacity_error, methods=["GET"], name=route_name)
+        registered_route = next(
+            route for route in app.router.routes
+            if getattr(route, "name", None) == route_name
+        )
+        # The application mounts StaticFiles at "/" as its final route. Move the
+        # temporary regression route before that catch-all so the real exception
+        # handlers are reached through ASGI instead of receiving a static 404.
+        app.router.routes.remove(registered_route)
+        static_mount_index = next(
+            (
+                index for index, route in enumerate(app.router.routes)
+                if getattr(route, "name", None) == "axyron-static"
+            ),
+            len(app.router.routes),
+        )
+        app.router.routes.insert(static_mount_index, registered_route)
+        try:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.get(path)
+        finally:
+            app.router.routes.remove(registered_route)
+
+        assert response.status_code == 503
+        assert response.headers["retry-after"] == expected_retry_after
+        assert forbidden_text not in response.text
+        assert "detail" in response.json()
+
+    async def test_capacity_exception_handler_is_exercised_through_http(self):
+        await self._assert_registered_handler_response(
+            CapacityExceeded(7), "7", "CapacityExceeded"
+        )
+
+    async def test_database_pool_handler_is_exercised_through_http(self):
+        await self._assert_registered_handler_response(
+            SQLAlchemyPoolTimeout("private driver pool diagnostic"), "3",
+            "private driver pool diagnostic",
+        )
