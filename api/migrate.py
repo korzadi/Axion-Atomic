@@ -21,16 +21,22 @@ LOCK_ID = 7_340_001
 
 
 def discover(directory: Path = MIGRATIONS_DIR) -> list[tuple[str, Path]]:
-    items = []
-    for p in sorted(directory.glob("*.sql")):
-        m = NAME_RE.match(p.name)
-        if not m:
-            raise ValueError(f"Nombre de migración inválido: {p.name}")
-        items.append((m.group(1), p))
-    versions = [v for v, _ in items]
-    if len(versions) != len(set(versions)):
+    items: list[tuple[int, str, Path]] = []
+    for path in directory.glob("*.sql"):
+        match = NAME_RE.match(path.name)
+        if not match:
+            raise ValueError(f"Nombre de migración inválido: {path.name}")
+        version = match.group(1)
+        items.append((int(version), version, path))
+
+    numeric_versions = [number for number, _, _ in items]
+    if len(numeric_versions) != len(set(numeric_versions)):
         raise ValueError("Versiones de migración duplicadas")
-    return items
+
+    # El orden lexicográfico coloca 1000 antes de 999. Ordenar por entero
+    # conserva la secuencia cronológica incluso al superar tres dígitos.
+    items.sort(key=lambda item: item[0])
+    return [(version, path) for _, version, path in items]
 
 
 def checksum(path: Path) -> str:
