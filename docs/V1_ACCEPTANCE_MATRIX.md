@@ -205,3 +205,14 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Primera CI del reemplazo seguro (HEAD `073bca6`): 909 passed, 10 skipped y 1 fallida. El único fallo era una aserción del test simulado que comparaba la ruta HTTP sin contemplar `?wait=true`; la operación de borrado selectivo sí eliminó los IDs esperados. Ajuste de la aserción publicado en `b36fd8d`; nueva CI pendiente.
 
 - Regresión adicional `test_cleanup_failure_keeps_new_metadata_and_retriever_ignores_old_vectors` (`36a3b70`): simula fallo de limpieza posterior al commit SQL; verifica que los metadatos nuevos permanecen, que la recuperación señala las referencias obsoletas y que ningún fragmento antiguo llega al resultado. La CI de este commit queda pendiente.
+
+
+## Reconciliación de vectores huérfanos RAG (8 de noviembre de 2026)
+
+- Hallazgo ARC-01: la eliminación posterior a una reindexación podía fallar transitoriamente y dejar vectores huérfanos. El Retriever ya los ignoraba por falta de metadatos, pero no existía un mecanismo de reparación automática.
+- Implementación: `MetaStore.list_project_chunk_ids` obtiene los IDs SQL canónicos por proyecto; `VectorStore.list_project_ids` enumera los IDs vectoriales del mismo proyecto. Qdrant usa `POST /points/scroll` con filtro obligatorio `project_id`, paginación de 256 puntos y sin recuperar payloads ni vectores; memoria usa filtro equivalente.
+- `RepoIndexer.reconcile_project` calcula `vector_ids - canonical_ids` y elimina únicamente esos IDs. La reconciliación se ejecuta al final de cada indexación, incluso después de un fallo de limpieza por archivo, para reintentar huérfanos en la misma ejecución. Un fallo de enumeración/limpieza queda registrado en `IndexReport.errors`, sin borrar metadatos ni vectores canónicos.
+- Regresiones: paginación Qdrant en más de 256 puntos; filtro de proyecto; consulta SQL aislada; fallo de limpieza de una vez y reparación automática; Retriever sin advertencias de referencias obsoletas tras reparación.
+- Commits: `79de8af` (listado vectorial por proyecto), `592184a` (IDs canónicos SQL), `98ece52` (reconciliador), `6454335` (paginación Qdrant) y `87db339` (regresiones).
+- CI: la ejecución del HEAD previo `d5c6544` terminó correctamente; estos commits requieren una nueva CI. No se ejecutó Qdrant real.
+- Alcance de seguridad: reconciliación limitada a `project_id`; nunca elimina IDs de otro proyecto ni elimina IDs que sigan presentes en SQL.
