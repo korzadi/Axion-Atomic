@@ -106,3 +106,45 @@ def test_admin_user_list_validates_search_and_pagination():
     finally:
         patcher.stop()
         app.dependency_overrides.clear()
+
+
+def test_admin_billing_overview_reads_persisted_aggregates():
+    client, patcher = _client_with_role("billing_readonly")
+    try:
+        with patch("api.admin_routes.engine.connect") as connect:
+            context = MagicMock()
+            context.__enter__.return_value = context
+            connect.return_value = context
+            reservations = MagicMock()
+            reservations.mappings.return_value.all.return_value = [
+                {"state": "settled", "count": 3, "credits": 120}
+            ]
+            ledger = MagicMock()
+            ledger.mappings.return_value.all.return_value = [
+                {"event_type": "consume", "count": 3, "available_delta": 0,
+                 "reserved_delta": -120, "consumed_delta": 120}
+            ]
+            executions = MagicMock()
+            executions.mappings.return_value.all.return_value = [
+                {"state": "completed", "count": 3, "requires_review": 0,
+                 "recovery_due": 0}
+            ]
+            context.execute.side_effect = [reservations, ledger, executions]
+            response = client.get("/admin/billing/overview")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["reservations"][0]["credits"] == 120
+        assert body["ledger"][0]["consumed_delta"] == 120
+        assert body["executions"][0]["count"] == 3
+    finally:
+        patcher.stop()
+        app.dependency_overrides.clear()
+
+
+def test_admin_billing_overview_requires_billing_read_permission():
+    client, patcher = _client_with_role("unassigned_role")
+    try:
+        assert client.get("/admin/billing/overview").status_code == 404
+    finally:
+        patcher.stop()
+        app.dependency_overrides.clear()
