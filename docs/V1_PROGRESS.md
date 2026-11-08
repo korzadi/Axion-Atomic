@@ -689,3 +689,11 @@ El propietario autorizó el trabajo en `agent/opencode-vps` (no en `agent/chatgp
 - QA-01/QA-02 pueden considerarse verificadas **para este SHA** (no para staging ni para producción). REL-01 sigue bloqueada por AUTH/sandbox/catálogo/staging.
 
 - CI `42496918230` sobre `704f6d3` (commit documental): 5/5 en verde. La evidencia de código corresponde a `76c5356` (CI `42496765302`).
+
+## Integración de candidato — 2026-11-08 (rama `agent/opencode-vps`)
+
+- `origin/agent/chatgpt` avanzó a `d420ef4` (`feat(maintenance): bounded rate-limit cleanup command`, `fix(auth): OAuth response hardening`).
+- `integration/chatgpt-opencode-20261108b` actualizada directamente: primero fast-forward a `d420ef4` (verificado local: **1015 passed, 11 skipped**, compileall y check_frontend_js OK) y luego merge de `origin/agent/opencode-vps` (`000393c`). Árbol combinado verificado: **1021 passed, 11 skipped**; E2E de navegador aprobado; `check_frontend_js.py` OK.
+- CI del commit combinado `000393c` (run `42497299420`): **5/5 en verde** — python-tests 1021/1021, postgres-migrations 74 passed, studio-browser-e2e aprobado, container-image-build y qdrant-cloud-integration success.
+- GitHub marcó el PR #9 (agent/opencode-vps → integration/chatgpt-opencode-20261108b) como **MERGED** de forma automática al quedar todas las ramas integradas en la candidata; no se fusionó nada a `main` ni se modificó `agent/chatgpt`. `main` permanece sin tocar; la integración final corresponde al propietario.
+- La candidata de integración sigue cubriendo las mismas puertas REL-01: AUTH/MFA en staging, AGT-04 (daemon/TLS/digests), catálogo/precios QvaPay y sandbox oficial de QvaPay. V1.0 no se declara liberada.
