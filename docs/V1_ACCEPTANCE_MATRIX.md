@@ -30,7 +30,7 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | SEC-02 | Seguridad | MFA, keyring, recuperación y rotación probados | `api/mfa.py`, migración MFA | Bloqueada hasta pruebas E2E y plan de claves |
 | SEC-03 | Seguridad | OAuth GitHub/Google y correo probados | Rutas OAuth/email | Bloqueada por configuración y prueba externa |
 | SEC-04 | Seguridad | Matriz HTTP de roles por endpoint | `authorize_project`, workspace tests | Parcial |
-| DB-01 | Datos | Migraciones reproducibles en DB aislada | Migraciones y job PostgreSQL | Verificada para `5e55582`/`08b6e65` (CI + simulacro de restauración y migración 022) |
+| DB-01 | Datos | Migraciones reproducibles en DB aislada | Migraciones y job PostgreSQL | Verificada para `c41f490` (CI `42488024013` + migraciones 001→023 desde cero + simulacro de restauración y migración 022) |
 | DB-02 | Datos | Restauración real de backup en entorno aislado | `scripts/restore_postgres.sh` + simulacro ejecutado el 2026-11-08: backup real restaurado (41 tablas; `schema_migrations` 021) y migración 022 aplicada con el migrador real; contenedor desechable eliminado | Verificada (entorno desechable); falta ensayarla en staging |
 | BILL-01 | Facturación | Medición tokens en shadow mode | `inference_usage_events`; agregado por modelo en `/admin/billing/overview` | Implementada; no cobra con facturación desactivada |
 | BILL-02 | Facturación | Reservas, ledger, reversos e idempotencia conectados a inferencia | `workspace_chat`, ejecución durable, atestación, recuperación y reversión auditada de consumo liquidado | Implementada y probada con dobles; PostgreSQL real/Ollama pendiente |
@@ -39,8 +39,8 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh` actualizado | Código publicado; CI pendiente |
 | OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución VPS pendiente |
 | OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador, `restore_postgres.sh` y simulacro de restauración real; sección de mantenimiento añadida | Restore verificado; upgrade/rollback aún no ensayados aislados |
-| QA-01 | QA | Suite Python aprobada en HEAD evaluado | `agent/opencode-vps` `08b6e65`: `pytest -q` → 911 passed, 11 skipped; CI `42485697750` green en `5e55582` (python-tests incluido) | Verificada local y en CI para el HEAD previo; CI del nuevo HEAD `c41f490` confirmada en verde (run `42488024013`) |
-| QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions: `42485697750` sobre `5e55582` — studio-browser-e2e, container-image-build, postgres-migrations, qdrant-cloud-integration, python-tests: success | Verificada para `5e55582`; CI del nuevo HEAD `c41f490` confirmada en verde (run `42488024013`) |
+| QA-01 | QA | Suite Python aprobada en HEAD evaluado | `agent/opencode-vps` `08b6e65`: `pytest -q` → 911 passed, 11 skipped; CI `42485697750` green en `5e55582` (python-tests incluido) | Verificada local y en CI para `c41f490` (run `42488024013`) |
+| QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions: `42485697750` sobre `5e55582` — studio-browser-e2e, container-image-build, postgres-migrations, qdrant-cloud-integration, python-tests: success | Verificada para `5e55582` y `c41f490` (run `42488024013`) |
 | DOC-01 | Docs | README, AGENTS, instalación, seguridad y usuario alineados | Documentación del repo | Parcial |
 | REL-01 | Lanzamiento | Todas las puertas críticas aprobadas | Esta matriz | Bloqueada |
 
