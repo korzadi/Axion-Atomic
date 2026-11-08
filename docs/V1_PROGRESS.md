@@ -854,3 +854,23 @@ Conclusión: el procedimiento de rollback documentado funciona en producción re
 
 ### Pendiente
 - Sin cambios en la decisión de cobros: `BILLING_ENFORCEMENT_ENABLED` sigue desactivado; `QVAPAY_ENABLED=false`; sandbox desactivado. `REL-01` bloqueada (buzón real, token/catálogo QvaPay, AGT-04). V1.0 no se declara liberada.
+
+## Auditoría integral V1.0 — 2026-11-08 (`agent/opencode-vps`, base `main = ad68953`)
+
+### HEAD y ramas
+- Fetch completo; las tres ramas de trabajo apuntan a `ad68953` (merge de PR #15 con ARC-02 integrado). Árbol limpio.
+- `main` CI del SHA exacto (run `42525211231`): **6/6 jobs** — python-tests, postgres-migrations, qdrant-cloud-integration, **qdrant-e2e**, container-image-build, studio-browser-e2e.
+- Suite local (`DATABASE_URL=sqlite`): **1035 passed, 22 skipped**; `compileall`, `check_frontend_js.py`, `bash -n`, `pip check`, `git diff --check`: OK.
+- Secretos: sin `.env` ni claves trackeadas; sin patrones de credenciales; `.pyc` no trackeados.
+
+### Corrección de defectos
+- `tests/test_rag_replace_rollback.py` (nuevo): fija con fallo inyectado el contrato de rollback de `replace_source` — (1) falla el borrado de fragmentos antiguos → se retira la versión nueva, la previa permanece íntegra y la operación falla con `KnowledgeStoreUnavailable`; (2) también falla el rollback → sigue fallando cerrada; nunca se declara éxito. Unitario con doble en memoria; no sustituye a la E2E real (`tests/test_rag_qdrant_e2e.py`).
+- Sin cambios funcionales de producción; `rag/*` intacto.
+
+### Documentación reconciliada (historial preservado)
+- Matriz: `STU-03`/`AI-02` → Implementada con E2E real en CI (`ad68953`); `QA-01`/`QA-02` con `ad68953` y 6/6; `OPS-03` actualizado (rollback ida y vuelta en vivo; upgrade en staging pendiente); sección de conteo real de criterios (9 Verificadas · 9 Implementadas · 12 Parciales · 1 Bloqueada = 31) y desglose implementación/pruebas/productivo/bloqueadores.
+- Gate y README: referencias al SHA actual e inclusión del job `qdrant-e2e` en la lista de CI.
+
+### Estado honesto
+- Implementación ~90 % de criterios con código y CI verde; pruebas verificadas ~80 %; preparación productiva ~75 % (producción en `a2f41d0`; 15 commits de `main` pendientes de despliegue por el propietario; delta sin migraciones).
+- `REL-01` **bloqueada**: (1) buzón real; (2) token/catálogo QvaPay; (3) AGT-04. V1.0 no se declara liberada.
