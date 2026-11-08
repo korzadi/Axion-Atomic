@@ -66,3 +66,45 @@ class WorkspaceAuthorizationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class WorkspaceAuthorizationHttpTests(unittest.TestCase):
+    def _request_as_role(self, role, endpoint):
+        import asyncio
+        import httpx
+        from api.main import app
+        from api.workspace_routes import _enabled_user
+
+        def resolve_role(user_id, project_id, allowed_roles):
+            if role not in allowed_roles:
+                raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+            return role
+
+        async def request():
+            app.dependency_overrides[_enabled_user] = lambda: {"id": "user-123"}
+            try:
+                with patch("api.workspace_routes.authorize_project", side_effect=resolve_role), \
+                     patch("api.workspace_routes._enforce_workspace_limit"), \
+                     patch("api.workspace_routes._list_runs", return_value=[]):
+                    async with httpx.AsyncClient(
+                        transport=httpx.ASGITransport(app=app), base_url="http://test"
+                    ) as client:
+                        return await client.get(endpoint)
+            finally:
+                app.dependency_overrides.pop(_enabled_user, None)
+
+        return asyncio.run(request())
+
+    def test_viewer_can_read_runs_over_http(self):
+        response = self._request_as_role("viewer", "/workspace/agent/runs?project_id=project-456")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"items": []})
+
+    def test_viewer_cannot_read_approval_queue_over_http(self):
+        response = self._request_as_role("viewer", "/workspace/agent/approvals?project_id=project-456")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "Proyecto no encontrado")
+
+    def test_non_member_receives_same_not_found_over_http(self):
+        response = self._request_as_role(None, "/workspace/agent/runs?project_id=project-456")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "Proyecto no encontrado")
