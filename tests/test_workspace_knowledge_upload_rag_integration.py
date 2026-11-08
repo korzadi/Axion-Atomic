@@ -108,6 +108,7 @@ class WorkspaceKnowledgeUploadRagIntegrationTests(unittest.IsolatedAsyncioTestCa
 
     async def test_malformed_embedding_identity_blocks_retrieval(self):
         from qdrant_client import models
+        service.ensure_collection()
         malformed_payloads = [
             {"embedding_model": "   ", "embedding_dimension": service.settings.embed_dimension},
             {"embedding_model": "nomic-embed-text:latest", "embedding_dimension": True},
