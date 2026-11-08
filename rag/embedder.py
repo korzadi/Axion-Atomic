@@ -2,6 +2,7 @@
 from typing import Protocol
 
 from core.errors import TransportError
+from rag.vector_contract import validate_embedding_batch
 
 
 class Embedder(Protocol):
@@ -16,9 +17,13 @@ class OllamaEmbedder:
     async def embed(self, texts: list[str]) -> list[list[float]]:
         out: list[list[float]] = []
         for i in range(0, len(texts), self.batch_size):
-            vecs = await self.transport.embed(self.model, texts[i:i + self.batch_size])
-            for v in vecs:
-                if len(v) != self.dimension:
-                    raise TransportError(f"El modelo {self.model} devolvió dimensión {len(v)}, se esperaba {self.dimension}", retryable=False)
-            out += vecs
+            batch = texts[i:i + self.batch_size]
+            vecs = await self.transport.embed(self.model, batch)
+            try:
+                out += validate_embedding_batch(vecs, len(batch), self.dimension)
+            except ValueError as exc:
+                raise TransportError(
+                    f"El modelo {self.model} devolvió embeddings incompatibles: {exc}",
+                    retryable=False,
+                ) from exc
         return out
