@@ -196,4 +196,4 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - ADM-01 pasa a verificada a nivel backend/CI (PostgreSQL incluido); falta validación E2E contra staging real.
 - Herramientas: `/node_modules/` añadido a `.gitignore`; `npm install --no-save` local como en CI.
 - CI `42488531176` (`68ffa13`) y `42488645522` (`1db1d32`): los cinco jobs en verde.
-- Exportación de órdenes QvaPay con importes exactos supersede de invoice abierta y expiración automática verificadas en instancia PostgreSQL desechable.
+- Expiración automática de órdenes QvaPay pendientes vencidas y de sus invoices abiertas (evento `expired`, idempotente) verificada en instancia PostgreSQL desechable y en CI (`postgres-migrations`: 74 passed).
