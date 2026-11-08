@@ -13,7 +13,7 @@ La exclusión basada únicamente en `asyncio.Lock` protege una instancia de `Rep
 - La salida ejecuta `pg_advisory_unlock` antes de devolver la conexión al pool.
 - Si el desbloqueo falla o informa que no liberó el lock, la conexión se invalida para evitar devolver al pool una sesión potencialmente bloqueada.
 - Si el proceso o la sesión PostgreSQL desaparece, PostgreSQL libera el advisory lock asociado a esa sesión.
-- El fallback para MetaStores sin capacidad `project_lock` conserva el comportamiento local anterior, útil para SQLite y pruebas unitarias.
+- En `rag.service`, SQLite y otros dialectos distintos de PostgreSQL usan un `asyncio.Lock` local por proyecto para desarrollo/CI. Este fallback no coordina procesos ni es válido como sustituto de PostgreSQL en producción. `SqlAlchemyMetaStore.project_lock` conserva su contrato específico de PostgreSQL.
 
 ## Cobertura
 
