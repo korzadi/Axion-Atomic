@@ -371,3 +371,11 @@ Tareas asignadas por el propietario: certificar el estado del SHA de referencia 
 - **Bloqueadores de liberación:** REL-01: (1) buzón real; (2) QvaPay token/catálogo; (3) AGT-04. Más decisión del propietario sobre despliegue del `main` actual.
 
 **Las cifras son conteo textual de esta matriz y de los resultados de CI/pruebas citados; no existe telemetría externa. V1.0 NO se declara liberada.**
+
+## Despliegue controlado a `main = a298344` — 8 de noviembre de 2026 (`agent/opencode-vps`)
+
+- PR #22 fusionado con autorización del propietario; CI del merge en `main` (run `42526094951`) **6/6 verde**.
+- Backup previo en producción: `backups/pre-main-a298344-20261108T213805Z.dump` (297 objetos); imágenes anteriores etiquetadas `rollback-a298344`. Recreada solo la API; postgres y redis intactos.
+- Verificación real: `/health` 6/6; readiness `ready`; `/auth/me` 401; dominio 200; assets == repo (`cmp`); logs limpios.
+- Producción == `main` (`a298344`). Delta: tests de rollback RAG y docs; sin migraciones.
+- `REL-01` sigue bloqueada (mismos tres bloqueadores). V1.0 no se declara liberada.
