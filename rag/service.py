@@ -266,8 +266,10 @@ async def replace_source(source_id: str, text: str, source: str, project_id: str
         normalized_source_id = str(uuid.UUID(source_id))
     except (ValueError, TypeError, AttributeError):
         raise ValueError("source_id debe ser un UUID válido") from None
+    # La identidad del embedding limita la recuperación, no la propiedad de la fuente.
+    # Al reemplazar debemos retirar también chunks de modelos anteriores del mismo proyecto.
     project_filter = models.Filter(
-        must=_project_embedding_filter(project_id).must + [
+        must=_project_filter(project_id).must + [
             models.FieldCondition(key="source_id", match=models.MatchValue(value=normalized_source_id))
         ]
     )
@@ -350,10 +352,11 @@ async def replace_source(source_id: str, text: str, source: str, project_id: str
 @_serialize_project_mutation(_preflight_delete)
 async def delete_source(source_id: str, project_id: str) -> None:
     """Elimina todos los fragmentos de una fuente, siempre dentro del proyecto indicado."""
-    project_filter = _project_filter(project_id)
     normalized_source_id = str(uuid.UUID(source_id))
+    # La eliminación se basa en propiedad (proyecto + fuente), no en el modelo
+    # de embeddings activo; así también purga vectores de versiones anteriores.
     source_filter = models.Filter(
-        must=_project_embedding_filter(project_id).must + [
+        must=_project_filter(project_id).must + [
             models.FieldCondition(key="source_id", match=models.MatchValue(value=normalized_source_id))
         ]
     )
