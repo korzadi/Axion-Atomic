@@ -125,4 +125,9 @@ async def configured_chat_model_available() -> bool:
         item.get("name") for item in models
         if isinstance(item, dict) and isinstance(item.get("name"), str)
     }
-    return settings.chat_model in names
+    configured = settings.chat_model.strip()
+    # Ollama devuelve normalmente la etiqueta explícita :latest aunque la
+    # configuración solicite el alias sin etiqueta.
+    if ":" not in configured:
+        return configured in names or f"{configured}:latest" in names
+    return configured in names
