@@ -69,6 +69,46 @@ class ManualRagDistributedLockTests(unittest.IsolatedAsyncioTestCase):
             ("upsert", "project-a"), ("unlock", "project-a"),
         ])
 
+
+    async def test_replace_and_delete_are_inside_the_same_project_lock(self):
+        events = []
+
+        @asynccontextmanager
+        async def project_lock(project_id):
+            events.append(("lock", project_id))
+            try:
+                yield
+            finally:
+                events.append(("unlock", project_id))
+
+        source_id = "12345678-1234-5678-1234-567812345678"
+        old_point = type("Point", (), {
+            "id": "old-point",
+            "payload": {"project_id": "project-a", "source_id": source_id},
+        })()
+
+        async def inline_to_thread(function, *args, **kwargs):
+            return function(*args, **kwargs)
+
+        with (
+            patch.object(service, "_project_mutation_lock", project_lock),
+            patch.object(service, "ensure_collection"),
+            patch.object(service.client, "scroll", return_value=([old_point], None)),
+            patch.object(service, "embed", new=AsyncMock(return_value=[0.1, 0.2, 0.3, 0.4])),
+            patch.object(service.client, "upsert", side_effect=lambda **_: events.append(("upsert", "project-a"))),
+            patch.object(service.client, "delete", side_effect=lambda **_: events.append(("delete", "project-a"))),
+            patch.object(service.asyncio, "to_thread", new=inline_to_thread),
+        ):
+            await service.replace_source(source_id, "Nuevo contenido válido", "manual-v2", "project-a")
+            await service.delete_source(source_id, "project-a")
+
+        self.assertEqual(events, [
+            ("lock", "project-a"), ("upsert", "project-a"),
+            ("delete", "project-a"), ("unlock", "project-a"),
+            ("lock", "project-a"), ("delete", "project-a"),
+            ("unlock", "project-a"),
+        ])
+
     async def test_sensitive_content_is_rejected_before_project_lock(self):
         lock = AsyncMock()
         with patch.object(service, "_project_mutation_lock", lock):
