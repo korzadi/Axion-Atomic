@@ -42,6 +42,8 @@
 - Rutas principales y de recuperación registradas en `api/main.py`.
 
 ### Pruebas existentes
+- Prueba de logout añadida en commit `3d98e946f3f4b4cb1628b96dfbc8bc565ea71fa5`: confirma revocación de sesión y eliminación de ambas cookies; CI run `42479092644` completado con éxito.
+- Pruebas de registro añadidas en commit `384a7911113e717c464d71521acf53f07d3858e3`: comprueban que el token de verificación nunca aparece en la respuesta y que un fallo SMTP tampoco lo filtra. CI run `42479161490` pendiente de resultado al actualizar este registro.
 - `tests/test_auth_security.py`: hashing, política de contraseña y rechazo de cuenta inactiva.
 - `tests/test_auth_routes.py`: gate cerrado, rate limits, login, MFA y OAuth.
 - `tests/test_auth_recovery_threadpool.py`: operaciones bloqueantes fuera del event loop.
@@ -65,8 +67,9 @@
 - `AUTH_ENABLED=false` permanece como valor seguro por defecto. No activarlo en producción desde esta tarea.
 
 ### Commits
-- Implementación previa: consultar historial Git de `main`.
-- Registro inicial: este commit.
+- `faae033383d3a28d8625390087d54e5db1d65b0b`: registro inicial de progreso.
+- `3d98e946f3f4b4cb1628b96dfbc8bc565ea71fa5`: prueba de revocación y limpieza de cookies al cerrar sesión; CI exitoso.
+- `384a7911113e717c464d71521acf53f07d3858e3`: pruebas anti-filtración de token de verificación; CI pendiente.
 
 ### Próxima tarea
 Completar la matriz de pruebas integrales de autenticación y corregir cualquier fallo reproducible antes de pasar a fase 2.
