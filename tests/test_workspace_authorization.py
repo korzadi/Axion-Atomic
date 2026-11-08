@@ -83,10 +83,10 @@ class WorkspaceAuthorizationHttpTests(unittest.TestCase):
             overrides[_enabled_user] = lambda: {"id": "user-123"}
             overrides[_csrf_user] = lambda: {"id": "user-123"}
             try:
-                with patch("api.workspace_routes.authorize_project", side_effect=resolve_role), \\
-                     patch("api.workspace_routes._enforce_workspace_limit"), \\
-                     patch("api.workspace_routes._list_runs", return_value=[]), \\
-                     patch("api.workspace_routes._get_run", return_value=None) as get_run, \\
+                with patch("api.workspace_routes.authorize_project", side_effect=resolve_role), \
+                     patch("api.workspace_routes._enforce_workspace_limit"), \
+                     patch("api.workspace_routes._list_runs", return_value=[]), \
+                     patch("api.workspace_routes._get_run", return_value=None) as get_run, \
                      patch("api.workspace_routes._decide_action_approval") as decide:
                     async with httpx.AsyncClient(
                         transport=httpx.ASGITransport(app=app), base_url="http://test"
