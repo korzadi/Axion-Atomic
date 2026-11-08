@@ -34,6 +34,23 @@ class FakeAsyncClient:
         return FakeResponse({"embedding": [0.1, 0.2]})
 
 
+class FakeTagsClient:
+    payload = {"models": [{"name": "atomic-code:1.1"}, {"name": "nomic-embed-text:latest"}]}
+
+    def __init__(self, timeout=None):
+        self.timeout = timeout
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def get(self, url):
+        self.last_url = url
+        return FakeResponse(self.payload)
+
+
 class OllamaClientTests(unittest.IsolatedAsyncioTestCase):
     async def test_chat_uses_configured_model_and_context(self):
         with patch.object(ollama, "settings") as settings, patch.object(
@@ -80,6 +97,24 @@ class OllamaClientTests(unittest.IsolatedAsyncioTestCase):
             settings.chat_model = "atomic-code:1.1"
             with self.assertRaisesRegex(RuntimeError, "no terminó"):
                 await ollama.chat([{"role": "user", "content": "hola"}])
+
+    async def test_model_availability_requires_exact_configured_ollama_tag(self):
+        with patch.object(ollama, "settings") as settings, patch.object(
+            ollama.httpx, "AsyncClient", FakeTagsClient
+        ):
+            settings.chat_model = "atomic-code:1.1"
+            settings.ollama_base_url = "http://ollama:11434"
+            settings.ollama_request_timeout_seconds = 30
+            self.assertTrue(await ollama.configured_chat_model_available())
+
+    async def test_model_availability_is_false_when_configured_tag_is_missing(self):
+        with patch.object(ollama, "settings") as settings, patch.object(
+            ollama.httpx, "AsyncClient", FakeTagsClient
+        ):
+            settings.chat_model = "atomic-code:missing"
+            settings.ollama_base_url = "http://ollama:11434"
+            settings.ollama_request_timeout_seconds = 30
+            self.assertFalse(await ollama.configured_chat_model_available())
 
     async def test_embeddings_use_configured_embedding_model(self):
         with patch.object(ollama, "settings") as settings, patch.object(
