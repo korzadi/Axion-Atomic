@@ -619,4 +619,4 @@ Confirmar CI del SHA publicado; después continuar Fase 11 (preflight/staging) y
 - `.env.example` ya estaba blindado con `tests/test_env_example_contract.py` (5 pruebas).
 - `scripts/install_vps.sh --check` ejecutado en el host real: falla de forma segura ante stack existente (`Puerto 8070 ocupado; no se detendrá el servicio existente.`, exit 1); sin cambios ni secretos impresos.
 - `test_vps_installer_contract.py`: 23 passed. OPS-01/02/03 actualizados en la matriz.
-- Fase 11 pasa a 75%; pendiente: `--prepare/--check/--deploy` y rollback en staging, inventario real (operador), upgrade aislado.
+- Fase 11 pasa a 75%; pendiente: `--prepare/--check/--deploy` y rollback en staging, inventario real (operador), upgrade aislado. CI `42491118328` sobre `87d3b9d`: los cinco jobs en verde (studio-browser-e2e, container-image-build, postgres-migrations, python-tests, qdrant-cloud-integration).
