@@ -36,6 +36,7 @@
   const agentStart = document.createElement("button");
   agentStart.type = "button";
   agentStart.textContent = "Iniciar tarea";
+  agentStart.disabled = true;
   const agentStatus = document.createElement("p");
   agentStatus.setAttribute("role", "status");
   agentStatus.setAttribute("aria-live", "polite");
@@ -203,6 +204,7 @@
     });
     if (!items.length) {
       currentProject = null;
+      setAgentBusy(false);
       setStatus("Crea tu primer proyecto para comenzar.");
       messages.replaceChildren();
       return;
@@ -210,6 +212,7 @@
     const preferred = preferredProjectId == null ? null : String(preferredProjectId);
     currentProject = items.some((item) => String(item.id) === preferred) ? preferred : String(items[0].id);
     projectSelect.value = currentProject;
+    setAgentBusy(false);
     await loadHistory();
     setStatus("Proyecto listo. Atomic Code está conectado al backend.");
   }
@@ -230,6 +233,7 @@
 
   projectSelect.addEventListener("change", async () => {
     currentProject = projectSelect.value || null;
+    setAgentBusy(false);
     try { await loadHistory(); setStatus("Historial del proyecto cargado."); }
     catch (error) { setStatus(error.message); }
   });
