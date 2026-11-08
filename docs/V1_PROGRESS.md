@@ -67,6 +67,7 @@
 - `AUTH_ENABLED=false` permanece como valor seguro por defecto. No activarlo en producción desde esta tarea.
 
 ### Commits
+- `0f689311a31cca0fa5c0010ea77007d5f5b39747`: corrige las aserciones de las pruebas de recuperación para validar el contrato real de las funciones (diccionarios de resultado). La ejecución anterior `42479287187` detectó dos fallos en las pruebas nuevas —no en la lógica de producción—; la corrección está bajo CI en `42479380635`.
 - `faae033383d3a28d8625390087d54e5db1d65b0b`: registro inicial de progreso.
 - `3d98e946f3f4b4cb1628b96dfbc8bc565ea71fa5`: prueba de revocación y limpieza de cookies al cerrar sesión; CI exitoso.
 - `384a7911113e717c464d71521acf53f07d3858e3`: pruebas anti-filtración de token de verificación; CI pendiente.
