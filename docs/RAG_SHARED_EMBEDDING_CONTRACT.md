@@ -87,3 +87,14 @@ Se actualizaron los contratos de prueba para:
 - Comprobar directamente la identidad del punto del modelo B y la conservación del fallo cerrado para puntos legacy.
 
 No se ha relajado el control de identidad ni se ha cambiado el tratamiento fail-closed de datos históricos. La nueva CI de estos ajustes debe aprobar antes de considerar validada ARC-01.
+
+
+## Resultado de CI y endurecimiento adicional
+
+La segunda ejecución, correspondiente al HEAD `8486e6c` (run `42492795887`), terminó con los cinco jobs en `success`: Python tests, container image build, PostgreSQL migrations, Studio browser E2E y Qdrant Cloud integration.
+
+Durante la revisión del preflight se detectó una condición adicional: Python considera `bool` como subclase de `int`, por lo que un payload con `embedding_dimension=true` podía superar una comprobación de tipo demasiado permisiva. El preflight ahora exige:
+- `embedding_model` de tipo string y no vacío tras eliminar espacios.
+- `embedding_dimension` entero positivo, excluyendo explícitamente booleanos.
+
+Se añadieron regresiones para modelo vacío, dimensión booleana, cero y dimensión serializada como texto. Esta ampliación está publicada después del HEAD que obtuvo CI 5/5; su propia ejecución de CI sigue pendiente. No se ha cambiado el filtro de recuperación ni se ha inferido identidad para puntos históricos.
