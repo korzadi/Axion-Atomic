@@ -119,7 +119,7 @@
       showAgentRun(run);
     } catch (error) {
       agentStatus.textContent = error.message;
-    } finally { setAgentBusy(false); }
+    } finally { setAgentBusy(false); await loadAgentHistory(); }
   }
   agentStart.addEventListener("click", async () => {
     const goal = agentGoal.value.trim();
@@ -146,7 +146,7 @@
       }
     } catch (error) {
       agentStatus.textContent = error.message;
-    } finally { setAgentBusy(false); }
+    } finally { setAgentBusy(false); await loadAgentHistory(); }
   });
 
   async function loadAgentHistory() {
