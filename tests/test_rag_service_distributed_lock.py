@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, patch
 
@@ -18,7 +19,7 @@ class ManualRagDistributedLockTests(unittest.IsolatedAsyncioTestCase):
                 finally:
                     entered.append(("release", project_id))
 
-        fake_engine = object()
+        fake_engine = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
         with (
             patch("api.database.engine", fake_engine),
             patch("agent.sqlalchemy_meta.SqlAlchemyMetaStore", return_value=FakeStore()) as adapter,
@@ -28,6 +29,23 @@ class ManualRagDistributedLockTests(unittest.IsolatedAsyncioTestCase):
 
         adapter.assert_called_once_with(fake_engine)
         self.assertEqual(entered, [("acquire", "project-a"), ("release", "project-a")])
+
+    async def test_sqlite_uses_process_local_fallback(self):
+        fake_engine = SimpleNamespace(dialect=SimpleNamespace(name="sqlite"))
+        second_entered = asyncio.Event()
+
+        with patch("api.database.engine", fake_engine):
+            async with service._project_mutation_lock("sqlite-project"):
+                async def second_worker():
+                    async with service._project_mutation_lock("sqlite-project"):
+                        second_entered.set()
+
+                task = asyncio.create_task(second_worker())
+                await asyncio.sleep(0.02)
+                self.assertFalse(second_entered.is_set())
+
+            await asyncio.wait_for(task, timeout=1)
+            self.assertTrue(second_entered.is_set())
 
     async def test_ingest_holds_project_lock_for_embedding_and_qdrant_write(self):
         state = {"locked": False, "events": []}
