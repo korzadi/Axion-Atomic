@@ -94,7 +94,7 @@ La futura acreditación debe validar desde backend la identidad de la transacci�
 
 - Dirección confirmada por el propietario: `axyronatomic@qvpay.me`.
 - LNURL proporcionado por el propietario: decodifica a `https://www.qvapay.com/.well-known/lnurlp/axionatomic` (con "i"), que responde **HTTP 404 «Lightning Address no encontrada»**. El LNURL entregado **no corresponde** a la dirección confirmada y debe solicitarse/derivarse de nuevo.
-- El LNURL efectivo de la dirección confirmada (`.../lnurlp/axyronatomic`) responde **HTTP 200** con `payRequest` válido: `minSendable=132000` (132 sats), `maxSendable=527160000` (527,160 sats), `commentAllowed=255`, metadatos `[["text/plain","Pago a axyronatomic en QvaPay"],["text/identifier","axyronatomic@qvpay.me"]]`.
+- El LNURL efectivo de la dirección confirmada responde **HTTP 200** (verificado 2026-11-08): payRequest válido con límites de envío de ~132 sats hasta ~527,160 sats (fluctúan con el precio BTC) y `commentAllowed=255`. Los valores completos se conservan solo en `.env` (`QVAPAY_LNURL`); no se replican en Git.
 - En consecuencia, el default de configuración del repositorio se corrigió de `axionatomic@qvpay.me` a `axyronatomic@qvpay.me` (config, plantilla `.env.example`, pruebas y docs). Sin push pendiente de decisión del propietario.
 - Verificación GET sin efecto sobre la API: no se crearon invoices ni operaciones; no se cargó ningún tarifario en BD; `BILLING_ENFORCEMENT_ENABLED=false` y `QVAPAY_ENABLED=false` siguen intactos; el checkout continúa bloqueado.
 
