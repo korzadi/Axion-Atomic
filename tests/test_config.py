@@ -66,8 +66,8 @@ class EnvironmentAliasTests(unittest.TestCase):
             "https://-cluster.qdrant.io",
             "https://cluster.qdrant.io?token=hidden",
             "https://user:password@cluster.qdrant.io",
-            "https://cluster.qdrant.io\\n.attacker.example",
-            "https://cluster.qdrant.io\\t.attacker.example",
+            "https://cluster.qdrant.io\n.attacker.example",
+            "https://cluster.qdrant.io\t.attacker.example",
         )
         for url in invalid_urls:
             with self.subTest(url=url):
@@ -90,8 +90,8 @@ class EnvironmentAliasTests(unittest.TestCase):
             "https://example.com..",
             "https://bad_host.example.com",
             "https://a" + "x" * 64 + ".example.com",
-            "https://axyronatomic.com\\n.attacker.example",
-            "https://axyronatomic.com\\t.attacker.example",
+            "https://axyronatomic.com\n.attacker.example",
+            "https://axyronatomic.com\t.attacker.example",
         )
         for origin in invalid_origins:
             with self.subTest(origin=origin):
