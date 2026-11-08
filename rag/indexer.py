@@ -32,6 +32,7 @@ class IndexReport:
     chunks: int = 0
     errors: list[str] = field(default_factory=list)
     truncated: bool = False
+    orphaned_removed: int = 0
 
 
 def embed_text(rel: str, symbol: str | None, text: str) -> str:
@@ -104,7 +105,22 @@ class RepoIndexer:
                 await self.store.delete_path(pid, gone)
                 await asyncio.to_thread(self.meta.delete_file, pid, gone)
                 rep.removed.append(gone)
+        try:
+            rep.orphaned_removed = await self.reconcile_project(pid)
+        except (AxionError, OSError, ValueError) as exc:
+            rep.errors.append(f"reconciliación de vectores huérfanos: {exc}")
         return rep
+
+    async def reconcile_project(self, project_id: str) -> int:
+        """Elimina solo vectores del proyecto que ya no tienen fragmento SQL vigente."""
+        if not project_id or not isinstance(project_id, str):
+            raise ValueError("project_id es obligatorio")
+        canonical_ids = await asyncio.to_thread(self.meta.list_project_chunk_ids, project_id)
+        vector_ids = await self.store.list_project_ids(project_id)
+        orphaned = sorted(vector_ids - canonical_ids)
+        if orphaned:
+            await self.store.delete_ids(orphaned)
+        return len(orphaned)
 
     async def remove_project(self, project_id: str) -> None:
         await self.store.delete_project(project_id)
