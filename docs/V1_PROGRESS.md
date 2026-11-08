@@ -147,3 +147,28 @@ Confirmar por CI las pruebas nuevas y la suite completa; después continuar con 
 ### Nota sobre porcentajes
 
 Los porcentajes heredados de la tabla anterior corresponden al orden anterior de fases y no son directamente comparables con esta nueva taxonomía. No se presentan como porcentajes reales de las nuevas 12 fases hasta reclasificar los criterios de aceptación y recalcularlos con evidencias del mismo HEAD. La matriz de aceptación sigue siendo la fuente de verdad para esa recalibración.
+
+
+## Continuidad de desarrollo — checkpoint 2026-11-08
+
+**Fase activa:** 1 — Estabilización y arquitectura.
+
+### Implementación adicional
+- Se reforzaron las pruebas de integración de `/health/readiness` en `tests/test_api_health.py`.
+- Se añadieron aserciones basadas en el esquema JSON para comprobar el estado HTTP 503, el estado `blocked`, las comprobaciones de autenticación, las dependencias críticas y la sección opcional. Esto evita acoplar la prueba al orden/serialización exacta de las claves JSON.
+- Commit: `68b7cea15d0927c0c2f97f76d3b3878bdbcb2857` — `test: make readiness response assertions schema-focused`.
+- Commit anterior del mismo bloque: `466d85b0b7c7abccc70267adab74a1ed874911c6` — añade cobertura de dependencia crítica no disponible y degradación opcional de Redis.
+
+### Verificación
+- Confirmado mediante lectura posterior en GitHub que ambos métodos de prueba y la aserción por esquema están en `main`.
+- No hay ejecución de Python/pytest ni runner CI disponible en esta sesión. Las pruebas están **añadidas, no ejecutadas**.
+- La consulta de workflow runs para el commit de documentación anterior devolvió lista vacía; no se afirma que CI esté aprobada.
+- No se modificó `api/main.py`, `api/readiness.py`, frontend, configuración VPS, PostgreSQL, Docker, volúmenes ni servicios externos.
+
+### Medición honesta
+- La matriz `docs/V1_ACCEPTANCE_MATRIX.md` contiene criterios con estados históricos, parciales y pendientes, pero varios resultados corresponden a SHA anteriores y no se pueden atribuir al HEAD actual.
+- Hasta obtener pruebas del mismo HEAD, el porcentaje **verificado en el HEAD actual** para cada fase es 0%; esto no significa que no exista implementación, sino que aún no hay evidencia de ejecución/CI actual que permita certificarla. Se mantiene Fase 1 en progreso.
+- No se recalcula avance de implementación a partir de la mera presencia de archivos.
+
+### Siguiente tarea
+- Conseguir una ejecución de CI reproducible para el HEAD actual y resolver fallos; después completar las pruebas de contrato/persistencia ARC-01, API-02 y DB-01 sin tocar datos ni servicios de producción.
