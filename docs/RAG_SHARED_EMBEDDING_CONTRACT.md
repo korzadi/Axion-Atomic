@@ -52,3 +52,25 @@ No se cambia el modelo configurado, dimensión, endpoint, colección, contenido 
 La identidad común permite comparar configuraciones y cada pipeline valida el modelo que solicita. Sin embargo, `RepoIndexer` sigue siendo una clase construida externamente y no está conectada al runtime HTTP de Studio; no se afirma que hoy exista una única fábrica de configuración que fuerce la paridad de ambas instancias. Antes de compartir una colección en producción, el punto de composición debe invocar `require_compatible_embeddings` con las dos identidades efectivas. Además, si Ollama omite el modelo en su respuesta, el cliente no puede demostrar qué artefacto respondió únicamente con ese payload.
 
 No se migran datos ni se cambia el contrato de payload para evitar mezclar silenciosamente puntos históricos con una identidad que no esté registrada en ellos.
+
+
+## Identidad persistente en el RAG manual de Studio (ARC-01)
+
+La ruta manual de Studio ahora escribe en cada punto dos campos de payload:
+- `embedding_model`: nombre Ollama canónico (incluye `:latest` cuando el alias no declara tag).
+- `embedding_dimension`: dimensión configurada del vector.
+
+La búsqueda manual filtra simultáneamente por `project_id`, `embedding_model` y `embedding_dimension`. Por tanto, dos modelos distintos con la misma dimensión no comparten resultados. La sustitución y eliminación de fuentes también se limitan a la identidad activa, evitando borrar puntos de otra identidad por compartir `source_id`.
+
+### Tratamiento de vectores históricos
+
+No se infiere retroactivamente la identidad de puntos anteriores ni se reescribe, elimina o recrea ninguna colección. Antes de recuperar contexto, Studio recorre los puntos del proyecto y comprueba que todos declaren ambos campos. Si encuentra un punto sin identidad, o no puede verificar hasta 10.000 puntos, falla de forma cerrada con `EmbeddingIdentityMigrationRequired` en lugar de ocultar silenciosamente el contexto legacy mediante un filtro.
+
+Esto preserva los datos históricos, pero significa que los proyectos que ya tenían puntos manuales sin identidad necesitan una migración explícita y revisada antes de volver a usar su RAG. La migración no forma parte de este cambio y no se ejecuta automáticamente. Los proyectos nuevos, y los proyectos sin puntos históricos, pueden usar la identidad persistente desde la primera escritura.
+
+### Regresión añadida
+
+`tests/test_workspace_knowledge_upload_rag_integration.py` comprueba:
+- Dos modelos de igual dimensión se indexan con identidades distintas y la recuperación de B no devuelve los textos de A.
+- Los puntos legacy sin identidad bloquean la recuperación de forma explícita, sin eliminarlos.
+- La integración de carga, listado, recuperación y aislamiento por proyecto continúa cubierta.
