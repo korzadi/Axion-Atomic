@@ -111,8 +111,7 @@ class OllamaClientTests(unittest.IsolatedAsyncioTestCase):
         payload = {"models": [{"name": "atomic-code:latest"}]}
         with patch.object(ollama, "settings") as settings, patch.object(
             ollama.httpx, "AsyncClient", FakeTagsClient
-        ) as client:
-            client.return_value.payload = payload
+        ), patch.object(FakeTagsClient, "payload", payload):
             settings.chat_model = "atomic-code"
             settings.ollama_base_url = "http://ollama:11434"
             settings.ollama_request_timeout_seconds = 30
