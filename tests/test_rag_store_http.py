@@ -122,7 +122,7 @@ class QdrantTests(Base):
         st = QdrantStore(self.url, "col", 4); await st.ensure(); await st.upsert(self.pts())
         await st.delete_ids(["a", "c"])
         self.assertEqual(set(S["cols"]["col"]["points"]), {"b"})
-        request = [r for r in S["requests"] if r[1].endswith("/points/delete")][-1]
+        request = [r for r in S["requests"] if r[1].startswith("/collections/col/points/delete?")][-1]
         self.assertEqual(request[2], {"points": ["a", "c"]})
 
     async def test_upsert_requires_complete_payload_before_any_http_write(self):
