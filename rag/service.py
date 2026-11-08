@@ -93,8 +93,13 @@ def _serialize_project_mutation(preflight):
     return decorate
 
 
-def _preflight_ingest(*, text, source, project_id, **_):
+def _preflight_ingest(*, text, source, project_id, source_id=None, **_):
     validate_manual_ingest(text, source, project_id)
+    if source_id is not None:
+        try:
+            uuid.UUID(source_id)
+        except (ValueError, TypeError, AttributeError):
+            raise ValueError("source_id debe ser un UUID válido") from None
 
 
 def _preflight_delete(*, source_id, project_id, **_):
