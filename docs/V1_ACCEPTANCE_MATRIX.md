@@ -32,14 +32,14 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | SEC-04 | Seguridad | Matriz HTTP de roles por endpoint | `authorize_project`, workspace tests | Parcial |
 | DB-01 | Datos | Migraciones reproducibles en DB aislada | Migraciones y job PostgreSQL | CI histórica; HEAD pendiente |
 | DB-02 | Datos | Restauración real de backup en entorno aislado | Backup pre-migration documentado | Pendiente |
-| BILL-01 | Facturación | Medición tokens en shadow mode | `inference_usage_events` | Implementada; no cobra con facturación desactivada |
-| BILL-02 | Facturación | Reservas, ledger, reversos e idempotencia conectados a inferencia | `workspace_chat`, ejecución durable, atestación, recuperación administrativa | Implementada y probada con dobles; E2E PostgreSQL/Ollama pendiente |
-| PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada por propietario; integración técnica por validar | Bloqueada |
-| ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación y conciliación auditadas, con CSRF, permisos y controles en el portal | Parcial; E2E browser de la recuperación pendiente |
+| BILL-01 | Facturación | Medición tokens en shadow mode | `inference_usage_events`; agregado por modelo en `/admin/billing/overview` | Implementada; no cobra con facturación desactivada |
+| BILL-02 | Facturación | Reservas, ledger, reversos e idempotencia conectados a inferencia | `workspace_chat`, ejecución durable, atestación, recuperación y reversión auditada de consumo liquidado | Implementada y probada con dobles; PostgreSQL real/Ollama pendiente |
+| PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada; contrato oficial de Lightning Address verificado; adaptador de cliente y pruebas unitarias implementados. Persistencia, sincronización y rutas de checkout pendientes | Parcial; activación bloqueada por token, catálogo/precios y sandbox |
+| ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación/conciliación y gestión de roles/estado auditadas con CSRF; E2E de navegador de la gestión de usuarios ejecutado localmente | Parcial; PostgreSQL/E2E de recuperación pendientes |
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh` actualizado | Código publicado; CI pendiente |
 | OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución VPS pendiente |
 | OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador y documentación | Pendiente |
-| QA-01 | QA | Suite Python aprobada en HEAD evaluado | Ejecución local con venv y dobles | Parcial; 812 pasan y 9 se omiten con `python` disponible; sin ese binario, 791 pasan al excluir 21 pruebas de sandbox local; CI del HEAD pendiente |
+| QA-01 | QA | Suite Python aprobada en HEAD evaluado | Rama `agent/opencode-vps`: `python3 -m pytest -q` → 898 pasan y 10 se omiten (PostgreSQL) con venv/local; CI del HEAD pendiente | Parcial; local aprobada, CI pendiente |
 | QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions | No confirmada para HEAD actual |
 | DOC-01 | Docs | README, AGENTS, instalación, seguridad y usuario alineados | Documentación del repo | Parcial |
 | REL-01 | Lanzamiento | Todas las puertas críticas aprobadas | Esta matriz | Bloqueada |
@@ -119,3 +119,63 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Se añadió `POST /workspace/agent/runs/{run_id}/cancel` para owner/admin: solo cancela ejecuciones en `awaiting_approval`, invalida aprobaciones pendientes o aprobadas y acciones pendientes, limpia la cola y audita la operación en la misma transacción. La migración 022 habilita el estado `cancelled`.
 - Verificación local: 812 pruebas pasan y 9 se omiten (las 9 son PostgreSQL) usando un enlace temporal no versionado `python` -> `python3`. Sin ese enlace, 791 pasan al excluir las 21 pruebas de `test_sandbox_exec.py`/`test_agent_sandbox.py`, que requieren el binario `python`; no son defectos de la lógica modificada.
 - No se ejecutaron pruebas PostgreSQL reales ni E2E contra Ollama; CI del HEAD actual sigue sin confirmarse. La facturación de pago y el checkout permanecen desactivados.
+
+## Revisión incremental QA — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Se reprodujo la suite completa sobre el árbol de trabajo: 9 fallos iniciales por `python` no instalado en el host (solo existía `python3`/venv). No eran defectos de la lógica de sandbox, pero impedían una verificación reproducible.
+- Corregido el backend local para ejecutar el mismo intérprete que la API; añadida prueba de regresión.
+- Añadidas pruebas de contrato para las consultas privadas de órdenes de pago: aislamiento por usuario, 404 indistinguible para órdenes ajenas/inexistentes, validación previa de UUID y ausencia de campos del proveedor o detalles internos en la respuesta.
+- Verificación real: `compileall` OK; `pytest -q` → **855 passed, 9 skipped**; `check_frontend_js.py` OK; `git diff --check` limpio.
+- QA-01 pasa a **Parcial (local aprobada)**. QA-02 (browser, Docker, PostgreSQL y Qdrant) continúa **no confirmada para este HEAD**; REL-01 sigue bloqueada. No se declara la V1.0 liberada.
+- No se ejecutaron migraciones reales, pagos, despliegues, reinicios, builds ni cambios de infraestructura.
+
+## Revisión incremental de administración — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Se añadieron endpoints auditados para conceder/revocar roles globales y para activar/deshabilitar cuentas.
+- Toda mutación exige `users.manage`, CSRF y motivo; la asignación y el evento de auditoría se escriben en la misma transacción.
+- Revocar el último `platform_admin` activo se rechaza. Deshabilitar una cuenta revoca sus sesiones; activar exige correo verificado; no se permite autodeshabilitarse.
+- El portal administrativo incorpora los controles solo cuando el backend informa `users.manage`.
+- Verificación local: 874 pruebas pasan y 9 se omiten (PostgreSQL). Las rutas nuevas aún no se probaron contra PostgreSQL real ni con E2E de navegador, y CI sigue pendiente para este HEAD.
+- ADM-01 permanece **Parcial**: backend y pruebas unitarias implementados; E2E browser y validación PostgreSQL pendientes.
+
+## Revisión incremental de sandbox, instalación y QA — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Sandbox: el snapshot rechaza enlaces duros además de symlinks; prueba de regresión con archivo externo. El backend local usa el intérprete del proceso, eliminando fallos por ausencia de `python`.
+- Instalación: añadido `scripts/restore_postgres.sh` con restricciones fail-closed (contenedor no productivo, base vacía, dump verificado, confirmación exacta) y 6 pruebas de contrato con Docker simulado. No se ejecutó una restauración real.
+- Administración: añadidas pruebas PostgreSQL para concesión/revocación de roles, protección del último `platform_admin`, revocación de sesiones y activación solo con correo verificado; el job PostgreSQL de CI las ejecutará.
+- QA local: **875 passed, 9 skipped** antes de las nuevas pruebas PostgreSQL; `compileall`, sintaxis JS y `git diff --check` correctos.
+- OPS-03 y DB-02 siguen **Pendientes** hasta ejecutar una restauración real en un entorno aislado autorizado. AGT-04 sigue **Parcial**. QA-02 y REL-01 siguen bloqueadas por CI/staging.
+
+## E2E de navegador ejecutado — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Se ejecutó `tests/e2e/studio-browser.mjs` con Playwright 1.58.2 y Chromium headless en un entorno temporal: **aprobado**.
+- El recorrido cubre landing, ausencia de sesión ficticia, apertura de registro/login, portal administrativo, MFA y la nueva sección de gestión de usuarios/roles/estado con respuestas simuladas del backend.
+- Es evidencia local del frontend, no del job CI ni de un backend real. QA-02 sigue sin confirmar Docker, PostgreSQL y Qdrant del HEAD; REL-01 sigue bloqueada.
+
+## Revisión incremental de consumo por modelo — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- `GET /admin/billing/overview` añade el agregado `usage`: solicitudes, tokens de entrada/salida y mediciones no disponibles agrupadas por `requested_model`.
+- Solo expone agregados de `inference_usage_events`; no devuelve prompts, respuestas, usuarios ni identificadores de solicitud.
+- El portal administrativo muestra la sección «Consumo por modelo» cuando el rol dispone de `billing.read`.
+- Verificación local: dos pruebas de contrato actualizadas con la cuarta consulta; `pytest -q` → **875 passed, 10 skipped** (PostgreSQL); sintaxis JS y E2E de navegador aprobados. Sin PostgreSQL real ni CI del HEAD.
+- BILL-01 permanece **Implementada**; no habilita cobros ni activa facturación.
+
+## Revisión incremental de reversión de consumo — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Se corrigió la matriz: la fila BILL-02 mencionaba «reversos» sin que existiera una operación de reversión en el código. Ahora la capacidad está implementada de verdad.
+- `api/billing_reservations.reverse_settled_reservation`: solo revierte reservas `settled` con consumo mayor que cero; recalcula el consumo por asignación, devuelve créditos al lote comprado o a la cuota original y crea asientos `reversal` compensatorios sin modificar el ledger original.
+- Idempotencia por clave y motivo: un reintento con la misma clave devuelve el mismo resultado; claves o motivos distintos sobre una reserva ya revertida se rechazan.
+- `POST /admin/billing/reservations/reverse`: exige `billing.manage`, CSRF, motivo de 10–500 caracteres y clave idempotente; registra auditoría global determinista y permite reintentar la auditoría con la misma clave.
+- `frontend/admin.js`: sección «Reversión de consumo liquidado» con confirmación explícita y resultado accesible.
+- Pruebas: 10 contratos HTTP con motor simulado y 3 pruebas PostgreSQL añadidas a `test_billing_reservations_postgres.py` (cuota, lote comprado y estados no reversibles).
+- Verificación local: **885 passed, 10 skipped** (PostgreSQL); sintaxis JS y E2E de navegador aprobados. Las pruebas PostgreSQL nuevas no se ejecutaron localmente; CI del HEAD pendiente.
+- No se habilitan cobros ni checkout; la reversión es una operación administrativa auditada.
+
+## Revisión incremental de QvaPay Lightning Address — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Se verificó el contrato oficial de Lightning Address: `GET /user/lightning-address` con Bearer del titular, LNURL público en `qvpay.me`, callback oficial de invoice y `GET /coins` para BTC/USD.
+- Se confirmó que no existe webhook firmado específico de Lightning: la conciliación requiere consulta autenticada y paginada. El comentario LUD-12 no es autenticación; la correlación exige referencia, sats exactos, dirección y `transaction_uuid`.
+- Nuevo `api/qvapay_lightning.py`: cliente asíncrono con transporte inyectable, validación de callback oficial, conversión USD→sats, parseo de estado/cobros y `match_payment` conservador.
+- Nuevas 13 pruebas en `tests/test_qvapay_lightning.py` con `httpx.MockTransport`; cubren errores sin filtrar el token, límites LNURL, callback malicioso, precio BTC, conversión y emparejamiento.
+- Configuración desactivada por defecto: `QVAPAY_ENABLED=false`, token `SecretStr`, dirección validada y timeout positivo. No se solicitó ni registró ningún token real.
+- Verificación local: **898 passed, 10 skipped**; `compileall`, sintaxis JS y `git diff --check` correctos. Persisten pendientes persistencia de invoices, sincronización, rutas HTTP, catálogo/precios y pruebas en sandbox oficial; no hay cobros habilitados.

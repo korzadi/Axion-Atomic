@@ -356,6 +356,153 @@ class ReconciliationResult:
     idempotent: bool = False
 
 
+@dataclass(frozen=True)
+class ReversalResult:
+    reservation_id: str
+    state: str
+    reversed_credits: int
+    idempotent: bool = False
+
+
+def reverse_settled_reservation(
+    *,
+    engine: Engine,
+    reservation_id: str,
+    actor_user_id: str,
+    reason: str,
+    idempotency_key: str,
+) -> ReversalResult:
+    """Revierte el consumo de una reserva liquidada con asientos compensatorios.
+
+    No modifica ni borra los asientos originales. La autorización global del
+    actor y el CSRF deben verificarse en la capa superior. Una reserva solo
+    puede revertirse una vez; los reintentos con la misma clave son idempotentes.
+    """
+    if not actor_user_id:
+        raise ValueError("actor_user_id es obligatorio")
+    if not isinstance(reason, str) or not 10 <= len(reason.strip()) <= 500:
+        raise ValueError("reason debe describir la reversión (10-500 caracteres)")
+    if not isinstance(idempotency_key, str) or not 1 <= len(idempotency_key) <= 200:
+        raise ValueError("idempotency_key debe tener entre 1 y 200 caracteres")
+    if any(ord(char) < 0x21 or ord(char) > 0x7E for char in idempotency_key):
+        raise ValueError("idempotency_key debe usar ASCII imprimible sin espacios")
+    normalized_reason = reason.strip()
+    reservation_uuid = str(uuid.UUID(reservation_id))
+
+    with engine.begin() as conn:
+        conn.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"axion-reversal:{idempotency_key}"},
+        )
+        reservation = conn.execute(text("""
+            SELECT id, user_id, state
+            FROM billing_usage_reservations
+            WHERE id=CAST(:id AS UUID)
+            FOR UPDATE
+        """), {"id": reservation_uuid}).mappings().first()
+        if reservation is None:
+            raise ReservationNotFound("Reserva inexistente")
+        if reservation["state"] != "settled":
+            raise ReservationStateError("Solo se revierte el consumo de una reserva liquidada")
+
+        allocations = conn.execute(text("""
+            SELECT a.id, a.source, a.quota_period_id, a.credit_lot_id, a.allocated_credits
+            FROM billing_reservation_allocations a
+            LEFT JOIN billing_quota_periods q ON q.id=a.quota_period_id
+            LEFT JOIN billing_credit_lots l ON l.id=a.credit_lot_id
+            WHERE a.reservation_id=CAST(:id AS UUID)
+            ORDER BY CASE a.source WHEN 'daily_free' THEN 0 WHEN 'subscription' THEN 1 ELSE 2 END,
+                     CASE WHEN a.source='purchased' THEN l.expires_at ELSE q.period_end END NULLS LAST,
+                     l.created_at NULLS LAST, a.id
+            FOR UPDATE OF a
+        """), {"id": reservation_uuid}).mappings().all()
+        if not allocations:
+            raise ReservationStateError("La reserva no tiene asignaciones que revertir")
+
+        charged = conn.execute(text("""
+            SELECT coalesce(sum(consumed_delta), 0)
+            FROM billing_credit_ledger
+            WHERE reservation_id=CAST(:id AS UUID) AND event_type='consume'
+        """), {"id": reservation_uuid}).scalar_one()
+        charged = int(charged)
+        if charged <= 0:
+            raise ReservationStateError("La reserva no tiene consumo liquidado que revertir")
+
+        remaining = charged
+        expected: list[tuple[dict, int]] = []
+        for item in allocations:
+            used = min(remaining, item["allocated_credits"])
+            remaining -= used
+            if used:
+                expected.append((item, used))
+        if remaining:
+            raise RuntimeError("Inconsistencia: consumo mayor que las asignaciones")
+
+        prefix = f"reversal:{reservation_uuid}:{idempotency_key}:"
+        expected_keys = {f"{prefix}{item['id']}" for item, _ in expected}
+        prior = conn.execute(text("""
+            SELECT idempotency_key, reason
+            FROM billing_credit_ledger
+            WHERE reservation_id=CAST(:id AS UUID) AND event_type='reversal'
+            ORDER BY idempotency_key
+        """), {"id": reservation_uuid}).mappings().all()
+        if prior:
+            if (
+                {row["idempotency_key"] for row in prior} != expected_keys
+                or any(row["reason"] != normalized_reason for row in prior)
+            ):
+                raise IdempotencyConflict(
+                    "La reserva ya fue revertida con otra clave o motivo"
+                )
+            return ReversalResult(reservation_uuid, "settled", charged, True)
+
+        consumes = conn.execute(text("""
+            SELECT idempotency_key, id
+            FROM billing_credit_ledger
+            WHERE reservation_id=CAST(:id AS UUID) AND event_type='consume'
+        """), {"id": reservation_uuid}).mappings().all()
+        consume_ids = {row["idempotency_key"]: str(row["id"]) for row in consumes}
+
+        for item, used in expected:
+            purchased = item["source"] == "purchased"
+            if purchased:
+                updated = conn.execute(text("""
+                    UPDATE billing_credit_lots
+                    SET consumed_credits=consumed_credits-:used,
+                        available_credits=available_credits+:used
+                    WHERE id=CAST(:id AS UUID) AND consumed_credits >= :used
+                """), {"used": used, "id": str(item["credit_lot_id"])})
+            else:
+                updated = conn.execute(text("""
+                    UPDATE billing_quota_periods
+                    SET consumed_credits=consumed_credits-:used
+                    WHERE id=CAST(:id AS UUID) AND consumed_credits >= :used
+                """), {"used": used, "id": str(item["quota_period_id"])})
+            if updated.rowcount != 1:
+                raise ReservationStateError("El consumo no coincide con las asignaciones")
+
+            consume_key = f"consume:{reservation_uuid}:{item['id']}"
+            conn.execute(text("""
+                INSERT INTO billing_credit_ledger
+                    (id, user_id, credit_lot_id, reservation_id, event_type,
+                     available_delta, reserved_delta, consumed_delta,
+                     idempotency_key, related_entry_id, reason, actor_user_id)
+                VALUES (CAST(:id AS UUID), :user_id, CAST(:lot_id AS UUID),
+                        CAST(:reservation_id AS UUID), 'reversal', :available_delta,
+                        0, :consumed_delta, :ledger_key, CAST(:related_id AS UUID),
+                        :reason, :actor_user_id)
+            """), {
+                "id": str(uuid.uuid4()), "user_id": reservation["user_id"],
+                "lot_id": item["credit_lot_id"], "reservation_id": reservation_uuid,
+                "available_delta": used if purchased else 0,
+                "consumed_delta": -used,
+                "ledger_key": f"{prefix}{item['id']}",
+                "related_id": consume_ids.get(consume_key),
+                "reason": normalized_reason, "actor_user_id": actor_user_id,
+            })
+    return ReversalResult(reservation_uuid, "settled", charged)
+
+
 def reconcile_confirmed_no_execution(
     *,
     engine: Engine,

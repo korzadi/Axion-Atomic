@@ -1,6 +1,6 @@
 # QvaPay — método de cobro previsto para AXION ATOMIC
 
-**Estado:** aprobación comercial de QvaPay confirmada por el propietario; integración técnica todavía bloqueada y sin cobros habilitados.
+**Estado:** aprobación comercial de QvaPay confirmada; contrato oficial de Lightning Address confirmado y adaptador de cliente implementado. Persisten pendientes de producto, persistencia y activación; no hay cobros habilitados.
 
 ## Evidencia disponible
 
@@ -25,26 +25,28 @@ Los límites, la comisión y la disponibilidad son datos de la pantalla de esa c
 7. Eventos duplicados, tardíos, manipulados, incompletos o con importe incorrecto se registran para conciliación y no acreditan saldo.
 8. Reembolsos y reversiones se registran con movimientos compensatorios; nunca se borra el historial económico.
 
-## Verificaciones obligatorias con QvaPay
+## Contrato oficial y límites verificados
 
-La captura confirma la interfaz de recepción Lightning, pero no demuestra que exista una API de facturas, metadata para asociar un pago a una orden, webhook firmado ni endpoint de consulta de transacciones. Antes de implementar el adaptador deben confirmarse oficialmente:
+La documentación oficial de QvaPay confirma:
 
-- Si QvaPay permite generar una invoice Lightning distinta por orden o asociar una referencia externa.
-- Si existe webhook o notificación firmada para pagos recibidos y cuál es el esquema exacto de firma.
-- Si el backend puede consultar el estado de una transacción y obtener su identificador, importe, moneda, destinatario y fecha.
-- Qué identificador estable permite correlacionar el pago con una orden de AXION ATOMIC.
-- Cómo se notifican pagos parciales, duplicados, expirados, reembolsados o revertidos.
-- Si USD se confirma como importe de liquidación o solo como modo de conversión de la cuenta.
-- Límites y comisiones aplicables a la cuenta comercial de AXION ATOMIC en el momento de operar.
+- `GET /user/lightning-address` con Bearer del titular devuelve estado, límites, comisión y los últimos cobros con `sats`, `credit_usd`, `comment`, `paid_at`, `transaction_uuid` y `address`.
+- El endpoint LNURL público `/.well-known/lnurlp/{name}` y su `callback` permiten generar una invoice BOLT11 por importe exacto y con comentario LUD-12.
+- `GET /coins` publica el precio BTC/USD utilizado para convertir el importe.
+- No existe webhook firmado específico de Lightning Address: la conciliación se hace por consulta autenticada y paginada.
+- El comentario lo escribe el pagador y no está verificado; la correlación exige referencia, sats exactos, dirección y `transaction_uuid`.
+- `credit_usd` es el neto tras comisión, no el bruto de la invoice.
+- Límites y comisiones son dinámicos y deben leerse en ejecución.
 
-No inventar endpoints, cabeceras, firmas HMAC, payloads ni eventos. No aceptar capturas de pantalla del usuario como prueba de pago.
+Pendiente antes de activar: custodia del token del titular, catálogo/precios aprobados, persistencia de invoices, sincronización paginada, rutas de checkout, conciliación de duplicados/tardíos y pruebas en sandbox oficial. No inventar endpoints, cabeceras, firmas HMAC, payloads ni eventos. No aceptar capturas de pantalla del usuario como prueba de pago.
 
 ## Estado de activación
 
 - Aprobación comercial: confirmada por el propietario.
 - Método de recepción previsto: Lightning Address de QvaPay.
-- Integración backend: pendiente de documentación/contrato técnico oficial.
-- Webhook/consulta y verificación: no implementados ni probados.
+- Contrato técnico oficial: confirmado.
+- Adaptador de cliente (`api/qvapay_lightning.py`): implementado y probado con transporte simulado.
+- Persistencia de invoices y sincronización de cobros: pendientes.
+- Webhook Lightning: no existe; se usa consulta autenticada del titular.
 - Acreditación automática: deshabilitada.
 - Cobros reales: deshabilitados.
 

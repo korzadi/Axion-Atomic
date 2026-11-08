@@ -1,29 +1,31 @@
 # AXYRON ATOMIC V1.0 — Registro de progreso
 
-**Rama:** `main`  
-**Fase activa:** 1 — Autenticación y cuentas  
+**Rama de trabajo:** `agent/opencode-vps`
+**Fase activa:** 12 — QA y liberación V1.0 (desarrollo inverso 12 → 7)
 **Estado global:** EN DESARROLLO  
-**Implementación global:** 69% (referencia inicial; no se incrementa sin evidencia integral)  
-**Preparación productiva:** 35% (requiere validación en staging y configuración externa)
+**Implementación global estimada:** 64% (media simple de las 12 fases; no equivale a preparación productiva)
+**Preparación productiva:** 35% (requiere CI del HEAD, staging y configuración externa)
 
-> Regla: trabajar en una sola fase a la vez. No iniciar la siguiente hasta demostrar los criterios críticos de la fase activa. Los porcentajes no equivalen a disponibilidad operativa en el VPS.
+> Regla: los porcentajes son estimaciones de implementación basadas en la matriz de aceptación. No certifican disponibilidad operativa. Solo se declara **verificada** una capacidad cuando existe una prueba reproducible aprobada para el HEAD indicado. Las fases 10 y 12 conservan bloqueos externos que impiden declarar la V1.0 liberada.
 
-## Resumen de las 12 fases
+## Resumen oficial de las 12 fases
 
-| Fase | Área | Estado | Avance |
-|---:|---|---|---:|
-| 1 | Autenticación y cuentas | EN CURSO | 75% |
-| 2 | Seguridad y MFA | PENDIENTE | 60% |
-| 3 | AXYRON Studio | PENDIENTE | 82% |
-| 4 | Agente AXYRON | PENDIENTE | 50% |
-| 5 | Modelos de IA | PENDIENTE | 65% |
-| 6 | Memoria y RAG | PENDIENTE | 75% |
-| 7 | Archivos y workspaces | PENDIENTE | 60% |
-| 8 | Créditos y facturación | PENDIENTE | 70% |
-| 9 | Administración | PENDIENTE | 53% |
-| 10 | Infraestructura e instalación | PENDIENTE | 74% |
-| 11 | Experiencia de usuario | PENDIENTE | 74% |
-| 12 | Documentación y entrega V1.0 | PENDIENTE | 70% |
+| Fase | Módulo | Avance | Estado |
+| ---: | --- | ---: | --- |
+| 1 | Estabilización y arquitectura | 70% | EN PROGRESO |
+| 2 | Autenticación y MFA | 60% | EN PROGRESO |
+| 3 | Axyron Studio | 50% | EN PROGRESO |
+| 4 | Modelos de IA | 65% | EN PROGRESO |
+| 5 | Agente AXYRON | 75% | EN PROGRESO |
+| 6 | Memoria y RAG | 70% | EN PROGRESO |
+| 7 | Archivos y sandbox | 65% | EN PROGRESO |
+| 8 | Administración | 80% | EN PROGRESO |
+| 9 | Créditos y facturación | 80% | EN PROGRESO |
+| 10 | Integración QvaPay | 35% | EN PROGRESO |
+| 11 | Instalación y documentación | 55% | EN PROGRESO |
+| 12 | QA y liberación V1.0 | 60% | EN PROGRESO |
+
+**Lectura de los porcentajes:** reflejan implementación y pruebas locales del código inspeccionado, no aceptación en staging. Las cifras heredadas del orden antiguo de fases se conservan solo como histórico en las secciones siguientes.
 
 ## Fase 1 — Autenticación y cuentas
 
@@ -203,3 +205,126 @@ Los porcentajes heredados de la tabla anterior corresponden al orden anterior de
 
 ### Próxima tarea de Fase 1
 - Completar cobertura del contrato del migrador en PostgreSQL aislado: confirmar que una segunda ejecución no aplica migraciones nuevas, que un checksum histórico alterado provoca aborto y que los cambios transaccionales fallidos no dejan una versión registrada. Mantener toda prueba destructiva confinada al PostgreSQL efímero de CI.
+
+---
+
+## Checkpoint Fase 12 — QA local reproducible (2026-11-08, rama `agent/opencode-vps`)
+
+### Cambios de esta sesión
+- Corregido `sandbox/backends.py`: el backend local resuelve `python`/`python3` al intérprete que ejecuta la API (`sys.executable`) en lugar de exigir un alias o una ruta presente en el `PATH` restringido del sandbox. Elimina los 9 fallos por `exit_code=127` en sistemas donde solo existe `python3` o un venv.
+- Añadida regresión en `tests/test_sandbox_exec.py` que verifica la resolución del intérprete sin depender del entorno del host.
+- Añadidas 4 pruebas de contrato en `tests/test_payment_orders_http.py`: aislamiento por usuario en listado y detalle de órdenes, orden ajena/inexistente indistinguible (404), rechazo de UUID inválido antes de tocar la base de datos y no filtración de campos del proveedor ni de detalles internos.
+
+### Verificación ejecutada (mismo árbol de trabajo)
+- `python3 -m compileall -q api agent core rag sandbox audit tests scripts` — OK.
+- `python3 -m pytest -q` — **855 passed, 9 skipped, 3 warnings** (los 9 omitidos son pruebas PostgreSQL que exigen `DATABASE_URL`).
+- `python3 scripts/check_frontend_js.py` — sintaxis válida en los 3 scripts inline, `workspace.js`, `studio.js` y `admin.js`.
+- `git diff --check` — limpio.
+- Cobertura local (`coverage run --branch -m pytest -q`): 84% total. Los módulos con menor cobertura son dependientes de PostgreSQL (`billing_reservations`, `mfa_store`, `payment_manager`, `password_reset`, `email_verification`) y se omiten localmente por diseño.
+
+### Pendiente / bloqueado
+- CI del HEAD de esta rama: no ejecutada en esta sesión; no se declara aprobada.
+- PostgreSQL real, Playwright/Chromium, Docker smoke y Qdrant Cloud: no ejecutados localmente; dependen de CI o de infraestructura externa.
+- Restauración de backup en entorno aislado (DB-02) y despliegue: siguen pendientes.
+
+### Siguiente tarea
+Continuar con Fase 11 (instalación y documentación): revisar preflight del instalador, validación de configuración y procedimiento de actualización/restauración reproducible sin tocar producción.
+
+## Checkpoint Fase 8 — gestión administrativa de usuarios y roles (2026-11-08)
+
+### Implementado
+- `GET /admin/users/{user_id}/roles`: consulta asignaciones globales activas e históricas con permiso `users.read`.
+- `POST /admin/users/{user_id}/roles`: concede un rol global (`platform_admin`, `billing_admin`, `billing_support`, `billing_readonly`) con motivo obligatorio, permiso `users.manage`, CSRF y auditoría en la misma transacción.
+- `DELETE /admin/users/{user_id}/roles/{role}`: revoca un rol activo con motivo obligatorio y auditoría. Impide dejar la plataforma sin ningún `platform_admin` activo.
+- `POST /admin/users/{user_id}/status`: activa o deshabilita cuentas con permiso `users.manage`. Deshabilitar revoca todas las sesiones del usuario y queda auditado; activar exige correo verificado y nunca se permite deshabilitar la propia cuenta.
+- Portal `frontend/admin.js`: sección de gestión visible solo con `users.manage`, con concesión, revocación, consulta de roles y cambio de estado, confirmaciones y resultado accesible (`aria-live`).
+- `tests/test_admin_user_management.py`: 13 pruebas de autorización, validación, conflictos, auditoría, revocación de sesiones y no activación de cuentas sin verificar.
+
+### Verificación
+- `python3 -m pytest -q` — **874 passed, 9 skipped** (los 9 son PostgreSQL); no cubre las rutas nuevas contra PostgreSQL real.
+- `python3 scripts/check_frontend_js.py` — sintaxis válida.
+- CI del HEAD: pendiente. Browser E2E de la nueva sección: pendiente.
+
+### Pendiente de Fase 8
+- Probar las mutaciones contra PostgreSQL real y la matriz HTTP completa con sesiones/CSRF reales.
+- Añadir E2E de navegador para la nueva gestión.
+- Revisar si se requieren más operaciones administrativas (catálogo, tarifas) antes de cerrar la fase.
+
+## Checkpoint Fases 7 y 11 — sandbox y restauración (2026-11-08)
+
+### Fase 7
+- `sandbox/snapshot.py` rechaza archivos con enlaces duros (`st_nlink > 1`) además de symlinks. Evita incluir en el snapshot contenido externo al que un enlace duro apunte.
+- Prueba de regresión en `tests/test_sandbox_exec.py` que crea un enlace duro a un archivo externo y verifica rechazo y limpieza del directorio temporal.
+- El backend local resuelve el intérprete Python del proceso, eliminando fallos de entorno ya registrados.
+- Aislamiento Docker, red deshabilitada, límites de CPU/memoria/PIDs, auditoría y limpieza ya existían y sus pruebas siguen pasando.
+- Sigue bloqueado AGT-04 completo: daemon dedicado, TLS, imágenes fijadas por digest y E2E real no están disponibles en este entorno.
+
+### Fase 11
+- Nuevo `scripts/restore_postgres.sh`: restauración únicamente en un contenedor/base desechables, rechaza nombres del stack real, exige base vacía, verifica el dump con `pg_restore --list`, no imprime secretos y exige confirmación exacta.
+- Documentación de restauración aislada, actualización segura y procedimiento de recuperación en `docs/VPS_INSTALLATION.md`.
+- 6 pruebas de contrato del script con Docker simulado; no se ejecutó una restauración real ni se creó infraestructura.
+
+### Verificación combinada
+- `python3 -m pytest -q` — **875 passed, 9 skipped** antes de añadir las pruebas PostgreSQL de administración (que se omiten localmente).
+- `python3 scripts/check_frontend_js.py` — OK.
+- `git diff --check` — limpio.
+- CI del HEAD: pendiente.
+
+### Bloqueos de Fase 10 y Fase 9
+- QvaPay: contrato oficial de Lightning Address confirmado y adaptador de cliente implementado con pruebas. El cobro sigue desactivado: faltan custodia del token del titular, persistencia de invoices, sincronización paginada, rutas de checkout, catálogo/precios aprobados y pruebas en sandbox oficial. No existe webhook firmado; no se inventan endpoints ni firmas.
+- Facturación: el catálogo comercial es `preview_only`, sin precios ni paquetes aprobados; no se activan cobros. La deuda pendiente es de producto/negocio, no de código inventable.
+
+### E2E de navegador (Fase 12)
+- `tests/e2e/studio-browser.mjs` ampliado para cubrir la gestión administrativa de usuarios.
+- Ejecutado localmente con Playwright 1.58.2/Chromium: landing, MFA del portal y concesión/cambio de estado de usuario **aprobados**.
+- No sustituye el job CI ni valida PostgreSQL/Docker/Qdrant reales.
+
+## Checkpoint Fase 9 — consumo por modelo en administración (2026-11-08)
+
+### Implementado
+- `GET /admin/billing/overview` incluye `usage`, agregado por `requested_model` con número de solicitudes, tokens de entrada/salida y mediciones no disponibles.
+- La consulta solo lee `inference_usage_events` y no expone prompts, respuestas, usuarios ni IDs de solicitud.
+- `frontend/admin.js` muestra «Consumo por modelo» dentro del panel de facturación visible con `billing.read`.
+
+### Verificación
+- `python3 -m pytest -q` — **875 passed, 10 skipped** (PostgreSQL omitido localmente).
+- `python3 scripts/check_frontend_js.py` — OK.
+- E2E de navegador — aprobado.
+- No se ejecutaron PostgreSQL real ni CI del HEAD. No se habilitan cobros ni facturación.
+
+### Siguiente tarea
+Validar el job PostgreSQL de CI con las pruebas administrativas y de facturación; después revisar conciliación/reversos sin inventar precios ni endpoints de QvaPay.
+
+## Checkpoint Fase 9 — reversión auditada de consumo (2026-11-08)
+
+### Implementado
+- `reverse_settled_reservation` en `api/billing_reservations.py`: revierte únicamente reservas liquidadas con consumo, recalcula la parte usada de cada asignación y crea asientos `reversal` compensatorios. No edita ni borra asientos originales y no cambia el estado `settled`.
+- Restaura `consumed_credits` en cuotas o lotes comprados; en lotes también incrementa `available_credits`.
+- Idempotencia por clave y motivo; una segunda clave sobre la misma reserva se rechaza.
+- `POST /admin/billing/reservations/reverse` con `billing.manage`, CSRF, motivo obligatorio, auditoría global determinista y reintento seguro de la auditoría.
+- `frontend/admin.js`: formulario «Reversión de consumo liquidado» con confirmación y `aria-live`.
+
+### Verificación
+- 10 pruebas HTTP nuevas con motor simulado.
+- 3 pruebas PostgreSQL añadidas al archivo que ejecuta el job de CI; **no ejecutadas localmente**.
+- `python3 -m pytest -q` — **885 passed, 10 skipped**.
+- `compileall`, sintaxis JS, E2E de navegador y `git diff --check` — OK.
+- CI del HEAD: pendiente. No se activan cobros, precios ni QvaPay.
+
+## Checkpoint Fase 10 — cliente oficial de QvaPay Lightning Address (2026-11-08)
+
+### Implementado
+- `api/qvapay_lightning.py`: cliente asíncrono para `GET /user/lightning-address`, LNURL `payRequest`, callback de invoice y `GET /coins`; transporte `httpx` inyectable para pruebas.
+- Validación de dirección `name@qvpay.me`, callback limitado a dominios oficiales de QvaPay, importes dentro de límites LNURL, comentario LUD-12 y conversión USD→sats con redondeo hacia arriba.
+- `match_payment` exige referencia, sats exactos y dirección; no confía solo en el comentario del pagador.
+- Configuración en `api/config.py`: `QVAPAY_ENABLED=false` por defecto, token como `SecretStr`, timeout positivo y dirección validada. Nunca se registra el token.
+- `docs/QVAPAY_INTEGRATION_STATUS.md` y `docs/QVAPAY_LIGHTNING_PAYMENT_FLOW.md` actualizados con el contrato oficial y sus límites.
+
+### Verificación
+- 13 pruebas nuevas en `tests/test_qvapay_lightning.py` con `httpx.MockTransport`.
+- `python3 -m pytest -q` — **898 passed, 10 skipped**.
+- `compileall`, sintaxis JS y `git diff --check` — OK.
+- No se usaron credenciales reales, no se crearon invoices reales y no se habilitaron cobros. CI del HEAD pendiente.
+
+### Siguiente tarea
+Persistencia de invoices y sincronización paginada de cobros ligada a órdenes internas, sin activar checkout hasta disponer de catálogo/precios aprobados y sandbox oficial.

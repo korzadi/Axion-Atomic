@@ -109,7 +109,52 @@ try {
   await adminPage.getByText("Acceso administrativo no autorizado").waitFor();
   assert.equal(await adminPage.locator("#logout").isVisible(), true);
   await adminPage.close();
-  process.stdout.write("Axyron Atomic landing and admin MFA browser E2E: passed\\n");
+  const managePage = await browser.newPage();
+  managePage.on("dialog", dialog => dialog.accept());
+  await managePage.route("**/auth/me", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ user: { id: "admin-1", email: "admin@example.test", display_name: "Admin" } })
+  }));
+  await managePage.route("**/admin/**", route => {
+    const url = new URL(route.request().url());
+    const method = route.request().method();
+    let body = {};
+    if (url.pathname === "/admin/access/me") {
+      body = {
+        administration_enabled: true,
+        mutations_enabled: true,
+        roles: ["platform_admin"],
+        permissions: ["admin.access.read", "billing.read", "billing.manage", "users.read", "users.manage", "audit.read"]
+      };
+    } else if (url.pathname === "/admin/audit") {
+      body = { events: [] };
+    } else if (url.pathname === "/admin/users") {
+      body = { users: [], pagination: { total: 0, limit: 50, offset: 0, has_more: false } };
+    } else if (url.pathname === "/admin/billing/overview") {
+      body = { reservations: [], ledger: [], executions: [], usage: [] };
+    } else if (url.pathname === "/admin/billing/executions") {
+      body = { executions: [], pagination: { total: 0, limit: 25, offset: 0, has_more: false } };
+    } else if (url.pathname.endsWith("/roles")) {
+      body = method === "POST"
+        ? { user_id: "user-1", role: "billing_readonly", status: "granted" }
+        : { user_id: "user-1", assignments: [] };
+    } else if (url.pathname.endsWith("/status")) {
+      body = { user_id: "user-1", status: "disabled" };
+    }
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await managePage.goto(baseUrl + "/admin-test");
+  await managePage.getByRole("heading", { name: "Gestión de usuarios y roles" }).waitFor();
+  await managePage.getByRole("heading", { name: "Reversión de consumo liquidado" }).waitFor();
+  await managePage.locator("#um-user").fill("user-1");
+  await managePage.locator("#um-reason").fill("Motivo administrativo verificado");
+  await managePage.locator("#um-grant").click();
+  await managePage.getByText("Rol billing_readonly concedido a user-1.").waitFor();
+  await managePage.locator("#um-status").selectOption("disabled");
+  await managePage.locator("#um-status-run").click();
+  await managePage.getByText("Usuario user-1 ahora en estado disabled.").waitFor();
+  await managePage.close();
+  process.stdout.write("Axyron Atomic landing, admin MFA and user management browser E2E: passed\\n");
 } finally {
   await browser.close();
   await new Promise(resolve => server.close(resolve));

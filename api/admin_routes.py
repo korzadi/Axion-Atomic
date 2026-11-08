@@ -13,6 +13,7 @@ from api.billing_reservations import (
     ReservationNotFound,
     ReservationStateError,
     reconcile_confirmed_no_execution,
+    reverse_settled_reservation,
 )
 from api.billing_result_crypto import (
     AesGcmResultCipher,
@@ -37,6 +38,180 @@ async def _admin_csrf(
 ):
     require_csrf(user, csrf_cookie, csrf_header)
     return user
+
+
+class RoleChangeRequest(BaseModel):
+    role: str = Field(min_length=1, max_length=64)
+    reason: str = Field(min_length=8, max_length=1000)
+
+
+class UserStatusChangeRequest(BaseModel):
+    status: str = Field(min_length=1, max_length=32)
+    reason: str = Field(min_length=8, max_length=1000)
+
+
+def _require_known_role(role: str) -> str:
+    if role not in ROLE_PERMISSIONS:
+        raise HTTPException(status_code=422, detail="Rol administrativo no válido")
+    return role
+
+
+def _audit_global_event(conn, *, actor_id: str, target_user_id: str | None,
+                        action: str, role: str | None, reason: str) -> None:
+    conn.execute(
+        text("""
+            INSERT INTO global_admin_audit_events
+                (id, actor_user_id, target_user_id, action, role, reason)
+            VALUES
+                (CAST(:id AS UUID), :actor_user_id, :target_user_id,
+                 :action, :role, :reason)
+        """),
+        {
+            "id": str(uuid.uuid4()),
+            "actor_user_id": actor_id,
+            "target_user_id": target_user_id,
+            "action": action,
+            "role": role,
+            "reason": reason,
+        },
+    )
+
+
+def _grant_global_role(target_user_id: str, role: str, reason: str, actor_id: str) -> dict:
+    with engine.begin() as conn:
+        target = conn.execute(
+            text("SELECT 1 FROM users WHERE id=:id"), {"id": target_user_id}
+        ).first()
+        if target is None:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        result = conn.execute(
+            text("""
+                INSERT INTO global_role_assignments
+                    (id, user_id, role, granted_by, grant_reason)
+                VALUES
+                    (CAST(:id AS UUID), :user_id, :role, :granted_by, :reason)
+                ON CONFLICT (user_id, role) WHERE revoked_at IS NULL DO NOTHING
+            """),
+            {
+                "id": str(uuid.uuid4()),
+                "user_id": target_user_id,
+                "role": role,
+                "granted_by": actor_id,
+                "reason": reason,
+            },
+        )
+        if result.rowcount != 1:
+            raise HTTPException(
+                status_code=409,
+                detail="El usuario ya tiene ese rol administrativo activo",
+            )
+        _audit_global_event(
+            conn, actor_id=actor_id, target_user_id=target_user_id,
+            action="role.granted", role=role, reason=reason,
+        )
+    return {"user_id": target_user_id, "role": role, "status": "granted"}
+
+
+def _revoke_global_role(target_user_id: str, role: str, reason: str, actor_id: str) -> dict:
+    with engine.begin() as conn:
+        result = conn.execute(
+            text("""
+                UPDATE global_role_assignments
+                SET revoked_at=now(), revoked_by=:revoked_by, revoke_reason=:reason
+                WHERE user_id=:user_id AND role=:role AND revoked_at IS NULL
+                RETURNING id
+            """),
+            {
+                "user_id": target_user_id,
+                "role": role,
+                "revoked_by": actor_id,
+                "reason": reason,
+            },
+        ).first()
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail="El usuario no tiene ese rol administrativo activo",
+            )
+        if role == "platform_admin":
+            remaining = conn.execute(
+                text("""
+                    SELECT count(*) FROM global_role_assignments a
+                    JOIN users u ON u.id = a.user_id
+                    WHERE a.role='platform_admin' AND a.revoked_at IS NULL
+                      AND u.status='active'
+                """)
+            ).scalar_one()
+            if remaining == 0:
+                raise HTTPException(
+                    status_code=409,
+                    detail="No se puede revocar el último platform_admin activo",
+                )
+        _audit_global_event(
+            conn, actor_id=actor_id, target_user_id=target_user_id,
+            action="role.revoked", role=role, reason=reason,
+        )
+    return {"user_id": target_user_id, "role": role, "status": "revoked"}
+
+
+def _change_user_status(target_user_id: str, status: str, reason: str, actor_id: str) -> dict:
+    with engine.begin() as conn:
+        target = conn.execute(
+            text("SELECT status, email_verified_at FROM users WHERE id=:id FOR UPDATE"),
+            {"id": target_user_id},
+        ).mappings().first()
+        if target is None:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        if status == "active" and target["email_verified_at"] is None:
+            raise HTTPException(
+                status_code=409,
+                detail="No se puede activar una cuenta sin correo verificado",
+            )
+        if status == "disabled" and target_user_id == actor_id:
+            raise HTTPException(
+                status_code=409,
+                detail="No puedes deshabilitar tu propia cuenta administrativa",
+            )
+        if status == "disabled" and target["status"] == "active":
+            remaining = conn.execute(
+                text("""
+                    SELECT count(*) FROM global_role_assignments a
+                    JOIN users u ON u.id = a.user_id
+                    WHERE a.role='platform_admin' AND a.revoked_at IS NULL
+                      AND u.status='active' AND a.user_id <> :target
+                """),
+                {"target": target_user_id},
+            ).scalar_one()
+            has_platform_role = conn.execute(
+                text("""
+                    SELECT 1 FROM global_role_assignments
+                    WHERE user_id=:target AND role='platform_admin' AND revoked_at IS NULL
+                """),
+                {"target": target_user_id},
+            ).first()
+            if has_platform_role is not None and remaining == 0:
+                raise HTTPException(
+                    status_code=409,
+                    detail="No se puede deshabilitar el último platform_admin activo",
+                )
+        conn.execute(
+            text("UPDATE users SET status=:status, updated_at=now() WHERE id=:id"),
+            {"id": target_user_id, "status": status},
+        )
+        if status == "disabled":
+            conn.execute(
+                text("""
+                    UPDATE user_sessions SET revoked_at=now()
+                    WHERE user_id=:id AND revoked_at IS NULL
+                """),
+                {"id": target_user_id},
+            )
+        _audit_global_event(
+            conn, actor_id=actor_id, target_user_id=target_user_id,
+            action=f"user.{status}", role=None, reason=reason,
+        )
+    return {"user_id": target_user_id, "status": status}
+
 
 
 @router.get("/access/me")
@@ -152,6 +327,94 @@ async def list_admin_users(
     }
 
 
+@router.get("/users/{user_id}/roles")
+async def admin_user_roles(
+    user_id: str,
+    _user=Depends(require_global_permission("users.read")),
+):
+    """Devuelve asignaciones globales activas e históricas de una cuenta."""
+    with engine.connect() as conn:
+        exists = conn.execute(
+            text("SELECT 1 FROM users WHERE id=:id"), {"id": user_id}
+        ).first()
+        if exists is None:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        rows = conn.execute(
+            text("""
+                SELECT role, granted_by, grant_reason, granted_at,
+                       revoked_by, revoke_reason, revoked_at
+                FROM global_role_assignments
+                WHERE user_id=:id
+                ORDER BY granted_at DESC, id DESC
+            """),
+            {"id": user_id},
+        ).mappings().all()
+    return {
+        "user_id": user_id,
+        "assignments": [
+            {
+                "role": row["role"],
+                "granted_by": row["granted_by"],
+                "grant_reason": row["grant_reason"],
+                "granted_at": row["granted_at"],
+                "revoked_by": row["revoked_by"],
+                "revoke_reason": row["revoke_reason"],
+                "revoked_at": row["revoked_at"],
+                "active": row["revoked_at"] is None,
+            }
+            for row in rows
+        ],
+    }
+
+
+@router.post("/users/{user_id}/roles")
+async def admin_grant_user_role(
+    user_id: str,
+    body: RoleChangeRequest,
+    user=Depends(require_global_permission("users.manage")),
+    _csrf_user=Depends(_admin_csrf),
+):
+    """Concede un rol global con motivo obligatorio y auditoría atómica."""
+    role = _require_known_role(body.role)
+    return await run_in_threadpool(
+        _grant_global_role, user_id, role, body.reason, user["id"]
+    )
+
+
+@router.delete("/users/{user_id}/roles/{role}")
+async def admin_revoke_user_role(
+    user_id: str,
+    role: str,
+    body: RoleChangeRequest,
+    user=Depends(require_global_permission("users.manage")),
+    _csrf_user=Depends(_admin_csrf),
+):
+    """Revoca un rol global activo, impidiendo dejar la plataforma sin admin."""
+    normalized = _require_known_role(role)
+    if body.role != normalized:
+        raise HTTPException(
+            status_code=422, detail="El rol del cuerpo no coincide con la ruta"
+        )
+    return await run_in_threadpool(
+        _revoke_global_role, user_id, normalized, body.reason, user["id"]
+    )
+
+
+@router.post("/users/{user_id}/status")
+async def admin_change_user_status(
+    user_id: str,
+    body: UserStatusChangeRequest,
+    user=Depends(require_global_permission("users.manage")),
+    _csrf_user=Depends(_admin_csrf),
+):
+    """Activa o deshabilita una cuenta; al deshabilitar revoca sus sesiones."""
+    if body.status not in ("active", "disabled"):
+        raise HTTPException(status_code=422, detail="Estado de usuario no válido")
+    return await run_in_threadpool(
+        _change_user_status, user_id, body.status, body.reason, user["id"]
+    )
+
+
 @router.get("/billing/overview")
 async def admin_billing_overview(
     _user=Depends(require_global_permission("billing.read")),
@@ -179,10 +442,19 @@ async def admin_billing_overview(
             FROM billing_inference_executions
             GROUP BY state ORDER BY state
         """)).mappings().all()
+        usage = conn.execute(text("""
+            SELECT requested_model, count(*) AS count,
+                   coalesce(sum(prompt_tokens), 0) AS prompt_tokens,
+                   coalesce(sum(output_tokens), 0) AS output_tokens,
+                   count(*) FILTER (WHERE usage_source = 'unavailable') AS unavailable
+            FROM inference_usage_events
+            GROUP BY requested_model ORDER BY requested_model
+        """)).mappings().all()
     return {
         "reservations": [dict(row) for row in reservations],
         "ledger": [dict(row) for row in ledger],
         "executions": [dict(row) for row in executions],
+        "usage": [dict(row) for row in usage],
     }
 
 @router.get("/billing/executions")
@@ -424,6 +696,107 @@ async def admin_reconcile_no_execution(
     return {
         "reservation_id": result.reservation_id,
         "state": result.state,
+        "idempotent": result.idempotent,
+        "audited": True,
+    }
+
+
+class ReverseSettledReservationRequest(BaseModel):
+    reservation_id: str = Field(min_length=36, max_length=36)
+    reason: str = Field(min_length=10, max_length=500)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+@router.post("/billing/reservations/reverse")
+async def admin_reverse_settled_reservation(
+    payload: ReverseSettledReservationRequest,
+    user=Depends(require_global_permission("billing.manage")),
+    _csrf_user=Depends(_admin_csrf),
+):
+    """Revierte el consumo de una reserva liquidada con asientos compensatorios."""
+    try:
+        normalized = str(uuid.UUID(payload.reservation_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="reservation_id inválido") from exc
+    owner = await run_in_threadpool(_load_reservation_owner, normalized)
+    if owner is None:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
+    target_user_id, state = owner
+    if state != "settled":
+        raise HTTPException(
+            status_code=409,
+            detail="Solo se revierte el consumo de una reserva liquidada",
+        )
+    reason = payload.reason.strip()
+    idempotency_key = payload.idempotency_key.strip()
+    if not idempotency_key or any(
+        ord(char) < 0x21 or ord(char) > 0x7E for char in idempotency_key
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="La clave idempotente debe usar ASCII imprimible sin espacios",
+        )
+    try:
+        result = await run_in_threadpool(
+            reverse_settled_reservation,
+            engine=engine,
+            reservation_id=normalized,
+            actor_user_id=user["id"],
+            reason=reason,
+            idempotency_key=idempotency_key,
+        )
+    except ReservationNotFound as exc:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada") from exc
+    except IdempotencyConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="La reserva ya fue revertida con otra clave o motivo",
+        ) from exc
+    except ReservationStateError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="La reserva no está en un estado reversible",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Datos de reversión inválidos") from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="La reversión no pudo completarse",
+        ) from exc
+
+    audit_id = str(uuid.uuid5(
+        uuid.UUID("6f0a1f9e-8f6a-4f0e-9c63-6a7f4a0d2b51"),
+        f"reverse-settled-reservation:{idempotency_key}",
+    ))
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO global_admin_audit_events
+                        (id, actor_user_id, target_user_id, action, role, reason)
+                    VALUES
+                        (CAST(:id AS UUID), :actor_user_id, :target_user_id,
+                         'billing.reservation.reversed', NULL, :reason)
+                    ON CONFLICT (id) DO NOTHING
+                """),
+                {
+                    "id": audit_id, "actor_user_id": user["id"],
+                    "target_user_id": target_user_id, "reason": reason,
+                },
+            )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "La reversión se aplicó, pero no se pudo registrar en auditoría global; "
+                "reintente con la misma clave idempotente"
+            ),
+        ) from exc
+    return {
+        "reservation_id": result.reservation_id,
+        "state": result.state,
+        "reversed_credits": result.reversed_credits,
         "idempotent": result.idempotent,
         "audited": True,
     }

@@ -1,4 +1,5 @@
 import os
+import sys
 import tempfile
 import time
 import unittest
@@ -10,6 +11,7 @@ from agent.workspace import Workspace
 from sandbox.backends import LocalBackend, ResourceLimits
 from sandbox.executor import NoTestsDetected, SandboxExecutor, detect_test_command, render_result
 from sandbox.policy import CommandBlocked, NeedsApproval
+from sandbox.runner import ExecResult
 from sandbox.snapshot import Snapshot, SnapshotTooLarge
 
 FAKE_AWS = "AKIA" + "ABCDEFGHIJKLMNOP"
@@ -51,6 +53,22 @@ class SnapshotTests(Base):
             self.assertFalse({".env", "node_modules/x.js", "link"} & names)
         self.assertEqual(self.leftover(), [])
 
+    def test_rejects_hardlink_to_file_outside_project(self):
+        outside = self.root.parent / (self.root.name + "-hardlink-outside")
+        outside.mkdir()
+        self.addCleanup(lambda: __import__("shutil").rmtree(outside, ignore_errors=True))
+        secret = outside / "secret.txt"
+        secret.write_text("outside secret", encoding="utf-8")
+        try:
+            (self.root / "hardlink-secret").hardlink_to(secret)
+        except (OSError, NotImplementedError):
+            self.skipTest("El sistema de archivos no permite crear enlaces duros")
+        with self.assertRaises(OSError) as caught:
+            with Snapshot(self.ws, base_dir=self.sbx_base.name):
+                pass
+        self.assertIn("enlaces duros", str(caught.exception))
+        self.assertEqual(self.leftover(), [])
+
     def test_size_limit_and_cleanup_on_error(self):
         with self.assertRaises(SnapshotTooLarge):
             with Snapshot(self.ws, max_bytes=10, base_dir=self.sbx_base.name): pass
@@ -74,6 +92,15 @@ class SnapshotTests(Base):
 
 
 class ExecTests(Base):
+    async def test_local_backend_uses_the_running_python_interpreter(self):
+        completed = ExecResult(0, "ok", "", False, False, 0.01, "local")
+        with mock.patch("sandbox.backends.run_bounded", return_value=completed) as run_bounded:
+            res = await self.ex.run_auto("python -c \"print('ok')\"")
+        self.assertEqual((res.exit_code, res.stdout), (0, "ok"))
+        argv = run_bounded.call_args.args[0]
+        index = argv.index(sys.executable)
+        self.assertEqual(argv[index + 1:], ["-c", "print('ok')"])
+
     async def test_runs_and_never_modifies_project_or_leaves_files(self):
         before = sorted(os.listdir(self.root))
         res = await self.ex.run_auto("python -c \"open('nuevo.txt','w').write('x'); print('ok')\"")
