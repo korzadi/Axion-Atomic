@@ -30,17 +30,17 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | SEC-02 | Seguridad | MFA, keyring, recuperación y rotación probados | `api/mfa.py`, migración MFA | Bloqueada hasta pruebas E2E y plan de claves |
 | SEC-03 | Seguridad | OAuth GitHub/Google y correo probados | Rutas OAuth/email | Bloqueada por configuración y prueba externa |
 | SEC-04 | Seguridad | Matriz HTTP de roles por endpoint | `authorize_project`, workspace tests | Parcial |
-| DB-01 | Datos | Migraciones reproducibles en DB aislada | Migraciones y job PostgreSQL | CI histórica; HEAD pendiente |
-| DB-02 | Datos | Restauración real de backup en entorno aislado | Backup pre-migration documentado | Pendiente |
+| DB-01 | Datos | Migraciones reproducibles en DB aislada | Migraciones y job PostgreSQL | Verificada para `5e55582`/`08b6e65` (CI + simulacro de restauración y migración 022) |
+| DB-02 | Datos | Restauración real de backup en entorno aislado | `scripts/restore_postgres.sh` + simulacro ejecutado el 2026-11-08: backup real restaurado (41 tablas; `schema_migrations` 021) y migración 022 aplicada con el migrador real; contenedor desechable eliminado | Verificada (entorno desechable); falta ensayarla en staging |
 | BILL-01 | Facturación | Medición tokens en shadow mode | `inference_usage_events`; agregado por modelo en `/admin/billing/overview` | Implementada; no cobra con facturación desactivada |
 | BILL-02 | Facturación | Reservas, ledger, reversos e idempotencia conectados a inferencia | `workspace_chat`, ejecución durable, atestación, recuperación y reversión auditada de consumo liquidado | Implementada y probada con dobles; PostgreSQL real/Ollama pendiente |
-| PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada; contrato oficial de Lightning Address verificado; adaptador de cliente y pruebas unitarias implementados. Persistencia, sincronización y rutas de checkout pendientes | Parcial; activación bloqueada por token, catálogo/precios y sandbox |
+| PAY-01 | QvaPay | Crear/verificar/reconciliar pagos idempotentes | Aprobación comercial confirmada; contrato oficial verificado; cliente adaptador; persistencia de invoices (migración 023) y conciliación paginada idempotente con pruebas unitarias y PostgreSQL | Parcial; checkout, rutas HTTP y cobros reales bloqueados por catálogo/precios y sandbox oficial |
 | ADM-01 | Administración | RBAC global, operaciones auditadas y pruebas | RBAC global; recuperación/conciliación y gestión de roles/estado auditadas con CSRF; E2E de navegador de la gestión de usuarios ejecutado localmente | Parcial; PostgreSQL/E2E de recuperación pendientes |
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh` actualizado | Código publicado; CI pendiente |
 | OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución VPS pendiente |
-| OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador y documentación | Pendiente |
-| QA-01 | QA | Suite Python aprobada en HEAD evaluado | Rama `agent/opencode-vps`: `python3 -m pytest -q` → 898 pasan y 10 se omiten (PostgreSQL) con venv/local; CI del HEAD pendiente | Parcial; local aprobada, CI pendiente |
-| QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions | No confirmada para HEAD actual |
+| OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador, `restore_postgres.sh` y simulacro de restauración real; sección de mantenimiento añadida | Restore verificado; upgrade/rollback aún no ensayados aislados |
+| QA-01 | QA | Suite Python aprobada en HEAD evaluado | `agent/opencode-vps` `08b6e65`: `pytest -q` → 911 passed, 11 skipped; CI `42485697750` green en `5e55582` (python-tests incluido) | Verificada local y en CI para el HEAD previo; CI del nuevo HEAD pendiente |
+| QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions: `42485697750` sobre `5e55582` — studio-browser-e2e, container-image-build, postgres-migrations, qdrant-cloud-integration, python-tests: success | Verificada para `5e55582`; CI del nuevo HEAD pendiente |
 | DOC-01 | Docs | README, AGENTS, instalación, seguridad y usuario alineados | Documentación del repo | Parcial |
 | REL-01 | Lanzamiento | Todas las puertas críticas aprobadas | Esta matriz | Bloqueada |
 
@@ -179,3 +179,13 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Nuevas 13 pruebas en `tests/test_qvapay_lightning.py` con `httpx.MockTransport`; cubren errores sin filtrar el token, límites LNURL, callback malicioso, precio BTC, conversión y emparejamiento.
 - Configuración desactivada por defecto: `QVAPAY_ENABLED=false`, token `SecretStr`, dirección validada y timeout positivo. No se solicitó ni registró ningún token real.
 - Verificación local: **898 passed, 10 skipped**; `compileall`, sintaxis JS y `git diff --check` correctos. Persisten pendientes persistencia de invoices, sincronización, rutas HTTP, catálogo/precios y pruebas en sandbox oficial; no hay cobros habilitados.
+
+## Revisión incremental QA/QvaPay — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- CI del HEAD previo `5e55582690891a66a002852b29aa28ae7f54fb63` confirmada en verde (run `42485697750`): studio-browser-e2e, postgres-migrations, qdrant-cloud, container-image-build y python-tests. Sustituye la anotación anterior «CI no confirmada» **para ese SHA**.
+- Suite local sobre el árbol de trabajo: **911 passed, 11 skipped** (PostgreSQL omitidos localmente); `compileall`, sintaxis JS, `pip check` y `git diff --check` correctos.
+- **Simulacro de restauración real (DB-02):** contenedor PostgreSQL 16-alpine desechable publicado solo en `127.0.0.1`; `backups/pre-frontend-upgrade-20261108T001710Z.dump` restaurado con `scripts/restore_postgres.sh` (41 tablas de usuario, `schema_migrations` hasta `021`); migración `022_agent_run_cancellation` aplicada con `python -m api.migrate`; segunda ejecución del migrador aplicó nada; contenedor y copia eliminados al terminar. Producción intacta.
+- **QvaPay (PAY-01):** migración `023_qvapay_lightning_invoices.sql` (`payment_invoices`, una invoice abierta por orden, referencia LNURL unguessable, índice parcial) y `api/qvapay_settlement.py` (persistencia con supersede, paginación de 20 cobros por página con deduplicación y tope de páginas, conciliación que exige referencia + sats exactos + destinatario + `transaction_uuid` y delega en `confirm_verified_payment`). Pruebas unitarias (5) y PostgreSQL (8); el job `postgres-migrations` de CI ahora ejecuta `tests/test_qvapay_settlement_postgres.py` junto a las migraciones; matriz PostgreSQL completa verificada localmente en instancia desechable: **70 passed**.
+- Verificación de instalación reproducida localmente: migraciones 001→023 aplican limpiamente desde cero en PostgreSQL 16-alpine desechable; idempotencia confirmada.
+- REL-01 permanece **bloqueada**: AUTH/MFA sin habilitar en producción, sandbox sin daemon dedicado (AGT-04), catálogo/precios y sandbox oficial QvaPay, restauración/backup en staging, y validación manual en navegador pendientes. No se declara la V1.0 liberada.
+- No se ejecutaron pagos reales, despliegues, migraciones en producción, builds de imágenes ni cambios de infraestructura.

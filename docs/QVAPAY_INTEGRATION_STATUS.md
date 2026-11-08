@@ -5,7 +5,8 @@
 - Aprobación comercial comunicada por el propietario: `APPROVED`.
 - Método elegido por el propietario para recibir pagos: Lightning Address de QvaPay (`axionatomic@qvpay.me`), con recepción en USD/conversión automática según la pantalla compartida.
 - Integración técnica: contrato oficial de Lightning Address confirmado en la documentación pública el 8 de noviembre de 2026.
-- Adaptador de solo lectura/creación de invoice implementado en `api/qvapay_lightning.py`; la persistencia de invoices, la sincronización y las rutas HTTP siguen pendientes.
+- Adaptador de solo lectura/creación de invoice implementado en `api/qvapay_lightning.py`.
+- Persistencia de invoices y conciliación paginada implementadas en `api/qvapay_settlement.py` (migración 023); las rutas HTTP de checkout siguen pendientes.
 - No se han realizado cobros reales y la acreditación automática permanece deshabilitada.
 - Credenciales, códigos de acceso y secretos no deben solicitarse ni publicarse en Git, incidencias o logs.
 
@@ -59,7 +60,7 @@ Pendiente antes de activar cobros:
 
 1. Custodia del token del titular y configuración `QVAPAY_USER_TOKEN` fuera del repositorio.
 2. Catálogo y precios aprobados que permitan crear órdenes sin confiar en importes enviados por el navegador.
-3. Persistencia de invoices (sats, precio BTC, comisión y estado) y sincronización paginada de cobros.
+3. ~~Persistencia de invoices (sats, precio BTC, comisión y estado) y sincronización paginada de cobros.~~ Implementado el 2026-11-08 (`api/qvapay_settlement.py`, migración `023_qvapay_lightning_invoices.sql`): una invoice abierta por orden (`payment_invoices_one_open_per_order`), supersede de la invoice anterior, referencia LNURL unguessable, paginación de 20 cobros por página con deduplicación, y conciliación que confirma únicamente cuando coinciden referencia, sats exactos, destinatario y `transaction_uuid`, delegando en `confirm_verified_payment` (importe, expiración, idempotencia y acreditación atómica).
 4. Rutas HTTP de checkout y conciliación con CSRF, permisos e idempotencia.
 5. Pruebas en el entorno de pruebas oficial de QvaPay, incluyendo pagos duplicados, tardíos y manipulados.
 6. Revisión operativa de reembolsos, pagos no conciliados y límites diarios.
@@ -74,7 +75,7 @@ La futura acreditación debe validar desde backend la identidad de la transacci�
 - Contrato técnico de Lightning Address: confirmado oficialmente.
 - Adaptador de cliente Lightning: implementado y probado con transporte simulado.
 - Payment Manager: implementado.
-- Persistencia de invoices y sincronización de cobros: pendientes.
+- Persistencia de invoices y sincronización/conciliación de cobros: implementadas y probadas (unitarias y PostgreSQL; migración 023). Checkout, rutas HTTP y cobros reales siguen deshabilitados.
 - Webhook Lightning: no existe; se usa consulta autenticada del titular.
 - Rutas de checkout: no implementadas.
 - Acreditación automática: deshabilitada.
