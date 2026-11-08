@@ -17,6 +17,7 @@ client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
 logger = logging.getLogger(__name__)
 _collection_lock = threading.Lock()
 _collection_checked_at = 0.0
+_local_project_mutation_locks: dict[str, asyncio.Lock] = {}
 _COLLECTION_CHECK_INTERVAL_SECONDS = 60.0
 
 MAX_MANUAL_INGEST_CHARS = 100_000
@@ -61,6 +62,15 @@ async def _project_mutation_lock(project_id: str):
     # Importación diferida para evitar ciclos durante la carga de api.main.
     from api.database import engine
     from agent.sqlalchemy_meta import SqlAlchemyMetaStore
+
+    # SQLite se usa en desarrollo y CI; no implementa advisory locks PostgreSQL.
+    # El fallback local evita romper esos entornos, pero no ofrece coordinación
+    # entre procesos y nunca debe confundirse con el bloqueo de producción.
+    if getattr(getattr(engine, "dialect", None), "name", None) != "postgresql":
+        lock = _local_project_mutation_locks.setdefault(project_id, asyncio.Lock())
+        async with lock:
+            yield
+        return
 
     async with SqlAlchemyMetaStore(engine).project_lock(project_id):
         yield
