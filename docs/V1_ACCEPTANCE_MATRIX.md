@@ -201,3 +201,5 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Commits: `e8b14e9` (protocolo y backends), `a69947e` (consulta SQL de IDs), `73d7a98` (orden seguro de reemplazo), `7405270` y `5674b74` (regresiones).
 - CI del cambio: pendiente. La ejecución anterior del PR #6 (`42486774940`) aprobó todos los trabajos, pero no incluye estos commits posteriores.
 - Riesgo residual controlado: si falla la limpieza después de confirmar los metadatos nuevos, los vectores antiguos pueden quedar huérfanos; el Retriever los ignora al no existir sus IDs en `MetaStore`. No se borran datos vigentes ni se amplía el alcance fuera del proyecto/ruta.
+
+- Primera CI del reemplazo seguro (HEAD `073bca6`): 909 passed, 10 skipped y 1 fallida. El único fallo era una aserción del test simulado que comparaba la ruta HTTP sin contemplar `?wait=true`; la operación de borrado selectivo sí eliminó los IDs esperados. Ajuste de la aserción publicado en `b36fd8d`; nueva CI pendiente.
