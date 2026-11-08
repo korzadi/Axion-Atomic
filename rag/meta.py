@@ -60,6 +60,14 @@ class MetaStore:
     def list_files(self, project_id: str) -> dict[str, str]:
         return dict(self._q("SELECT path, sha256 FROM rag_files WHERE project_id = ?", (project_id,)))
 
+    def list_file_chunk_ids(self, project_id: str, path: str) -> list[str]:
+        """Devuelve los IDs vectoriales vigentes de un archivo dentro de su proyecto."""
+        rows = self._q(
+            "SELECT id FROM rag_chunks WHERE project_id = ? AND path = ? ORDER BY idx",
+            (project_id, path),
+        )
+        return [row[0] for row in rows]
+
     def replace_file(self, project_id: str, path: str, sha: str, revision: str | None, size: int,
                      chunks: list[tuple[str, Chunk]], now_iso: str) -> None:
         with self._tx() as cur:
