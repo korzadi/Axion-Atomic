@@ -173,6 +173,36 @@ class IndexerTests(PipelineBase):
         self.assertTrue(old_page_ids.isdisjoint(store.points))
         self.assertGreater(report.orphaned_removed, 0)
 
+    async def test_remove_project_metadata_first_and_reconcile_vector_failure(self):
+        await self.idx.index_project(self.ws)
+
+        class FailOnceProjectDeleteStore(InMemoryVectorStore):
+            def __init__(self):
+                super().__init__()
+                self.delete_calls = 0
+
+            async def delete_project(self, project_id):
+                self.delete_calls += 1
+                if self.delete_calls == 1:
+                    raise TransportError("temporary project cleanup failure", retryable=True)
+                await super().delete_project(project_id)
+
+        store = FailOnceProjectDeleteStore()
+        store.points = self.store.points
+        indexer = RepoIndexer(self.emb, store, self.meta)
+
+        with self.assertRaises(TransportError):
+            await indexer.remove_project("p1")
+
+        self.assertEqual(self.meta.stats("p1"), {"files": 0, "chunks": 0})
+        self.assertTrue(await store.list_project_ids("p1"))  # huérfanos, pero ya invisibles en SQL
+        result = await Retriever(self.emb, store, self.meta).retrieve("p1", "calculate_tax")
+        self.assertEqual(result.chunks, [])
+
+        removed = await indexer.reconcile_project("p1")
+        self.assertGreater(removed, 0)
+        self.assertEqual(await store.list_project_ids("p1"), set())
+
     async def test_truncated_walk_deletes_nothing(self):
         await self.idx.index_project(self.ws)
         small = RepoIndexer(self.emb, self.store, self.meta, max_files=1)
