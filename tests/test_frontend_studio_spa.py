@@ -42,6 +42,15 @@ def test_spa_uses_only_existing_backend_routes_for_available_modules():
         assert '"' + section + '"' in source
 
 
+def test_model_page_uses_authenticated_live_ollama_availability_not_static_catalog_claims():
+    source = (FRONTEND / "studio.js").read_text(encoding="utf-8")
+    assert '"/workspace/models/availability?project_id="' in source
+    assert 'm.available===true' in source
+    assert 'Comprobando modelos en Ollama' in source
+    assert 'No se pudo verificar Ollama' in source
+    assert 'No disponible' in source
+
+
 def test_billing_view_displays_only_real_credit_balance_and_ledger():
     source = (FRONTEND / "studio.js").read_text(encoding="utf-8")
     assert 'api("/billing/credits")' in source
