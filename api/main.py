@@ -24,7 +24,7 @@ from api.catalog_routes import router as catalog_router
 from api.usage_routes import router as usage_router
 from api.capacity import CapacityExceeded
 from api.rcache import close_cache, ping_cache
-from api.readiness import auth_readiness
+from api.readiness import auth_readiness, combine_readiness_report
 
 app = FastAPI(title="Axyron Atomic API", version="0.2.0")
 
@@ -66,8 +66,14 @@ app.include_router(usage_router)
 
 @app.get("/health/readiness")
 async def health_readiness():
-    """Readiness de configuración para el lanzamiento; no expone secretos."""
-    report = auth_readiness()
+    """Readiness real: controles de lanzamiento y dependencias críticas en vivo."""
+    try:
+        operational = await health()
+        dependency_checks = operational.get("checks", {})
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        dependency_checks = detail.get("checks", {})
+    report = combine_readiness_report(auth_readiness(), dependency_checks)
     status_code = 200 if report["status"] == "ready" else 503
     return JSONResponse(status_code=status_code, content=report)
 
