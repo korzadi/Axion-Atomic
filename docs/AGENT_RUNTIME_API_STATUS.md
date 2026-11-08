@@ -1,5 +1,13 @@
 # Estado de conexión del runtime AXION con la API
 
+> **Estado al 2026-11-08 (certificación QA-HEAD-001/002).** Este documento es un registro histórico de revisiones y no se reescribe. Estado real comprobado ese día:
+> - `main = a5df4f7`, CI del SHA exacto en verde (run `42515231275`).
+> - Producción sirve el código de `main` previo (`e383621`/`aad1f48`) con `AUTH_ENABLED=true` y readiness `ready`; `/workspace/*` exige sesión (401 sin autenticar); la API heredada `/v1/*` sigue siendo API de servicio (no multiusuario) y no factura.
+> - Billing en modo `shadow` (sin cobros); `QVAPAY_ENABLED=false`; sandbox Docker desactivado y fail-closed (`SANDBOX_DOCKER_ENABLED` por defecto `false`; ninguna ejecución real de sandbox validada end-to-end).
+> - Migraciones `022`/`023` aplicadas en producción; rollback de aplicación ensayado.
+>
+> Cualquier afirmación histórica de este documento sobre «autenticación desactivada» describe el estado del repositorio al redactarla, no producción actual. Historia preservada a continuación.
+
 ## Estado verificado por inspección estática
 
 - `agent/runtime.py` construye `CodingAgent` con `DbApprovalGate` y `RunStore`.

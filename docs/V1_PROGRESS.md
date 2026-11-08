@@ -810,3 +810,27 @@ Conclusión: el procedimiento de rollback documentado funciona en producción re
 2. Buzón de prueba del propietario para ensayo de registro/verificación/MFA end-to-end (la configuración y el flujo SMTP están validados; falta el clic real en el correo).
 3. Sandbox AGT-04 (daemon dedicado no privilegiado + imágenes por digest + TLS).
 4. Declaración formal de REL-01/V1.0 liberada tras (1)-(3) y aceptación del propietario.
+
+## Certificación QA-HEAD-001/002 — 2026-11-08 (`agent/opencode-vps`)
+
+### HEAD y CI
+- `origin/main` == `a5df4f774eaac141b7b87ba5ce7cc958dba902c6` (coincide con el SHA de referencia). `agent/opencode-vps` == `a5df4f7`. El `main` local estaba 19 commits por detrás; actualizado con ff-only.
+- CI del SHA exacto (run `42515231275`): `python-tests`, `studio-browser-e2e`, `container-image-build`, `postgres-migrations`, `qdrant-cloud-integration` → **5/5 success**. No se presentan como resultado del HEAD ejecuciones de commits anteriores.
+
+### Regresiones
+- Primera ejecución local: 1 fallo en `tests/test_frontend_serving.py::test_api_routes_keep_priority_over_frontend_mount` (esperaba 503 con AUTH cerrada; el `.env` real de este host la tiene habilitada → 401). Defecto de hermeticidad de la prueba; corregido con `mock.patch.object(settings, "auth_enabled", False)`.
+- Suite final: **1033 passed, 13 skipped** (PostgreSQL). `compileall`, `check_frontend_js.py`, `bash -n scripts/*.sh`, `pip check`, `git diff --check`: correctos. Sin código de producción modificado.
+
+### Producción (sondas de solo lectura; sin cambios en el VPS)
+- `/health/readiness` → `ready` (`authentication_enabled`, `transactional_email`, `https_cookie`, `public_https_origin`, `mfa_encryption_key` = true; billing `shadow`). `/auth/me` → 401 (local y dominio público). Migraciones 022/023 ya aplicadas el 2026-11-08. Rollback de aplicación ensayado (evidencia previa del día).
+- Flags comprobados sin imprimir valores: `AUTH_ENABLED=true`; `QVAPAY_ENABLED=false`; `BILLING_ENFORCEMENT_ENABLED` no habilitado; `SANDBOX_DOCKER_ENABLED` ausente (por defecto `false`, fail-closed). Cobros/ledger/sandbox/QvaPay **desactivados**.
+- Deriva documentada: producción sirve el código de `main` previo (`e383621`/`aad1f48`); único delta de código en `a5df4f7` = valor por defecto de `qvapay_lightning_address` (inerte) más docs/tests. Actualizar producción corresponde al propietario.
+
+### Documentación reconciliada (historial preservado)
+- `docs/V1_ACCEPTANCE_MATRIX.md`: filas API-02, STU-01, STU-04, SEC-01/02/03, QA-01/02, REL-01 actualizadas a la evidencia real; nueva sección QA-HEAD-001/002.
+- `docs/PRODUCTION_INITIAL_RELEASE_GATE.md` y `docs/AGENT_RUNTIME_API_STATUS.md`: bloques fechados de estado actual añadidos al inicio; contenido histórico conservado.
+- `README.md`: nota de estado verificado en «Estado de implementación».
+
+### Pendiente / bloqueado
+- `REL-01` bloqueada: buzón real (registro/verificación/MFA), `QVAPAY_USER_TOKEN` + catálogo/precios aprobados, AGT-04 (daemon TLS + imágenes por digest). V1.0 no liberada.
+- PR hacia `main` preparado; no se fusiona (decisión del propietario tras auditoría de ChatGPT).

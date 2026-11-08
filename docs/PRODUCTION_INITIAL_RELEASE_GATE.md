@@ -1,6 +1,17 @@
 # AXYRON ATOMIC — Puerta de salida a producción inicial
 
-**Estado:** plan de cierre obligatorio; no certifica que el producto esté listo ni habilita despliegues o cobros.
+> **Estado actual verificado — 2026-11-08 (certificación QA-HEAD-001/002, rama `agent/opencode-vps`).**
+> Las secciones siguientes son un registro histórico y se conservan sin reescritura. Estado real comprobado ese día:
+> - `main = a5df4f7`; CI del SHA exacto en verde (run `42515231275`, los cinco jobs).
+> - Producción sirve el código de `main` previo (`e383621`/`aad1f48`); la única deriva de código en `a5df4f7` es el valor por defecto de `qvapay_lightning_address` (`axionatomic@` → `axyronatomic@qvpay.me`, inerte con `QVAPAY_ENABLED=false`), más documentación y pruebas. La actualización de producción a `a5df4f7` corresponde al propietario.
+> - `AUTH_ENABLED=true` en producción (readiness `ready`; 401 sin sesión, 422 con payload inválido; sin cuentas ni correos reales de prueba todavía).
+> - Migraciones PostgreSQL `022` y `023` aplicadas en producción el 2026-11-08 con rehearsal previo en contenedor desechable; segunda ejecución del migrador: ninguna migración pendiente.
+> - `QVAPAY_ENABLED=false` (confirmado por presencia de flag `false`); `BILLING_ENFORCEMENT_ENABLED` no habilitado (sombra/`shadow`, confirmado en readiness); `SANDBOX_DOCKER_ENABLED` ausente → por defecto `false` y fail-closed.
+> - Rollback de aplicación ensayado en vivo (ida y vuelta, salud 6/6 y readiness `ready`); rollback completo de DB no ensayado (no fue necesario).
+> - Cobros, checkout, ledger en cobro real y sandbox **siguen desactivados**. `REL-01` bloqueada; la V1.0 no se declara liberada.
+> - Persistente como histórico: cualquier afirmación de este documento sobre «autenticación desactivada» corresponde al momento de su redacción y no al estado actual.
+
+**Estado histórico del documento:** plan de cierre obligatorio; no certifica que el producto esté listo ni habilita despliegues o cobros.
 **Objetivo:** entregar una primera versión privada y comercialmente operable, con ATOMIC CODE como único modelo facturable inicial. Vídeo, visión, imágenes, organizaciones y proveedores adicionales quedan fuera de este lanzamiento.
 
 ## 1. Definición de producción inicial

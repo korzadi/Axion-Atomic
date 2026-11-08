@@ -1,7 +1,9 @@
 import unittest
+from unittest import mock
 
 from fastapi.testclient import TestClient
 
+from api.config import settings
 from api.main import app
 
 
@@ -17,11 +19,14 @@ class AxionStudioServingTests(unittest.TestCase):
         self.assertIn('data-open="reg"', response.text)
 
     def test_api_routes_keep_priority_over_frontend_mount(self):
-        with TestClient(app) as client:
-            response = client.get("/auth/me")
-
         # AUTH_ENABLED remains closed by default; the API must not fall through
-        # to the landing page or be shadowed by the frontend mount.
+        # to the landing page or be shadowed by the frontend mount. Patch the
+        # singleton explicitly so an ambient .env with AUTH_ENABLED=true cannot
+        # change the contract under test.
+        with mock.patch.object(settings, "auth_enabled", False):
+            with TestClient(app) as client:
+                response = client.get("/auth/me")
+
         self.assertEqual(response.status_code, 503)
         self.assertNotIn("<!doctype html>", response.text.lower())
 

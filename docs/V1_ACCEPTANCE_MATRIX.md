@@ -14,11 +14,11 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 |---|---|---|---|---|
 | ARC-01 | Arquitectura | Contratos API, frontend, DB y RAG coherentes | `api/main.py`, routers, Compose; contrato homogéneo `project_id`/`path` en stores RAG y validación de lote previa a escritura (commit `31d44e3`) | Parcial |
 | API-01 | API | Health DB/Ollama/modelos/Qdrant/Redis | VPS devolvió 6/6 OK el 07-11-2026 | Verificada en VPS en ese momento |
-| API-02 | API | Errores de capacidad/pool controlados | Handlers en `api/main.py` | Implementada; prueba HEAD pendiente |
-| STU-01 | Studio | Proyectos autenticados | `/auth/projects` y SPA | Parcial; AUTH desactivada operativamente |
+| API-02 | API | Errores de capacidad/pool controlados | Handlers en `api/main.py`; regresiones HTTP/ASGI en `tests/test_capacity_http.py` | Verificada en CI para `a5df4f7` (run `42515231275`, 5/5; python-tests success) |
+| STU-01 | Studio | Proyectos autenticados | `/auth/projects` y SPA | Parcial; AUTH habilitada en producción el 2026-11-08 (readiness `ready`, 401 sin sesión); E2E con buzón real pendiente |
 | STU-02 | Studio | Chat real, RAG por proyecto e historial persistente | `/workspace/chat/completions`, `/workspace/chat/history` | Implementada; E2E real pendiente |
 | STU-03 | Studio | Ingesta/listado/gestión de fuentes con permisos | `/workspace/knowledge/*` | Parcial; integración Qdrant real pendiente |
-| STU-04 | UX | Responsive, teclado, lector de pantalla y WCAG | `tests/e2e/a11y-scan.mjs` (axe-core WCAG 2 A/AA): 0 violaciones en landing, login administrativo y vista autenticada de gestión de usuarios/facturación (backend simulado) | Parcial: vistas de Studio autenticado y navegación completa por teclado sin escanear; auditoría total pendiente |
+| STU-04 | UX | Responsive, teclado, lector de pantalla y WCAG | `tests/e2e/a11y-scan.mjs` (axe-core WCAG 2 A/AA): 0 violaciones en landing, login administrativo, vista autenticada de gestión y vistas de Studio autenticado (`#app/inicio`, `#app/facturacion`, backend simulado); auditoría de teclado (Tab) en landing/portal/gestión sin trampas ni foco perdido | Parcial: faltan lectores de pantalla reales y validación contra backend en staging; auditoría total pendiente |
 | AGT-01 | Agente | Inicio, listado, detalle y reanudación persistentes | `ProjectAgentRuntime`, `/workspace/agent/runs*` | Implementada; CI HEAD pendiente |
 | AGT-02 | Agente | Aprobación ligada al hash y revisor autenticado | `DbApprovalGate`, `action_approvals` | Implementada; CI HEAD pendiente |
 | AGT-03 | Agente | Acciones interrumpidas requieren reconciliación | `needs_reconciliation`, `/runs/{run_id}/reconcile`, tests de persistencia | Implementada; CI HEAD pendiente |
@@ -26,9 +26,9 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | AGT-05 | Agente | Cancelación explícita de ejecuciones pendientes | `/workspace/agent/runs/{run_id}/cancel`, migración 022, pruebas HTTP/transacción | Implementada; CI HEAD pendiente |
 | AI-01 | IA | Ollama y modelo configurado accesibles desde API | Health VPS 6/6 | Verificada en VPS en ese momento |
 | AI-02 | IA | Embeddings y Qdrant con datos aislados reales | Health VPS y tests históricos | Parcial; falta E2E con datos desechables |
-| SEC-01 | Seguridad | Registro, verificación, login, sesión, CSRF y logout E2E | `api/auth_routes.py`, `api/auth.py` | Bloqueada para producción; AUTH desactivada |
-| SEC-02 | Seguridad | MFA, keyring, recuperación y rotación probados | `api/mfa.py`, migración MFA | Bloqueada hasta pruebas E2E y plan de claves |
-| SEC-03 | Seguridad | OAuth GitHub/Google y correo probados | Rutas OAuth/email | Bloqueada por configuración y prueba externa |
+| SEC-01 | Seguridad | Registro, verificación, login, sesión, CSRF y logout E2E | `api/auth_routes.py`, `api/auth.py` | Parcial; AUTH habilitada en producción el 2026-11-08 (readiness `ready`; 401 sin sesión, 422 con payload inválido); registro/verificación/MFA E2E con buzón real NO ejecutado; no se declara verificada |
+| SEC-02 | Seguridad | MFA, keyring, recuperación y rotación probados | `api/mfa.py`, migración MFA | Parcial; MFA activa en producción (`mfa_encryption_key=true` en readiness); login MFA real con cuenta NO ensayado; recuperación y rotación sin E2E |
+| SEC-03 | Seguridad | OAuth GitHub/Google y correo probados | Rutas OAuth/email | Parcial; SMTP autenticado y OAuth configurado en producción (presencia verificada; sin correo de prueba enviado); flujo E2E con buzón real pendiente |
 | SEC-04 | Seguridad | Matriz HTTP de roles por endpoint | `authorize_project`, workspace tests | Parcial |
 | DB-01 | Datos | Migraciones reproducibles en DB aislada | Migraciones y job PostgreSQL | Verificada para `c41f490` (CI `42488024013` + migraciones 001→023 desde cero + simulacro de restauración y migración 022) |
 | DB-02 | Datos | Restauración real de backup en entorno aislado | `scripts/restore_postgres.sh` + simulacro ejecutado el 2026-11-08: backup real restaurado (41 tablas; `schema_migrations` 021) y migración 022 aplicada con el migrador real; contenedor desechable eliminado | Verificada (entorno desechable); falta ensayarla en staging |
@@ -39,10 +39,10 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh`; contrato probado por `test_vps_installer_contract.py` (23 pruebas) | Código publicado y CI en verde; falta ensayo sobre stack ocupado en staging (ejecución `--check` real confirma cierre seguro: puerto 8070 ocupado, no se detiene el servicio) |
 | OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado; ejecutado en el host el 2026-11-08 (stack `axyron-atomic` sano; legado `axion-atomic` ausente; sin `.env` impreso) | Ejecutada en el host (2026-11-08); pendiente revisión operativa del operador previa a cualquier actualización |
 | OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador, `restore_postgres.sh` y simulacro de restauración real; sección de mantenimiento añadida | Restore verificado en entorno desechable con backup real; upgrade/rollback sin ensayar en staging |
-| QA-01 | QA | Suite Python aprobada en HEAD evaluado | `agent/opencode-vps` `08b6e65`: `pytest -q` → 911 passed, 11 skipped; CI `42485697750` green en `5e55582` (python-tests incluido) | Verificada local y en CI para `c41f490` (run `42488024013`) |
-| QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions: `42485697750` sobre `5e55582` — studio-browser-e2e, container-image-build, postgres-migrations, qdrant-cloud-integration, python-tests: success | Verificada para `5e55582` y `c41f490` (run `42488024013`) |
+| QA-01 | QA | Suite Python aprobada en HEAD evaluado | `agent/opencode-vps` `08b6e65`: `pytest -q` → 911 passed, 11 skipped; CI `42485697750` green en `5e55582` (python-tests incluido) | Verificada local y en CI para `c41f490` (run `42488024013`) y para `a5df4f7` (run `42515231275`; python-tests success; suite local 1033 passed tras corrección de hermeticidad en `tests/test_frontend_serving.py`) |
+| QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions: `42485697750` sobre `5e55582` — studio-browser-e2e, container-image-build, postgres-migrations, qdrant-cloud-integration, python-tests: success | Verificada para `5e55582`, `c41f490` (run `42488024013`) y `a5df4f7` (run `42515231275`; los cinco jobs en verde) |
 | DOC-01 | Docs | README, AGENTS, instalación, seguridad y usuario alineados | Documentación del repo | Parcial |
-| REL-01 | Lanzamiento | Todas las puertas críticas aprobadas | Esta matriz | Bloqueada |
+| REL-01 | Lanzamiento | Todas las puertas críticas aprobadas | Esta matriz | Bloqueada; faltan (1) ensayo con buzón real (registro/verificación/MFA), (2) `QVAPAY_USER_TOKEN` y catálogo/precios aprobados, (3) AGT-04 (daemon dedicado con TLS e imágenes digest) |
 
 ## Evidencia CI histórica y estado actual
 
@@ -311,3 +311,32 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Rollback de aplicación ensayado en vivo: imágenes `rollback-20261108` en servicio saludable (6/6) contra la DB migrada (023); re-forward a `main-20261108` verificado (readiness `ready`, `/health` 6/6, assets 200). `OPS-03`: rollback de aplicación y de instalación ensayados; el rollback completo de DB sigue sin ensayarse (no fue necesario).
 - Producción == `main` (`aad1f48`): código desplegado == documentación de `main` == `agent/opencode-vps` (docs). CI `main` `42500057110`: 5/5 verde.
 - `REL-01` permanece bloqueada por (1) token/catálogo QvaPay, (2) ensayo con buzón real, (3) AGT-04. No se declara la V1.0 liberada.
+
+## Certificación QA-HEAD-001/002 — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+Tareas asignadas por el propietario: certificar el estado del SHA de referencia `a5df4f774eaac141b7b87ba5ce7cc958dba902c6` y reconciliar la documentación con la evidencia real.
+
+### Verificación de HEAD
+- `origin/main` en `a5df4f7` (coincide con el SHA de referencia). `agent/opencode-vps` == `a5df4f7`; sin divergencia ni force-push. El `main` local estaba 19 commits por detrás; se actualizó con `git merge --ff-only origin/main` (avance seguro, sin sobrescribir nada).
+
+### CI del SHA exacto `a5df4f7` (run `42515231275`, workflow `AXYRON ATOMIC CI`)
+- `python-tests`: success · `studio-browser-e2e`: success · `container-image-build`: success · `postgres-migrations`: success · `qdrant-cloud-integration`: success. **5/5 verde.**
+
+### Regresiones locales
+- `pytest -q` completo: **1033 passed, 13 skipped** (PostgreSQL omitidos). Primera ejecución reveló 1 fallo en `tests/test_frontend_serving.py::test_api_routes_keep_priority_over_frontend_mount`: esperaba 503 (AUTH cerrada) pero el `.env` real del host tiene AUTH habilitada y devolvía 401. Defecto de hermeticidad de la prueba, no del handler. Corregido con `mock.patch.object(settings, "auth_enabled", False)` y prueba de regresión verde; suite re-ejecutada íntegramente en verde.
+- `compileall`, `scripts/check_frontend_js.py`, `bash -n` sobre `scripts/*.sh`, `pip check`, `git diff --check`: correctos.
+- No se modificó código de producción en la corrección.
+
+### Contradicciones documentales encontradas y corregidas
+- La matriz declaraba `SEC-01 … AUTH desactivada`, `STU-01 … AUTH desactivada operativamente` y `SEC-02/03 bloqueadas`, pese a que producción tiene `AUTH_ENABLED=true` desde el despliegue controlado del 2026-11-08 (readiness `ready`, 401 sin sesión, verificado en vivo en esta certificación). Actualizadas a **Parcial** con el límite real: el flujo E2E con buzón/cuenta real no se ha ejecutado.
+- `STU-04` declaraba sin escanear las vistas de Studio autenticado y el teclado; ambos estaban auditados (0 violaciones / 0 problemas). Actualizado.
+- `API-02` declaraba “prueba HEAD pendiente” pese a CI verde. `QA-01`/`QA-02` actualizadas con la evidencia de `a5df4f7` (run `42515231275`).
+- `PRODUCTION_INITIAL_RELEASE_GATE.md`, `AGENT_RUNTIME_API_STATUS.md` y `README.md` llevaban notas históricas presentadas como estado actual; se añadió a cada uno un bloque fechado “estado actual” sin borrar el historial.
+- Despliegue vs repositorio: producción sirve el código de `main` previo (`e383621`/`aad1f48`); la única deriva de código en `a5df4f7` es el valor por defecto de `qvapay_lightning_address` (`axionatomic@` → `axyronatomic@qvpay.me`, inerte con `QVAPAY_ENABLED=false`), más docs y pruebas. Se documenta, no se despliega nada desde aquí.
+
+### Seguridad
+- El diff no contiene secretos ni valores de `.env`; `.env` y `.env.*` reales siguen sin trackear (`.gitignore` verificado en esta rama). No se activaron cobros, facturación, ledger, checkout, `QVAPAY_ENABLED` ni sandbox; `SANDBOX_DOCKER_ENABLED=false` y billing en `shadow` confirmados en readiness vivo. Ningún cambio operativo en el VPS: solo sondas HTTP de solo lectura (`/health`, `/health/readiness`, `/auth/me` y dominio público).
+
+### Bloqueadores pendientes (sin cambios)
+- `REL-01` **bloqueada**: (1) ensayo de registro/verificación/MFA con buzón real, (2) `QVAPAY_USER_TOKEN` + catálogo/precios aprobados, (3) `AGT-04` (daemon dedicado con TLS e imágenes por digest). La V1.0 no se declara liberada.
+- Producción sigue en el código del `main` previo; la actualización a `a5df4f7` corresponde al propietario.
