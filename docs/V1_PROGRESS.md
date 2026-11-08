@@ -328,3 +328,172 @@ Validar el job PostgreSQL de CI con las pruebas administrativas y de facturació
 
 ### Siguiente tarea
 Persistencia de invoices y sincronización paginada de cobros ligada a órdenes internas, sin activar checkout hasta disponer de catálogo/precios aprobados y sandbox oficial.
+
+## Desarrollo ChatGPT — Fase 1 — 2026-11-08
+
+**Rama de trabajo:** `agent/chatgpt`  
+**Commit de implementación:** `9a590a0c0a14837df9a145660768b1a61cd72567`  
+**Rama OpenCode:** `agent/opencode-vps`, sin modificaciones realizadas.
+
+### Tarea implementada
+
+Se amplió `tests/test_postgres_migrations.py` con tres pruebas de integración dirigidas al migrador real y destinadas exclusivamente al PostgreSQL efímero del job `postgres-migrations`:
+
+1. **Idempotencia:** ejecuta de nuevo el migrador y exige que no aplique migraciones y que la lista de versiones/checksums permanezca idéntica.
+2. **Integridad histórica:** crea una migración temporal con una versión ya aplicada y checksum distinto; exige que el migrador aborte.
+3. **Atomicidad:** ejecuta una migración temporal que crea una tabla y luego falla; exige que ni la versión ni la tabla parcial queden registradas.
+
+Los archivos temporales viven en `tmp_path`; no se modifican los SQL versionados del repositorio. Las pruebas requieren `DATABASE_URL` PostgreSQL y quedan omitidas fuera del job aislado, conforme al patrón del módulo.
+
+**Commit:** `9a590a0c0a14837df9a145660768b1a61cd72567` — `test: verify migration runner idempotency and transaction safety`.
+
+### Verificación y límites
+
+- Publicación confirmada en GitHub, rama `agent/chatgpt`.
+- **Ejecución pytest: pendiente.** Esta sesión no dispone de terminal ni de runner local; no se declara aprobada ninguna de las tres pruebas.
+- El workflow actual ejecuta el migrador dos veces antes de las pruebas PostgreSQL, pero no se afirma que el workflow haya corrido para este nuevo SHA.
+- No se tocaron producción, VPS, Docker, PostgreSQL real, volúmenes, secretos, frontend ni archivos asignados a OpenCode.
+- No se fusionaron ramas. `agent/opencode-vps` permanece en su HEAD previo observado.
+
+### Estado de Fase 1
+
+La tarea de cobertura del contrato del migrador queda **implementada y pendiente de CI**. La Fase 1 continúa abierta: ARC-01 y API-02 requieren evidencia del HEAD actual; DB-01 requiere que el job PostgreSQL ejecute estas pruebas y los smoke tests existentes. También siguen pendientes la revisión de los demás criterios de Fase 1 y la validación aislada de los contratos de API/infraestructura.
+
+**Siguiente tarea:** comprobar el resultado de CI del SHA `9a590a0c0a14837df9a145660768b1a61cd72567`; corregir cualquier fallo reproducible. Después continuar con el siguiente criterio abierto de arquitectura/contratos de Fase 1, sin iniciar Fase 2 antes de satisfacer los criterios de aceptación.
+
+
+## Continuidad ChatGPT — Fase 1 — 2026-11-08 (API-02)
+
+**Rama:** `agent/chatgpt`  
+**Commit:** `f0bf0cde1c5925d835429c8222e8bda423540534`
+
+### Tarea real abordada: errores de capacidad y agotamiento del pool
+
+La matriz de aceptación identifica API-02 como implementada, pero pendiente de pruebas sobre el HEAD evaluado. Se amplió `tests/test_capacity_http.py` con dos regresiones:
+
+- La saturación de inferencia debe responder HTTP 503, conservar `Retry-After` y devolver el mensaje público controlado sin exponer el tipo de excepción.
+- El agotamiento del pool SQLAlchemy debe responder HTTP 503, conservar `Retry-After: 3` y no filtrar el texto interno del error del pool ni el tipo `TimeoutError`.
+
+No se cambió el comportamiento de producción: los handlers existentes ya construyen respuestas genéricas; estas pruebas protegen el contrato HTTP ante futuras regresiones.
+
+### Verificación
+
+- Código y pruebas publicados en `agent/chatgpt`.
+- **Ejecución local:** no disponible en esta sesión.
+- **CI del commit anterior `333bdf2da559088ee2f3c919d2eec60c1a6573f1`:** al momento de esta actualización, `studio-browser-e2e` y `qdrant-cloud-integration` terminaron con éxito; `python-tests`, `postgres-migrations` y `container-image-build` seguían en ejecución. No se declara CI completa.
+- El nuevo commit dispara una ejecución para el SHA actualizado; debe revisarse antes de marcar API-02 como verificada.
+- No se modificaron módulos de OpenCode, código de producción, frontend, secretos, datos, VPS ni servicios.
+
+### Estado
+
+API-02 queda con cobertura de regresión ampliada, **pendiente de ejecución CI**. Fase 1 permanece abierta. Próximo paso: revisar todos los checks del SHA actual y después continuar ARC-01 con revisión de contratos entre rutas, esquemas y persistencia, evitando duplicar cambios de la otra rama.
+
+
+## Corrección de regresiones API-02 tras CI — 2026-11-08
+
+**Commit de corrección de pruebas:** `a722273721007c3bb832ae11cc31e5a6ed837606`.
+
+### Hallazgo reproducible
+- El workflow CI #1112, ejecutado sobre el SHA anterior `dd30e7da2a09b1710417731e33adc7c340ddcc8d`, terminó en fallo únicamente en el job `python-tests`.
+- Resultado de pytest: **2 fallidas, 850 aprobadas, 9 omitidas**.
+- Causa: las aserciones comparaban bytes con la secuencia literal `\\u00e1`, mientras que Starlette serializa el texto acentuado como UTF-8 real. El contrato HTTP de producción devolvía el mensaje genérico esperado; el defecto estaba en las aserciones añadidas.
+- Se corrigieron ambas pruebas para leer `response.json()["detail"]` como texto Unicode y decodificar el cuerpo UTF-8 al comprobar que no aparecen detalles internos. No se modificó código de producción.
+
+### Estado de CI y límites
+- En el SHA fallido, los jobs `studio-browser-e2e`, `container-image-build`, `postgres-migrations` y `qdrant-cloud-integration` terminaron con éxito.
+- `python-tests` falló por las dos aserciones descritas.
+- El commit de corrección dispara una nueva ejecución; **la corrección aún no está verificada por CI** hasta revisar el workflow del nuevo HEAD.
+- No se tocaron la rama `agent/opencode-vps`, VPS, producción, servicios, datos, secretos ni archivos ajenos a esta tarea.
+
+**Siguiente paso:** comprobar CI del nuevo HEAD. Si queda verde, continuar ARC-01 con auditoría de contratos entre rutas, esquemas y persistencia. Fase 1 sigue abierta y no se declara completada.
+
+## Endurecimiento de readiness OAuth — 2026-11-08
+
+**Rama:** `agent/chatgpt`  
+**HEAD al documentar:** `9bf4a36b4153ac308bd4f54049dd76a8f4d854c6`
+
+### Hallazgo y corrección
+
+- En `api/readiness.py`, el control `public_https_origin` solo comprobaba que `oauth_public_base_url` fuera truthy. Una URL HTTP, localhost, con credenciales embebidas, puerto inválido, query o fragmento podía aparecer como configuración HTTPS preparada.
+- Se añadió `_is_public_https_origin`, que exige esquema HTTPS, hostname, excluye localhost, credenciales, query y fragmento, y valida el puerto.
+- La preparación de autenticación ahora queda bloqueada cuando el origen OAuth no cumple ese contrato.
+- Se añadieron regresiones para HTTP, FTP, host vacío, userinfo, puerto inválido, query, fragmento y localhost.
+- Archivos: `api/readiness.py`, `tests/test_readiness.py`.
+- Commits: `3dee239822a168fd4b4e5d297c491e5111fe62e9` (fix) y `9bf4a36b4153ac308bd4f54049dd76a8f4d854c6` (tests).
+
+### Verificación y límites
+
+- Lectura posterior en GitHub confirma el contenido de ambos archivos y el HEAD indicado.
+- No se ejecutó pytest localmente en esta sesión.
+- CI del SHA `9bf4a36b4153ac308bd4f54049dd76a8f4d854c6`: workflow #`42483118977` pendiente al documentar; no se marca como aprobado.
+- No se modificaron `tests/test_capacity_http.py` ni archivos de OpenCode. El fallo API-02 anterior sigue pendiente de coordinación.
+- No se modificó configuración real, secretos, servicios, VPS ni datos.
+
+**Estado:** endurecimiento implementado; pruebas escritas, pendientes de CI. Fase 1 sigue abierta.
+
+### Ajuste de contrato de origen OAuth y análisis de CI — 2026-11-08
+
+- La revisión de `api/config.py` mostró que el contrato de configuración OAuth ya exige hostname público, dominio y ausencia de ruta, mientras el primer helper de readiness solo comprobaba HTTPS y excluía localhost.
+- Se alineó `_is_public_https_origin` con ese contrato: rechaza IPs, hostnames sin dominio público, sufijos locales y rutas distintas de raíz, además de los casos ya cubiertos.
+- Se añadieron regresiones para loopback IPv4, rutas de callback, dominios .local y hostnames sin punto.
+- Commits: `ab72c0552cc680986eb3737f963d6b2288eca6f6` (alineación) y `9b0954fc2666b684fd17ac6bb9d767ce108b0dda` (pruebas).
+- CI del commit anterior `d54fdff2f04c386d7a6654f0166bd7791a390035`: `studio-browser-e2e`, `qdrant-cloud-integration`, `postgres-migrations` y `container-image-build` pasaron; `python-tests` falló con 851 passed, 9 skipped y 2 fallos preexistentes en `tests/test_capacity_http.py`, por invocar `.json()` en `JSONResponse`.
+- El archivo de capacidad también contiene cambios históricos de OpenCode; permanece bloqueado para edición hasta coordinar. No se alteró.
+- CI de los commits `ab72c055...` y `9b0954f...` seguía ejecutándose/pendiente al documentar; no se declaran pruebas aprobadas.
+- Fase 1 sigue abierta; no se habilitó AUTH ni se tocó configuración de producción.
+
+### Contrato único de origen HTTPS público — 2026-11-08
+
+- La auditoría de ARC-01 detectó duplicación entre la validación de `OAUTH_PUBLIC_BASE_URL` en configuración y el control `public_https_origin` de readiness. Esa duplicación ya había permitido que ambas comprobaciones tuvieran reglas diferentes.
+- Se centralizó `is_public_https_origin` en `api/config.py`; tanto el validador Pydantic como readiness consumen ahora el mismo contrato.
+- La validación rechaza protocolos inseguros, IPs, dominios locales, userinfo, query/fragment, rutas, puertos inválidos y etiquetas DNS mal formadas (vacías, con guion inicial/final, caracteres no permitidos o longitud excesiva).
+- Se añadieron regresiones en `tests/test_config.py` para normalización del origen y hostnames DNS mal formados; se conserva la cobertura HTTP/readiness existente.
+- Commits: `bd85dd32dee45957660bf714f610a09803c17883` (helper y validador), `405b7776b39c06e50c3185c307a17430b6beb9f8` (readiness compartida), `86e4049acba1ad212dcae18f722d900d58614605` (pruebas).
+- No se tocó `tests/test_capacity_http.py`, que continúa pendiente de coordinación por solapamiento histórico con OpenCode.
+- CI del HEAD previo `fe08b700482ed9d02fbd870d8d84879d5c643274`: 3 jobs pasaron (Studio E2E, Qdrant Cloud, migraciones PostgreSQL e imagen; imagen y migraciones también finalizaron correctamente), pero `python-tests` falló con 2 errores de test en `tests/test_capacity_http.py` por invocar `.json()` directamente sobre `JSONResponse`. No son fallos de este cambio, que aún requiere su propio CI.
+- La matriz ARC-01 permanece Parcial; no se declara completada hasta revisar contratos restantes y evidencia del mismo SHA.
+
+### Contrato HTTPS compartido para Qdrant — 2026-11-08
+
+- La revisión de ARC-01 encontró que `QDRANT_URL` y `OAUTH_PUBLIC_BASE_URL` mantenían validaciones distintas para el mismo requisito de origen HTTPS público.
+- Se cambió el validador de `QDRANT_URL` para reutilizar `is_public_https_origin`, que ahora aplica a ambos orígenes: HTTPS, hostname DNS válido, sin IP/local, sin credenciales, sin ruta, query ni fragmento y con puerto válido.
+- Se añadieron regresiones para URLs Qdrant con HTTP, IP loopback, puerto inválido, ruta, hostname mal formado, query y userinfo, además de una URL HTTPS válida.
+- Archivos: `api/config.py`, `tests/test_config.py`.
+- Commits: `2ac236a99df2217c6442cf9971da718764597436` (validador Qdrant) y `d01a17d8bb390a6948436c4b3839b69fb838be22` (pruebas).
+- Esta tarea no cambia el cliente Qdrant, la colección, credenciales ni la conectividad; solo valida el origen configurado antes de su uso.
+- CI del HEAD previo `f3c227a47d25950d0754f3da542be61a338af942`: `python-tests` falló por dos errores conocidos en `tests/test_capacity_http.py` (uso de `.json()` sobre `JSONResponse`); los otros jobs observados finalizaron con éxito salvo PostgreSQL, que seguía en curso al consultar. Las nuevas pruebas de configuración necesitan CI propio.
+- `tests/test_capacity_http.py` permanece sin cambios hasta coordinar con OpenCode.
+- ARC-01 continúa Parcial; Fase 1 sigue abierta.
+
+
+### Revisión adicional de hostname público — 2026-11-08
+
+- La revisión del validador compartido encontró que eliminar todos los puntos finales con `rstrip(".")` hacía que un hostname mal formado como `example.com..` se normalizara y aceptara.
+- Se ajustó el parser para permitir como máximo un punto raíz DNS final y rechazar puntos finales repetidos.
+- Se añadieron regresiones para Qdrant y OAuth, conservando la aceptación/normalización de un único punto final.
+- Archivos: `api/config.py`, `tests/test_config.py`.
+- Implementación y pruebas publicadas en `agent/chatgpt`; ejecución local no disponible y CI del nuevo HEAD pendiente.
+- CI del HEAD anterior `641210a948d2e97a8807ac68918a9aba119785a1`: 855 aprobadas, 9 omitidas y 2 fallidas, ambas en `tests/test_capacity_http.py` por llamar `.json()` directamente sobre `JSONResponse`. Studio E2E, Qdrant, build de imagen y migraciones PostgreSQL pasaron.
+- `tests/test_capacity_http.py` permanece sin cambios hasta coordinar con OpenCode. No se modificó su rama, VPS, producción ni datos.
+
+
+### Validación estricta de puertos explícitos — 2026-11-08
+
+- Una revisión adicional del parser estándar `urlsplit` encontró que acepta `https://example.com:` y devuelve `port=None`, aunque la URL declara explícitamente un puerto vacío.
+- `is_public_https_origin` ahora rechaza autoridades cuyo host termina en `:` después de separar cualquier userinfo; conserva puertos válidos y sigue rechazando puertos no numéricos o fuera de rango.
+- Se añadieron regresiones para Qdrant y OAuth con puerto explícito vacío.
+- Archivos: `api/config.py`, `tests/test_config.py`.
+- Commits: `dfb4a6e39cc1ce49ebfb97a7b76c6fa21ad2bd0f` (corrección) y `9232a6f6b3e8bd533babf4ec70c35739e4227113` (regresiones).
+- No se ejecutó pytest local; CI del nuevo HEAD pendiente. CI del HEAD anterior `e83b71d7850ae171859f63e32b89060d01d1c218` terminó con 855 passed, 9 skipped y 2 fallos conocidos en `tests/test_capacity_http.py`; Studio E2E, Qdrant, migraciones y build de imagen pasaron.
+- No se modificó el archivo compartido `tests/test_capacity_http.py`; no se integró la rama de OpenCode ni se realizaron operaciones VPS/producción.
+
+
+### Consentimiento de registro con tipo estricto — 2026-11-08
+
+- La revisión del contrato de registro encontró que Pydantic podía convertir valores como `1`, `0` o cadenas (`"true"`) a booleanos. En un campo de aceptación legal, esa coerción no demuestra que el cliente haya enviado el booleano JSON explícito.
+- `RegisterRequest.terms_accepted` ahora usa validación estricta: solo acepta `true`/`false` JSON; el valor predeterminado continúa siendo `false`. La ruta existente sigue exigiendo `is True` antes de registrar.
+- Se añadieron regresiones para rechazar enteros y cadenas, y confirmar que el booleano `true` se acepta.
+- Archivos: `api/schemas.py`, `tests/test_auth_routes.py`.
+- Commits: `3f69d7330a85ad41bd5e01bf86c90ec5e9b9dad5` (contrato) y `20abc36b7988c7d7a5ded1251e53358d664f475b` (pruebas).
+- No se ejecutó pytest local; CI del HEAD vigente aún debe confirmarse. El workflow del HEAD anterior `1252a8e4c50d2aa0c99c8db8a1e29f2af8416d37` tenía Studio E2E, Qdrant Cloud y build de imagen aprobados; Python y migraciones PostgreSQL seguían ejecutándose al consultar.
+- No se modificaron archivos con solapamiento observado con `agent/opencode-vps`, ni se tocó VPS, producción, datos o secretos. La Fase 1 permanece abierta.
