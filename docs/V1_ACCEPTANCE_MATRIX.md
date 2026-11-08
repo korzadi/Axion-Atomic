@@ -283,3 +283,9 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - `install_vps.sh --check`: falla segura de nuevo (exit 1, puerto 8070 ocupado, stack intacto). `--prepare/--check/--deploy/--upgrade-frontend` en staging siguen pendientes de autorización interactiva sobre el stack.
 - `OPS-03`: el restore aislado conserva su evidencia del 2026-11-08 (sin repetirla sin cambios en migraciones/scripts); upgrade/rollback sin ensayar en stack real.
 - No se desplegó, reinició, construyó ni reconfiguró nada; `main` intacto. `REL-01` sigue bloqueada.
+
+## Fase 11 — integridad de backups y validación de configuración — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Los tres backups `pre-frontend-upgrade-*.dump` verificados con `pg_restore --list`: 274 objetos cada uno (lectura, sin restaurar). El dump `pre-migration` de 834 B/0 objetos es coherente con un snapshot pre-migración de una base vacía; no es un fallo.
+- `docker compose config --quiet` sobre el stack real: validación OK (exit 0), sin imprimir `.env`.
+- `DB-02` conserva su evidencia de restore aislado del 2026-11-08; `OPS-03` pendiente de ensayo en staging/autorización interactiva para `--deploy/--upgrade-frontend`. `REL-01` sigue bloqueada.

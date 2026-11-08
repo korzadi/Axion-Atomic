@@ -712,3 +712,9 @@ El propietario autorizó el alcance de la Fase 11. Se ejecutaron las verificacio
 - La restauración de backup en entorno desechable (DB-02) ya tiene evidencia válida (2026-11-08, migraciones 001→023 + doble ejecución del migrador; contenedor eliminado). No se repite sin cambios en migraciones o scripts de restauración.
 - `inspect_vps_state.sh` de OPS-02 pasa a **ejecutado en el host** (evidencia reproducible); sigue pendiente la revisión operativa por parte del operador como control previo a cualquier actualización.
 - No se desplegó, reinició, construyó ni reconfiguró nada; PostgreSQL, Redis, API y frontend siguen como estaban.
+
+## Fase 11 — verificación de backups y configuración (misma sesión autorizada)
+
+- Integridad de dumps (lectura, `pg_restore --list`, sin restauración): los tres `pre-frontend-upgrade-*.dump` (2026-11-07/08) son válidos con 274 objetos cada uno y contentura idéntica. `pre-migration-20261107T204351Z.dump` (834 B, 0 objetos, formato CUSTOM, PostgreSQL 16.15) corresponde a un snapshot previo a la primera migración sobre base vacía: coherente, no un dump corrupto.
+- `docker compose --project-name axyron-atomic -f compose.yaml --env-file .env config --quiet` → exit 0 (la configuración valida; no se imprimieron valores de `.env`).
+- No se ejecutó restauración, `--deploy` ni `--upgrade-frontend`; el stack en vivo permanece sin cambios.
