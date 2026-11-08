@@ -16,7 +16,7 @@ from decimal import Decimal
 
 from sqlalchemy import create_engine, text
 
-from api.payment_manager import create_payment_order, get_payment_order
+from api.payment_manager import create_payment_order, get_payment_order, expire_overdue_orders
 from api.qvapay_settlement import (
     InvoiceOrderStateError,
     InvoicePersistenceError,
@@ -197,3 +197,57 @@ def test_wrong_comment_wrong_sats_or_wrong_destination_never_confirms():
         results = reconcile_lightning_payments(engine=engine, payments=[payment], recipient=ADDRESS)
         assert next(r for r in results if r.reference == reference).outcome == "unmatched"
     assert get_payment_order(engine=engine, user_id=user_id, order_id=order.order_id).status == "pending"
+
+
+def _expire_order_in_past(order_id):
+    with engine.begin() as conn:
+        conn.execute(text("""
+            UPDATE payment_orders
+               SET expires_at = now() - interval '1 hour'
+             WHERE id = CAST(:id AS UUID)
+        """), {"id": order_id})
+
+
+def test_expire_overdue_orders_closes_order_and_invoice_idempotently():
+    user_id = _user()
+    order = _order(user_id)
+    invoice = _invoice(order.order_id, reference=new_payment_reference())
+    _expire_order_in_past(order.order_id)
+    assert expire_overdue_orders(engine=engine) == 1
+    assert expire_overdue_orders(engine=engine) == 0
+    assert get_payment_order(engine=engine, user_id=user_id, order_id=order.order_id).status == "expired"
+    with engine.connect() as conn:
+        invoice_status = conn.execute(text(
+            "SELECT status FROM payment_invoices WHERE id=CAST(:id AS UUID)"
+        ), {"id": invoice.invoice_id}).scalar_one()
+        events = conn.execute(text(
+            "SELECT count(*) FROM payment_order_events WHERE order_id=CAST(:id AS UUID) AND event_type='expired'"
+        ), {"id": order.order_id}).scalar_one()
+    assert invoice_status == "expired"
+    assert events == 1
+
+
+def test_expire_overdue_orders_spares_fresh_orders():
+    user_id = _user()
+    order = _order(user_id)
+    assert expire_overdue_orders(engine=engine) == 0
+    assert get_payment_order(engine=engine, user_id=user_id, order_id=order.order_id).status == "pending"
+
+
+def test_get_payment_order_lazily_expires_overdue_order_and_invoice():
+    user_id = _user()
+    order = _order(user_id)
+    invoice = _invoice(order.order_id, reference=new_payment_reference())
+    _expire_order_in_past(order.order_id)
+    assert get_payment_order(engine=engine, user_id=user_id, order_id=order.order_id).status == "expired"
+    with engine.connect() as conn:
+        invoice_status = conn.execute(text(
+            "SELECT status FROM payment_invoices WHERE id=CAST(:id AS UUID)"
+        ), {"id": invoice.invoice_id}).scalar_one()
+    assert invoice_status == "expired"
+
+
+def test_expire_overdue_orders_rejects_invalid_limit():
+    import pytest
+    with pytest.raises(Exception):
+        expire_overdue_orders(engine=engine, limit=0)

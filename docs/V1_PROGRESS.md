@@ -520,5 +520,10 @@ API-02 queda con cobertura de regresión ampliada, **pendiente de ejecución CI*
 - CI del nuevo HEAD (`08b6e65`): pendiente al redactar; debe confirmarse antes de declarar QA-01/QA-02 «Verificadas».
 - PostgreSQL local de esta sesión omitido; verificado en instancia desechable y en el job CI.
 
+### Fase 10 — expiración automática de órdenes y invoices (continuación)
+- `api/payment_manager.py`: `_expire_one` y `expire_overdue_orders` (pendientes vencidas → `expired`, cierre de invoice abierta, evento `expired` idempotente, `FOR UPDATE SKIP LOCKED`); `get_payment_order` expira de forma perezosa la orden solicitada si venció.
+- 4 pruebas PostgreSQL nuevas en `tests/test_qvapay_settlement_postgres.py` (expiración + cierre de invoice idempotente, órdenes frescas respetadas, expiración perezosa vía GET, validación de `limit`).
+- Verificado en instancia desechable: migraciones 001→023 y 54 pruebas PostgreSQL en verde; contenedor eliminado.
+
 ### Siguiente tarea
 Confirmar CI del SHA publicado; después continuar Fase 11 (preflight/staging) y Fase 10 (rutas de checkout condicionadas a catálogo/precios aprobados).

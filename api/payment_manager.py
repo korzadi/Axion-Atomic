@@ -97,19 +97,68 @@ def create_payment_order(
     )
 
 
+def _expire_one(conn, order_id: str, now: datetime) -> bool:
+    """Marca una orden pendiente vencida como expirada y cierra su invoice abierta."""
+    result = conn.execute(text("""
+        UPDATE payment_orders SET status='expired', updated_at=:now
+        WHERE id=CAST(:id AS UUID) AND status='pending'
+    """), {"id": order_id, "now": now})
+    if result.rowcount != 1:
+        return False
+    conn.execute(text("""
+        UPDATE payment_invoices SET status='expired', updated_at=:now
+        WHERE order_id=CAST(:id AS UUID) AND status='created'
+    """), {"id": order_id, "now": now})
+    conn.execute(text("""
+        INSERT INTO payment_order_events
+            (id, order_id, event_type, event_key, details, actor)
+        VALUES (CAST(:id AS UUID), CAST(:order_id AS UUID), 'expired',
+                :event_key, '{"reason":"order_expired"}'::jsonb, 'payment-expiry')
+        ON CONFLICT (event_key) DO NOTHING
+    """), {
+        "id": str(uuid.uuid4()), "order_id": order_id,
+        "event_key": f"order-expired:{order_id}",
+    })
+    return True
+
+
+def expire_overdue_orders(*, engine: Engine, now: datetime | None = None, limit: int = 100) -> int:
+    """Expira órdenes pendientes vencidas y cierra sus invoices abiertas. Idempotente."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise PaymentOrderError("limit debe ser un entero positivo")
+    instant = _utc(now or datetime.now(timezone.utc), "now")
+    expired = 0
+    with engine.begin() as conn:
+        rows = conn.execute(text("""
+            SELECT CAST(id AS TEXT) AS id FROM payment_orders
+            WHERE status='pending' AND expires_at <= :now
+            ORDER BY expires_at LIMIT :limit
+            FOR UPDATE SKIP LOCKED
+        """), {"now": instant, "limit": limit}).scalars().all()
+        for order_id in rows:
+            if _expire_one(conn, order_id, instant):
+                expired += 1
+    return expired
+
+
 def get_payment_order(*, engine: Engine, user_id: str, order_id: str) -> PaymentOrder:
     try:
         order_uuid = str(uuid.UUID(order_id))
     except (ValueError, TypeError, AttributeError) as exc:
         raise PaymentOrderNotFound("Orden inexistente") from exc
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         row = conn.execute(text("""
             SELECT id, user_id, product_code, amount_minor, currency, credits,
                    status, expires_at
             FROM payment_orders WHERE id=CAST(:id AS UUID) AND user_id=:user_id
+            FOR UPDATE
         """), {"id": order_uuid, "user_id": user_id}).mappings().first()
-    if row is None:
-        raise PaymentOrderNotFound("Orden inexistente")
+        if row is None:
+            raise PaymentOrderNotFound("Orden inexistente")
+        instant = datetime.now(timezone.utc)
+        if row["status"] == "pending" and row["expires_at"] <= instant:
+            _expire_one(conn, order_uuid, instant)
+            row = {**row, "status": "expired"}
     return PaymentOrder(
         str(row["id"]), row["user_id"], row["product_code"], row["amount_minor"],
         row["currency"].strip(), row["credits"], row["status"], row["expires_at"],
