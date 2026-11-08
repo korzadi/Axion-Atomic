@@ -50,6 +50,13 @@ def parse_chat_response(data: dict[str, Any], requested_model: str) -> Inference
     returned_model = data.get("model")
     if not isinstance(returned_model, str) or not returned_model:
         returned_model = None
+    # Ollama puede devolver la etiqueta explícita :latest aunque la solicitud
+    # use el alias sin etiqueta. Normalizamos solo esa equivalencia exacta;
+    # cualquier otro modelo conserva su identidad y será rechazado.
+    if returned_model == f"{requested_model}:latest" and ":" not in requested_model:
+        returned_model = requested_model
+    elif requested_model == f"{returned_model}:latest" and ":" not in returned_model:
+        returned_model = requested_model
     done = data.get("done") if isinstance(data.get("done"), bool) else None
     return InferenceResult(
         content=content, requested_model=requested_model, returned_model=returned_model,
