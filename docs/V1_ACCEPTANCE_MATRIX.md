@@ -201,7 +201,7 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 ## Auditoría automática de accesibilidad inicial — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
 
 - Nuevo `tests/e2e/a11y-scan.mjs` (axe-core 4.10.2, WCAG 2 A/AA): escanea la landing (`/`) y el portal administrativo (`/admin-test`) servidos estáticamente. Resultado: **0 violaciones** en la carga inicial de ambas páginas.
-- El script es una herramienta de diagnóstico local; requiere `npm install --no-save playwright@1.58.2 axe-core@4.10.2`. Alcance escaneado: landing, login administrativo y vista autenticada de gestión (usuarios/roles/facturación con backend simulado) — 0 violaciones WCAG 2 A/AA. No cubre Studio autenticado, backend real ni navegación completa por teclado.
+- El script es una herramienta de diagnóstico local; requiere `npm install --no-save playwright@1.58.2 axe-core@4.10.2`. Alcance escaneado: landing, Studio autenticado (`#app/inicio`, `#app/facturacion`), login administrativo y vista autenticada de gestión — 0 violaciones WCAG 2 A/AA. No cubre backend real ni navegación completa por teclado.
 - STU-04 queda como **parcial**; no se declara cubierta la auditoría completa.
 - No se modificó código de producción ni comportamiento del frontend.
 

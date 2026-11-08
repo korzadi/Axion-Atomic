@@ -620,3 +620,9 @@ Confirmar CI del SHA publicado; después continuar Fase 11 (preflight/staging) y
 - `scripts/install_vps.sh --check` ejecutado en el host real: falla de forma segura ante stack existente (`Puerto 8070 ocupado; no se detendrá el servicio existente.`, exit 1); sin cambios ni secretos impresos.
 - `test_vps_installer_contract.py`: 23 passed. OPS-01/02/03 actualizados en la matriz.
 - Fase 11 pasa a 75%; pendiente: `--prepare/--check/--deploy` y rollback en staging, inventario real (operador), upgrade aislado. CI `42491118328` sobre `87d3b9d`: los cinco jobs en verde (studio-browser-e2e, container-image-build, postgres-migrations, python-tests, qdrant-cloud-integration).
+
+## Checkpoint Fase 12 — accesibilidad Studio verificada (2026-11-08, `agent/opencode-vps`)
+
+- `tests/e2e/a11y-scan.mjs` amplía el escaneo axe WCAG 2 A/AA a las vistas autenticadas del Studio (`#app/inicio`, `#app/facturacion`) con backend simulado: **0 violaciones** también en ambas.
+- STU-04 queda auditada a nivel automático inicial (landing, Studio, admin login y administración); siguen sin verificar navegación completa por teclado y lectores de pantalla reales, así como el backend en staging.
+- CI de la integración actualizada a `f98ead9`: 5/5 en verde. PR #7 pendiente de revisión del propietario.
