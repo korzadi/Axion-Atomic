@@ -105,3 +105,13 @@ La futura acreditación debe validar desde backend la identidad de la transacci�
 - Conclusión técnica: con solo Lightning Address + LNURL (sin token de cuenta), se pueden crear invoices pero **no se puede confirmar el pago** de forma programática en QvaPay. La conciliación requiere obligatoriamente el token de cuenta (consultas autenticadas `GET /user/lightning-address`/`GET /coins`) o un mecanismo oficial de notificación (el propietario indicó que no existe webhook Lightning de QvaPay).
 - La invoice creada expirará sin pagar; no se ejecutó ningún cobro ni movimiento de fondos.
 - Checkout permanece BLOQUEADO en la práctica hasta que el propietario obtenga uno de: token de cuenta QvaPay, mecanismo oficial de verificación server-to-server, o decisión comercial de no cobrar aún.
+
+## Verificación del contrato en vivo con el token real — 2026-11-08
+
+El propietario proporcionó el token de cuenta QvaPay (custodiado en `.env` `QVAPAY_USER_TOKEN`; nunca se muestra ni se commitea). Verificación con el cliente propio (`api/qvapay_lightning.QvaPayLightningClient`), solo lecturas, sin importes ni datos de pago impresos:
+
+- `GET https://api.qvapay.com/user/lightning-address` (Bearer): **OK** — dirección visible; 0 pagos en página 1.
+- `GET https://api.qvapay.com/coins`: **OK** (precio BTC/USD parseado).
+- `GET https://qvpay.me/.well-known/lnurlp/axyronatomic` vía cliente: **OK** (payRequest válido).
+
+Conclusión: el token funciona contra la API real y la integración técnicamente está lista de punta a punta para el flujo Lightning (crear invoice → conciliación autenticada paginada). Continúa bloqueado por la decisión comercial: checkout y cobros requieren cerrar la lista de release, precios/catálogo aprobados y autorización explícita del propietario. `QVAPAY_ENABLED=false` permanece; el reconcile admin queda funcional al activarlo el propietario.
