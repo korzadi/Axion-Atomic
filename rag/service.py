@@ -1,6 +1,9 @@
 import asyncio
 import logging
 import threading
+import inspect
+from contextlib import asynccontextmanager
+from functools import wraps
 import time
 import uuid
 
@@ -51,6 +54,47 @@ def validate_manual_ingest(text: str, source: str, project_id: str) -> None:
         )
 
 
+
+@asynccontextmanager
+async def _project_mutation_lock(project_id: str):
+    """Comparte la misma clave advisory que RepoIndexer entre todas las rutas RAG."""
+    # Importación diferida para evitar ciclos durante la carga de api.main.
+    from api.database import engine
+    from agent.sqlalchemy_meta import SqlAlchemyMetaStore
+
+    async with SqlAlchemyMetaStore(engine).project_lock(project_id):
+        yield
+
+
+def _serialize_project_mutation(preflight):
+    """Serializa escrituras manuales por proyecto, también entre workers API."""
+    def decorate(function):
+        signature = inspect.signature(function)
+
+        @wraps(function)
+        async def wrapped(*args, **kwargs):
+            bound = signature.bind(*args, **kwargs)
+            preflight(**bound.arguments)
+            project_id = bound.arguments["project_id"]
+            async with _project_mutation_lock(project_id):
+                return await function(*args, **kwargs)
+
+        return wrapped
+    return decorate
+
+
+def _preflight_ingest(*, text, source, project_id, **_):
+    validate_manual_ingest(text, source, project_id)
+
+
+def _preflight_delete(*, source_id, project_id, **_):
+    _project_filter(project_id)
+    try:
+        uuid.UUID(source_id)
+    except (ValueError, TypeError, AttributeError):
+        raise ValueError("source_id debe ser un UUID válido") from None
+
+
 def ensure_collection():
     """Comprueba/crea la colección con caché breve y sincronización entre threads.
 
@@ -97,8 +141,8 @@ def _project_filter(project_id: str):
     )
 
 
+@_serialize_project_mutation(_preflight_ingest)
 async def ingest_text(text, source, project_id: str, source_id: str | None = None):
-    validate_manual_ingest(text, source, project_id)  # Antes de Qdrant y del embedder.
     try:
         source_id = str(uuid.UUID(source_id)) if source_id else str(uuid.uuid4())
     except (ValueError, TypeError, AttributeError):
@@ -131,9 +175,9 @@ async def ingest_text(text, source, project_id: str, source_id: str | None = Non
     return len(points)
 
 
+@_serialize_project_mutation(_preflight_ingest)
 async def replace_source(source_id: str, text: str, source: str, project_id: str) -> int:
     """Reindexa una fuente conservando su ID; publica la nueva versión antes de retirar la anterior."""
-    validate_manual_ingest(text, source, project_id)
     try:
         normalized_source_id = str(uuid.UUID(source_id))
     except (ValueError, TypeError, AttributeError):
@@ -219,13 +263,11 @@ async def replace_source(source_id: str, text: str, source: str, project_id: str
     return len(new_points)
 
 
+@_serialize_project_mutation(_preflight_delete)
 async def delete_source(source_id: str, project_id: str) -> None:
     """Elimina todos los fragmentos de una fuente, siempre dentro del proyecto indicado."""
     project_filter = _project_filter(project_id)
-    try:
-        normalized_source_id = str(uuid.UUID(source_id))
-    except (ValueError, TypeError, AttributeError):
-        raise ValueError("source_id debe ser un UUID válido") from None
+    normalized_source_id = str(uuid.UUID(source_id))
     source_filter = models.Filter(
         must=project_filter.must + [
             models.FieldCondition(key="source_id", match=models.MatchValue(value=normalized_source_id))
