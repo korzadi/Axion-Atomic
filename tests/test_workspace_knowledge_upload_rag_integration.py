@@ -70,5 +70,38 @@ class WorkspaceKnowledgeUploadRagIntegrationTests(unittest.IsolatedAsyncioTestCa
         self.assertNotIn("Guía privada de despliegue AXION", isolated)
 
 
+    async def test_retrieval_never_mixes_models_with_equal_dimensions(self):
+        await service.ingest_text("Contenido del modelo A.", "a.txt", "project-models")
+        model_a = service.settings.embed_model
+        service.settings.embed_model = model_a + "-alternate"
+        try:
+            await service.ingest_text("Contenido del modelo B.", "b.txt", "project-models")
+            retrieved_b = await service.retrieve("consulta", "project-models")
+            self.assertIn("Contenido del modelo B.", retrieved_b)
+            self.assertNotIn("Contenido del modelo A.", retrieved_b)
+            self.assertTrue(all(
+                point.payload.get("embedding_model") == service.settings.embed_model
+                for point in self.client.points.values()
+                if point.payload.get("project_id") == "project-models"
+                and point.payload.get("text") in retrieved_b
+            ))
+        finally:
+            service.settings.embed_model = model_a
+
+    async def test_legacy_points_block_retrieval_instead_of_being_silently_hidden(self):
+        from qdrant_client import models
+        await service.ensure_collection()
+        self.client.upsert(
+            collection_name=self.collection,
+            points=[models.PointStruct(
+                id="legacy-point",
+                vector=[1.0] + [0.0] * (service.settings.embed_dimension - 1),
+                payload={"project_id": "project-legacy", "path": "legacy.txt", "text": "old context"},
+            )],
+        )
+        with self.assertRaises(service.EmbeddingIdentityMigrationRequired):
+            await service.retrieve("consulta", "project-legacy")
+
+
 if __name__ == "__main__":
     unittest.main()
