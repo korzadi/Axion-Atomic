@@ -25,6 +25,7 @@ def auth_readiness() -> dict:
     billing_enabled = bool(getattr(settings, "billing_enforcement_enabled", False))
     billing = {
         "mode": "ledger" if billing_enabled else "shadow",
+        "chat_execution": "not_integrated",
         "result_encryption_key": "not_required",
     }
     if billing_enabled:
@@ -35,9 +36,15 @@ def auth_readiness() -> dict:
             billing["result_encryption_key"] = "missing"
 
     auth_ready = all(checks.values())
+    # /v1/chat/completions todavía usa la ruta legacy y no invoca la
+    # orquestación durable. No declarar listo el modo ledger hasta conectar
+    # identidad autenticada, autorización de proyecto, preflight y settlement.
     billing_ready = (
         not billing_enabled
-        or billing["result_encryption_key"] == "configured"
+        or (
+            billing["result_encryption_key"] == "configured"
+            and billing["chat_execution"] == "integrated"
+        )
     )
     ready = auth_ready and billing_ready
     return {
