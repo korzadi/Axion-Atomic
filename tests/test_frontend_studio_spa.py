@@ -138,6 +138,10 @@ def test_admin_portal_is_separate_and_host_routed():
     assert "billing.manage" in admin_js
     assert '/admin/billing/executions/recover?limit=25&reason=' in admin_js
     assert '/admin/billing/reservations/reconcile-no-execution' in admin_js
+    assert "users.manage" in admin_js
+    assert 'renderUserManagement()' in admin_js
+    assert '/roles' in admin_js
+    assert '/status' in admin_js
     assert "de solo lectura" not in admin_js
 
 

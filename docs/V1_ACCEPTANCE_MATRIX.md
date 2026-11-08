@@ -128,3 +128,12 @@ El endpoint `/health` no sustituye ninguno de estos niveles.
 - Verificación real: `compileall` OK; `pytest -q` → **855 passed, 9 skipped**; `check_frontend_js.py` OK; `git diff --check` limpio.
 - QA-01 pasa a **Parcial (local aprobada)**. QA-02 (browser, Docker, PostgreSQL y Qdrant) continúa **no confirmada para este HEAD**; REL-01 sigue bloqueada. No se declara la V1.0 liberada.
 - No se ejecutaron migraciones reales, pagos, despliegues, reinicios, builds ni cambios de infraestructura.
+
+## Revisión incremental de administración — 8 de noviembre de 2026 (rama `agent/opencode-vps`)
+
+- Se añadieron endpoints auditados para conceder/revocar roles globales y para activar/deshabilitar cuentas.
+- Toda mutación exige `users.manage`, CSRF y motivo; la asignación y el evento de auditoría se escriben en la misma transacción.
+- Revocar el último `platform_admin` activo se rechaza. Deshabilitar una cuenta revoca sus sesiones; activar exige correo verificado; no se permite autodeshabilitarse.
+- El portal administrativo incorpora los controles solo cuando el backend informa `users.manage`.
+- Verificación local: 874 pruebas pasan y 9 se omiten (PostgreSQL). Las rutas nuevas aún no se probaron contra PostgreSQL real ni con E2E de navegador, y CI sigue pendiente para este HEAD.
+- ADM-01 permanece **Parcial**: backend y pruebas unitarias implementados; E2E browser y validación PostgreSQL pendientes.

@@ -39,6 +39,180 @@ async def _admin_csrf(
     return user
 
 
+class RoleChangeRequest(BaseModel):
+    role: str = Field(min_length=1, max_length=64)
+    reason: str = Field(min_length=8, max_length=1000)
+
+
+class UserStatusChangeRequest(BaseModel):
+    status: str = Field(min_length=1, max_length=32)
+    reason: str = Field(min_length=8, max_length=1000)
+
+
+def _require_known_role(role: str) -> str:
+    if role not in ROLE_PERMISSIONS:
+        raise HTTPException(status_code=422, detail="Rol administrativo no válido")
+    return role
+
+
+def _audit_global_event(conn, *, actor_id: str, target_user_id: str | None,
+                        action: str, role: str | None, reason: str) -> None:
+    conn.execute(
+        text("""
+            INSERT INTO global_admin_audit_events
+                (id, actor_user_id, target_user_id, action, role, reason)
+            VALUES
+                (CAST(:id AS UUID), :actor_user_id, :target_user_id,
+                 :action, :role, :reason)
+        """),
+        {
+            "id": str(uuid.uuid4()),
+            "actor_user_id": actor_id,
+            "target_user_id": target_user_id,
+            "action": action,
+            "role": role,
+            "reason": reason,
+        },
+    )
+
+
+def _grant_global_role(target_user_id: str, role: str, reason: str, actor_id: str) -> dict:
+    with engine.begin() as conn:
+        target = conn.execute(
+            text("SELECT 1 FROM users WHERE id=:id"), {"id": target_user_id}
+        ).first()
+        if target is None:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        result = conn.execute(
+            text("""
+                INSERT INTO global_role_assignments
+                    (id, user_id, role, granted_by, grant_reason)
+                VALUES
+                    (CAST(:id AS UUID), :user_id, :role, :granted_by, :reason)
+                ON CONFLICT (user_id, role) WHERE revoked_at IS NULL DO NOTHING
+            """),
+            {
+                "id": str(uuid.uuid4()),
+                "user_id": target_user_id,
+                "role": role,
+                "granted_by": actor_id,
+                "reason": reason,
+            },
+        )
+        if result.rowcount != 1:
+            raise HTTPException(
+                status_code=409,
+                detail="El usuario ya tiene ese rol administrativo activo",
+            )
+        _audit_global_event(
+            conn, actor_id=actor_id, target_user_id=target_user_id,
+            action="role.granted", role=role, reason=reason,
+        )
+    return {"user_id": target_user_id, "role": role, "status": "granted"}
+
+
+def _revoke_global_role(target_user_id: str, role: str, reason: str, actor_id: str) -> dict:
+    with engine.begin() as conn:
+        result = conn.execute(
+            text("""
+                UPDATE global_role_assignments
+                SET revoked_at=now(), revoked_by=:revoked_by, revoke_reason=:reason
+                WHERE user_id=:user_id AND role=:role AND revoked_at IS NULL
+                RETURNING id
+            """),
+            {
+                "user_id": target_user_id,
+                "role": role,
+                "revoked_by": actor_id,
+                "reason": reason,
+            },
+        ).first()
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail="El usuario no tiene ese rol administrativo activo",
+            )
+        if role == "platform_admin":
+            remaining = conn.execute(
+                text("""
+                    SELECT count(*) FROM global_role_assignments a
+                    JOIN users u ON u.id = a.user_id
+                    WHERE a.role='platform_admin' AND a.revoked_at IS NULL
+                      AND u.status='active'
+                """)
+            ).scalar_one()
+            if remaining == 0:
+                raise HTTPException(
+                    status_code=409,
+                    detail="No se puede revocar el último platform_admin activo",
+                )
+        _audit_global_event(
+            conn, actor_id=actor_id, target_user_id=target_user_id,
+            action="role.revoked", role=role, reason=reason,
+        )
+    return {"user_id": target_user_id, "role": role, "status": "revoked"}
+
+
+def _change_user_status(target_user_id: str, status: str, reason: str, actor_id: str) -> dict:
+    with engine.begin() as conn:
+        target = conn.execute(
+            text("SELECT status, email_verified_at FROM users WHERE id=:id FOR UPDATE"),
+            {"id": target_user_id},
+        ).mappings().first()
+        if target is None:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        if status == "active" and target["email_verified_at"] is None:
+            raise HTTPException(
+                status_code=409,
+                detail="No se puede activar una cuenta sin correo verificado",
+            )
+        if status == "disabled" and target_user_id == actor_id:
+            raise HTTPException(
+                status_code=409,
+                detail="No puedes deshabilitar tu propia cuenta administrativa",
+            )
+        if status == "disabled" and target["status"] == "active":
+            remaining = conn.execute(
+                text("""
+                    SELECT count(*) FROM global_role_assignments a
+                    JOIN users u ON u.id = a.user_id
+                    WHERE a.role='platform_admin' AND a.revoked_at IS NULL
+                      AND u.status='active' AND a.user_id <> :target
+                """),
+                {"target": target_user_id},
+            ).scalar_one()
+            has_platform_role = conn.execute(
+                text("""
+                    SELECT 1 FROM global_role_assignments
+                    WHERE user_id=:target AND role='platform_admin' AND revoked_at IS NULL
+                """),
+                {"target": target_user_id},
+            ).first()
+            if has_platform_role is not None and remaining == 0:
+                raise HTTPException(
+                    status_code=409,
+                    detail="No se puede deshabilitar el último platform_admin activo",
+                )
+        conn.execute(
+            text("UPDATE users SET status=:status, updated_at=now() WHERE id=:id"),
+            {"id": target_user_id, "status": status},
+        )
+        if status == "disabled":
+            conn.execute(
+                text("""
+                    UPDATE user_sessions SET revoked_at=now()
+                    WHERE user_id=:id AND revoked_at IS NULL
+                """),
+                {"id": target_user_id},
+            )
+        _audit_global_event(
+            conn, actor_id=actor_id, target_user_id=target_user_id,
+            action=f"user.{status}", role=None, reason=reason,
+        )
+    return {"user_id": target_user_id, "status": status}
+
+
+
 @router.get("/access/me")
 async def my_admin_access(user=Depends(authenticated_admin_user)):
     roles = global_roles_for_user(user["id"])
@@ -150,6 +324,94 @@ async def list_admin_users(
             "has_more": offset + len(rows) < total,
         },
     }
+
+
+@router.get("/users/{user_id}/roles")
+async def admin_user_roles(
+    user_id: str,
+    _user=Depends(require_global_permission("users.read")),
+):
+    """Devuelve asignaciones globales activas e históricas de una cuenta."""
+    with engine.connect() as conn:
+        exists = conn.execute(
+            text("SELECT 1 FROM users WHERE id=:id"), {"id": user_id}
+        ).first()
+        if exists is None:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        rows = conn.execute(
+            text("""
+                SELECT role, granted_by, grant_reason, granted_at,
+                       revoked_by, revoke_reason, revoked_at
+                FROM global_role_assignments
+                WHERE user_id=:id
+                ORDER BY granted_at DESC, id DESC
+            """),
+            {"id": user_id},
+        ).mappings().all()
+    return {
+        "user_id": user_id,
+        "assignments": [
+            {
+                "role": row["role"],
+                "granted_by": row["granted_by"],
+                "grant_reason": row["grant_reason"],
+                "granted_at": row["granted_at"],
+                "revoked_by": row["revoked_by"],
+                "revoke_reason": row["revoke_reason"],
+                "revoked_at": row["revoked_at"],
+                "active": row["revoked_at"] is None,
+            }
+            for row in rows
+        ],
+    }
+
+
+@router.post("/users/{user_id}/roles")
+async def admin_grant_user_role(
+    user_id: str,
+    body: RoleChangeRequest,
+    user=Depends(require_global_permission("users.manage")),
+    _csrf_user=Depends(_admin_csrf),
+):
+    """Concede un rol global con motivo obligatorio y auditoría atómica."""
+    role = _require_known_role(body.role)
+    return await run_in_threadpool(
+        _grant_global_role, user_id, role, body.reason, user["id"]
+    )
+
+
+@router.delete("/users/{user_id}/roles/{role}")
+async def admin_revoke_user_role(
+    user_id: str,
+    role: str,
+    body: RoleChangeRequest,
+    user=Depends(require_global_permission("users.manage")),
+    _csrf_user=Depends(_admin_csrf),
+):
+    """Revoca un rol global activo, impidiendo dejar la plataforma sin admin."""
+    normalized = _require_known_role(role)
+    if body.role != normalized:
+        raise HTTPException(
+            status_code=422, detail="El rol del cuerpo no coincide con la ruta"
+        )
+    return await run_in_threadpool(
+        _revoke_global_role, user_id, normalized, body.reason, user["id"]
+    )
+
+
+@router.post("/users/{user_id}/status")
+async def admin_change_user_status(
+    user_id: str,
+    body: UserStatusChangeRequest,
+    user=Depends(require_global_permission("users.manage")),
+    _csrf_user=Depends(_admin_csrf),
+):
+    """Activa o deshabilita una cuenta; al deshabilitar revoca sus sesiones."""
+    if body.status not in ("active", "disabled"):
+        raise HTTPException(status_code=422, detail="Estado de usuario no válido")
+    return await run_in_threadpool(
+        _change_user_status, user_id, body.status, body.reason, user["id"]
+    )
 
 
 @router.get("/billing/overview")

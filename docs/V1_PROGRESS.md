@@ -229,3 +229,23 @@ Los porcentajes heredados de la tabla anterior corresponden al orden anterior de
 
 ### Siguiente tarea
 Continuar con Fase 11 (instalación y documentación): revisar preflight del instalador, validación de configuración y procedimiento de actualización/restauración reproducible sin tocar producción.
+
+## Checkpoint Fase 8 — gestión administrativa de usuarios y roles (2026-11-08)
+
+### Implementado
+- `GET /admin/users/{user_id}/roles`: consulta asignaciones globales activas e históricas con permiso `users.read`.
+- `POST /admin/users/{user_id}/roles`: concede un rol global (`platform_admin`, `billing_admin`, `billing_support`, `billing_readonly`) con motivo obligatorio, permiso `users.manage`, CSRF y auditoría en la misma transacción.
+- `DELETE /admin/users/{user_id}/roles/{role}`: revoca un rol activo con motivo obligatorio y auditoría. Impide dejar la plataforma sin ningún `platform_admin` activo.
+- `POST /admin/users/{user_id}/status`: activa o deshabilita cuentas con permiso `users.manage`. Deshabilitar revoca todas las sesiones del usuario y queda auditado; activar exige correo verificado y nunca se permite deshabilitar la propia cuenta.
+- Portal `frontend/admin.js`: sección de gestión visible solo con `users.manage`, con concesión, revocación, consulta de roles y cambio de estado, confirmaciones y resultado accesible (`aria-live`).
+- `tests/test_admin_user_management.py`: 13 pruebas de autorización, validación, conflictos, auditoría, revocación de sesiones y no activación de cuentas sin verificar.
+
+### Verificación
+- `python3 -m pytest -q` — **874 passed, 9 skipped** (los 9 son PostgreSQL); no cubre las rutas nuevas contra PostgreSQL real.
+- `python3 scripts/check_frontend_js.py` — sintaxis válida.
+- CI del HEAD: pendiente. Browser E2E de la nueva sección: pendiente.
+
+### Pendiente de Fase 8
+- Probar las mutaciones contra PostgreSQL real y la matriz HTTP completa con sesiones/CSRF reales.
+- Añadir E2E de navegador para la nueva gestión.
+- Revisar si se requieren más operaciones administrativas (catálogo, tarifas) antes de cerrar la fase.
