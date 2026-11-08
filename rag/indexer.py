@@ -102,9 +102,15 @@ class RepoIndexer:
                 seen.add(rel)                             # un error transitorio no debe borrar lo ya indexado
         if not rep.truncated:                             # con recorrido incompleto no se borra nada
             for gone in set(existing) - seen:
-                await self.store.delete_path(pid, gone)
-                await asyncio.to_thread(self.meta.delete_file, pid, gone)
-                rep.removed.append(gone)
+                try:
+                    old_ids = await asyncio.to_thread(self.meta.list_file_chunk_ids, pid, gone)
+                    # SQL es la fuente canónica: quitar primero los metadatos.
+                    # Si falla la limpieza vectorial, reconcile_project reintentará.
+                    await asyncio.to_thread(self.meta.delete_file, pid, gone)
+                    await self.store.delete_ids(old_ids)
+                    rep.removed.append(gone)
+                except (AxionError, OSError, ValueError) as exc:
+                    rep.errors.append(f"{gone}: {exc}")
         try:
             rep.orphaned_removed = await self.reconcile_project(pid)
         except (AxionError, OSError, ValueError) as exc:
