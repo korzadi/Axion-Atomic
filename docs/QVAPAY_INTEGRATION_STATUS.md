@@ -97,3 +97,11 @@ La futura acreditación debe validar desde backend la identidad de la transacci�
 - El LNURL efectivo de la dirección confirmada (`.../lnurlp/axyronatomic`) responde **HTTP 200** con `payRequest` válido: `minSendable=132000` (132 sats), `maxSendable=527160000` (527,160 sats), `commentAllowed=255`, metadatos `[["text/plain","Pago a axyronatomic en QvaPay"],["text/identifier","axyronatomic@qvpay.me"]]`.
 - En consecuencia, el default de configuración del repositorio se corrigió de `axionatomic@qvpay.me` a `axyronatomic@qvpay.me` (config, plantilla `.env.example`, pruebas y docs). Sin push pendiente de decisión del propietario.
 - Verificación GET sin efecto sobre la API: no se crearon invoices ni operaciones; no se cargó ningún tarifario en BD; `BILLING_ENFORCEMENT_ENABLED=false` y `QVAPAY_ENABLED=false` siguen intactos; el checkout continúa bloqueado.
+
+## Sondeo del callback LNURL — 2026-11-08 (autorizado por el propietario)
+
+- Única consulta autorizada al callback con monto mínimo (133,000 msat = 133 sats) y comentario `axyron-verify-001`.
+- Respuesta: claves `pr`, `routes`, `successAction`. Bolt11 presente; **LUD-21 `verify` AUSENTE** — no existe URL pública de estado de la invoice.
+- Conclusión técnica: con solo Lightning Address + LNURL (sin token de cuenta), se pueden crear invoices pero **no se puede confirmar el pago** de forma programática en QvaPay. La conciliación requiere obligatoriamente el token de cuenta (consultas autenticadas `GET /user/lightning-address`/`GET /coins`) o un mecanismo oficial de notificación (el propietario indicó que no existe webhook Lightning de QvaPay).
+- La invoice creada expirará sin pagar; no se ejecutó ningún cobro ni movimiento de fondos.
+- Checkout permanece BLOQUEADO en la práctica hasta que el propietario obtenga uno de: token de cuenta QvaPay, mecanismo oficial de verificación server-to-server, o decisión comercial de no cobrar aún.
