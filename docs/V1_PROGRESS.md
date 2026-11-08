@@ -472,7 +472,7 @@ API-02 queda con cobertura de regresión ampliada, **pendiente de ejecución CI*
 - Se ajustó el parser para permitir como máximo un punto raíz DNS final y rechazar puntos finales repetidos.
 - Se añadieron regresiones para Qdrant y OAuth, conservando la aceptación/normalización de un único punto final.
 - Archivos: `api/config.py`, `tests/test_config.py`.
-- Implementación y pruebas publicadas en `agent/chatgpt`; ejecución local no disponible y CI del nuevo HEAD pendiente.
+- Implementación y pruebas publicadas en `agent/chatgpt`; ejecución local no disponible y CI del nuevo HEAD `c41f490` confirmada en verde (run `42488024013`).
 - CI del HEAD anterior `641210a948d2e97a8807ac68918a9aba119785a1`: 855 aprobadas, 9 omitidas y 2 fallidas, ambas en `tests/test_capacity_http.py` por llamar `.json()` directamente sobre `JSONResponse`. Studio E2E, Qdrant, build de imagen y migraciones PostgreSQL pasaron.
 - `tests/test_capacity_http.py` permanece sin cambios hasta coordinar con OpenCode. No se modificó su rama, VPS, producción ni datos.
 
@@ -484,7 +484,7 @@ API-02 queda con cobertura de regresión ampliada, **pendiente de ejecución CI*
 - Se añadieron regresiones para Qdrant y OAuth con puerto explícito vacío.
 - Archivos: `api/config.py`, `tests/test_config.py`.
 - Commits: `dfb4a6e39cc1ce49ebfb97a7b76c6fa21ad2bd0f` (corrección) y `9232a6f6b3e8bd533babf4ec70c35739e4227113` (regresiones).
-- No se ejecutó pytest local; CI del nuevo HEAD pendiente. CI del HEAD anterior `e83b71d7850ae171859f63e32b89060d01d1c218` terminó con 855 passed, 9 skipped y 2 fallos conocidos en `tests/test_capacity_http.py`; Studio E2E, Qdrant, migraciones y build de imagen pasaron.
+- No se ejecutó pytest local; CI del nuevo HEAD `c41f490` confirmada en verde (run `42488024013`). CI del HEAD anterior `e83b71d7850ae171859f63e32b89060d01d1c218` terminó con 855 passed, 9 skipped y 2 fallos conocidos en `tests/test_capacity_http.py`; Studio E2E, Qdrant, migraciones y build de imagen pasaron.
 - No se modificó el archivo compartido `tests/test_capacity_http.py`; no se integró la rama de OpenCode ni se realizaron operaciones VPS/producción.
 
 

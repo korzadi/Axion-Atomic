@@ -39,8 +39,8 @@ Estados: Verificada · Implementada/pendiente de prueba · Parcial · Bloqueada 
 | OPS-01 | Instalador | Preflight detecta volúmenes PostgreSQL legado y actual | `scripts/install_vps.sh` actualizado | Código publicado; CI pendiente |
 | OPS-02 | Instalador | Inventario solo lectura sin secretos | `scripts/inspect_vps_state.sh` actualizado | Código publicado; ejecución VPS pendiente |
 | OPS-03 | Operaciones | Upgrade, rollback y restore probados aislados | Instalador, `restore_postgres.sh` y simulacro de restauración real; sección de mantenimiento añadida | Restore verificado; upgrade/rollback aún no ensayados aislados |
-| QA-01 | QA | Suite Python aprobada en HEAD evaluado | `agent/opencode-vps` `08b6e65`: `pytest -q` → 911 passed, 11 skipped; CI `42485697750` green en `5e55582` (python-tests incluido) | Verificada local y en CI para el HEAD previo; CI del nuevo HEAD pendiente |
-| QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions: `42485697750` sobre `5e55582` — studio-browser-e2e, container-image-build, postgres-migrations, qdrant-cloud-integration, python-tests: success | Verificada para `5e55582`; CI del nuevo HEAD pendiente |
+| QA-01 | QA | Suite Python aprobada en HEAD evaluado | `agent/opencode-vps` `08b6e65`: `pytest -q` → 911 passed, 11 skipped; CI `42485697750` green en `5e55582` (python-tests incluido) | Verificada local y en CI para el HEAD previo; CI del nuevo HEAD `c41f490` confirmada en verde (run `42488024013`) |
+| QA-02 | QA | Browser E2E, Docker smoke, PostgreSQL y Qdrant aprobados en HEAD | GitHub Actions: `42485697750` sobre `5e55582` — studio-browser-e2e, container-image-build, postgres-migrations, qdrant-cloud-integration, python-tests: success | Verificada para `5e55582`; CI del nuevo HEAD `c41f490` confirmada en verde (run `42488024013`) |
 | DOC-01 | Docs | README, AGENTS, instalación, seguridad y usuario alineados | Documentación del repo | Parcial |
 | REL-01 | Lanzamiento | Todas las puertas críticas aprobadas | Esta matriz | Bloqueada |
 
