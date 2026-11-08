@@ -67,7 +67,7 @@
     if (run.error) lines.push("", "Error: " + run.error);
     const pending = Array.isArray(run.pending_actions) ? run.pending_actions : [];
     if (pending.length) lines.push("", "Acciones que requieren aprobación:");
-    agentOutput.textContent = lines.join("\\n");
+    agentOutput.textContent = lines.join("\n");
     agentActions.replaceChildren();
     if (pending.length && !["owner", "admin"].includes(currentProjectRole)) {
       const notice = document.createElement("p");
