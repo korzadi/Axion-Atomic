@@ -87,7 +87,7 @@ Uso desde la perspectiva del usuario final: [docs/USER_GUIDE.md](docs/USER_GUIDE
 
 - **Resumen:** readiness real (incluye estado degradado con sus dependencias), proyectos, última ejecución del agente y disponibilidad de modelos.
 - **Proyectos:** lista, creación, selección y apertura mediante `/auth/projects`; no se simula borrado porque el backend no expone `DELETE`.
-- **Atomic Code:** chat autenticado mediante `/workspace/chat/history` y `/workspace/chat/completions`, con historial completo e idempotencia por payload; no ofrece streaming porque el backend no lo implementa.
+- **Atomic Code:** chat autenticado mediante `/workspace/chat/history` y `/workspace/chat/completions`, con historial completo, idempotencia por payload y streaming SSE real (`stream=true`, `text/event-stream`) preservando el contrato JSON no-stream; la facturación/liquidación usa medición verificable (fail-closed) antes de confirmar cobros.
 - **Conocimiento:** indexación de texto y carga de documentos, listado y eliminación de fuentes por proyecto.
 - **Agente Axyron:** ejecuciones persistentes, detalle, aprobaciones de acción y de plan, `resume`, `cancel` y `reconcile`. La aprobación registra una decisión; no debe interpretarse como ejecución automática de la acción.
 - **Modelos Atomic:** catálogo del servidor y verificación en vivo con `/workspace/models/availability`. Atomic Video, Atomic Vision y Atomic Reasoning se identifican como próximas actualizaciones mientras no estén publicados como disponibles.
