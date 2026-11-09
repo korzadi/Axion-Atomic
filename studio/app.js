@@ -454,33 +454,98 @@ async function renderCode() {
         messages: history.concat([{ role: "user", content }]),
         max_tokens: 1024,
         temperature: 0.2,
-        stream: false,
+        stream: true,
       };
-      const fingerprint = JSON.stringify(payload);
+      const fingerprint = JSON.stringify({ ...payload, stream: false });
       if (!pendingKey || pendingFingerprint !== fingerprint) {
         pendingKey = newKey();
         pendingFingerprint = fingerprint;
       }
-      const result = await api("/workspace/chat/completions", {
-        method: "POST",
-        headers: { "Idempotency-Key": pendingKey },
-        body: fingerprint,
-      });
-      const answer = result.choices?.[0]?.message?.content ?? "(sin respuesta)";
+      const assistantBubble = document.createElement("div");
+      assistantBubble.className = "st-bubble assistant";
+      assistantBubble.textContent = "…";
+      chat.appendChild(assistantBubble);
+      chat.scrollTop = chat.scrollHeight;
+      const applyBilling = (result) => {
+        const billing = result && result.usage_billing;
+        if (billing?.mode === "ledger" && billing.charged) {
+          billingNote.textContent = `${billing.credits_charged ?? "?"} créditos liquidados según el consumo medido.`;
+        } else if (billing?.mode === "shadow") {
+          billingNote.textContent = "Medición en modo sombra: no se cobraron créditos.";
+        }
+      };
+      let answer = "";
+      let doneResult = null;
+      try {
+        const response = await fetch("/workspace/chat/completions", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrf(),
+            "Idempotency-Key": pendingKey,
+            "Accept": "text/event-stream",
+          },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream")) {
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new ApiError(data.detail || data.message || `HTTP ${response.status}`, response.status);
+          doneResult = data;
+          answer = data.choices?.[0]?.message?.content ?? "(sin respuesta)";
+        } else {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const frames = buffer.split("\n\n");
+            buffer = frames.pop() || "";
+            for (const frame of frames) {
+              const lines = frame.split("\n");
+              let event = "message";
+              const dataLines = [];
+              for (const line of lines) {
+                if (line.startsWith("event:")) event = line.slice(6).trim();
+                else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+              }
+              if (!dataLines.length) continue;
+              let data;
+              try { data = JSON.parse(dataLines.join("\n")); } catch { continue; }
+              if (event === "message" && typeof data.delta === "string") {
+                answer += data.delta;
+                assistantBubble.textContent = answer;
+                chat.scrollTop = chat.scrollHeight;
+              } else if (event === "done") {
+                doneResult = data;
+                if (!answer) answer = data.choices?.[0]?.message?.content ?? "";
+              } else if (event === "error") {
+                throw new ApiError(data.detail || "Error de streaming", data.status_code || 503);
+              }
+            }
+          }
+        }
+      } catch (streamError) {
+        if (!(streamError instanceof ApiError) || streamError.status === 0) throw streamError;
+        if (answer) { applyBilling(doneResult || {}); history = payload.messages.concat([{ role: "assistant", content: answer }]); pendingKey = null; pendingFingerprint = ""; throw streamError; }
+        // fallback no-stream (compatibilidad)
+        const fallback = await api("/workspace/chat/completions", {
+          method: "POST",
+          headers: { "Idempotency-Key": pendingKey },
+          body: JSON.stringify({ ...payload, stream: false }),
+        });
+        doneResult = fallback;
+        answer = fallback.choices?.[0]?.message?.content ?? "(sin respuesta)";
+      }
+      if (!answer) answer = "(sin respuesta)";
+      assistantBubble.textContent = answer;
       history = payload.messages.concat([{ role: "assistant", content: answer }]);
       pendingKey = null;
       pendingFingerprint = "";
-      const bubble = document.createElement("div");
-      bubble.className = "st-bubble assistant";
-      bubble.textContent = answer;
-      chat.appendChild(bubble);
       chat.scrollTop = chat.scrollHeight;
-      const billing = result.usage_billing;
-      if (billing?.mode === "ledger" && billing.charged) {
-        billingNote.textContent = `${billing.credits_charged ?? "?"} créditos liquidados según el consumo medido.`;
-      } else if (billing?.mode === "shadow") {
-        billingNote.textContent = "Medición en modo sombra: no se cobraron créditos.";
-      }
+      applyBilling(doneResult || {});
     } catch (error) {
       outlet.prepend(notice("error", error.message));
     } finally {

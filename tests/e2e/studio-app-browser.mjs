@@ -51,6 +51,20 @@ function mockAuthed(page) {
   page.route("**/billing/catalog", (route) => route.fulfill(json(catalog)));
   page.route("**/workspace/usage**", (route) => route.fulfill(json({ totals: { requests: 3, prompt_tokens: 1200, output_tokens: 800, unavailable_measurements: 0 } })));
   page.route("**/workspace/chat/history**", (route) => route.fulfill(json({ messages: [], updated_at: null })));
+  page.route("**/workspace/chat/completions", async (route) => {
+    const request = route.request();
+    let body = {};
+    try { body = request.postDataJSON() || {}; } catch {}
+    if (body.stream) {
+      const sse = [
+        'event: message\ndata: {"delta":"Hola"}\n\n',
+        'event: message\ndata: {"delta":" mundo"}\n\n',
+        'event: done\ndata: {"id":"chatcmpl-e2e","object":"chat.completion","created":0,"model":"atomic-code","history_saved":true,"usage_billing":{"mode":"shadow","charged":false,"credits_reserved":false},"choices":[{"index":0,"message":{"role":"assistant","content":"Hola mundo"},"finish_reason":"stop"}]}\n\n',
+      ].join('');
+      return route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream; charset=utf-8' }, body: sse });
+    }
+    return route.fulfill(json({ id: "chatcmpl-e2e", object: "chat.completion", created: 0, model: "atomic-code", history_saved: true, usage_billing: { mode: "shadow", charged: false, credits_reserved: false }, choices: [{ index: 0, message: { role: "assistant", content: "Hola mundo" }, finish_reason: "stop" }] }));
+  });
   page.route("**/auth/mfa/status", (route) => route.fulfill(json({ enabled: false })));
   page.route("**/workspace/knowledge/sources**", (route) => route.fulfill(json({ items: [] })));
   page.route("**/workspace/agent/runs**", (route) => {

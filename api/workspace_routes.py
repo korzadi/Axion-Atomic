@@ -3,17 +3,23 @@ import json
 import logging
 import uuid
 from starlette.concurrency import run_in_threadpool
-from fastapi import APIRouter, Cookie, Depends, File, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Cookie, Depends, File, Header, HTTPException, Query, Request, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from api.database import engine
 from api.rate_limit import consume_rate_limit, rate_limit_key
 from datetime import datetime, timedelta, timezone
+import asyncio
 import hashlib
 
 from api.auth import current_user, authorize_project, require_csrf, COOKIE_NAME, CSRF_COOKIE
 from api.config import settings
 from api.schemas import ChatRequest, IngestRequest, TaskRequest, ApprovalRequest, AgentReconcileRequest, AgentCancelRequest
 from api.ollama import chat_with_usage, configured_chat_model_available
+
+def _chat_with_usage_stream(messages, temperature=0.2, max_tokens=2048):
+    from api import ollama
+    return ollama.chat_with_usage_stream(messages, temperature, max_tokens)
 from api.billing_budget import (
     ContextBudgetExceeded,
     SUPPORTED_TOKENIZER_CONTRACT,
@@ -484,15 +490,16 @@ async def workspace_chat_history(
         raise HTTPException(status_code=503, detail="No se pudo recuperar el historial de la conversación") from None
 
 
-@router.post("/chat/completions")
-async def workspace_chat(
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, separators=(',', ':'))}\n\n"
+
+
+async def _prepare_workspace_chat(
     req: ChatRequest,
-    user=Depends(_csrf_user),
-    idempotency_key_header: str | None = Header(default=None, alias="Idempotency-Key"),
+    user,
+    idempotency_key_header: str | None,
 ):
     await run_in_threadpool(_project_role, user, req.project_id, ("owner", "admin", "editor"))
-    if req.stream:
-        raise HTTPException(status_code=400, detail="Streaming no está implementado")
     total_chars = sum(len(message.content) for message in req.messages)
     if total_chars > 40000:
         raise HTTPException(status_code=413, detail="La conversación supera el límite de 40000 caracteres")
@@ -504,7 +511,6 @@ async def workspace_chat(
     billing_identity = None
     idempotency_key = ""
     if settings.billing_enforcement_enabled:
-        # Validar la identidad idempotente antes de recuperar RAG o llamar a Ollama.
         idempotency_key = idempotency_key_header.strip() if isinstance(idempotency_key_header, str) else ""
         if not idempotency_key or len(idempotency_key) > 200:
             raise HTTPException(
@@ -512,178 +518,48 @@ async def workspace_chat(
                 detail="La facturación requiere el encabezado Idempotency-Key (1-200 caracteres).",
             )
         try:
-            # Valida el alfabeto permitido antes de cualquier trabajo costoso.
-            request_id = stable_request_id(
-                user_id=str(user["id"]),
-                idempotency_key=idempotency_key,
-            )
+            request_id = stable_request_id(user_id=str(user["id"]), idempotency_key=idempotency_key)
         except InvalidIdempotencyKey:
-            raise HTTPException(
-                status_code=400,
-                detail="La clave de idempotencia no cumple el formato permitido.",
-            ) from None
+            raise HTTPException(status_code=400, detail="La clave de idempotencia no cumple el formato permitido.") from None
         try:
             billing_identity = await attest_runtime(settings)
         except RuntimeAttestationError:
-            raise HTTPException(
-                status_code=503,
-                detail="El runtime de inferencia no coincide con el manifiesto verificado; no se ejecutó ni cobró.",
-            ) from None
+            raise HTTPException(status_code=503, detail="El runtime de inferencia no coincide con el manifiesto verificado; no se ejecutó ni cobró.") from None
         except Exception:
-            raise HTTPException(
-                status_code=503,
-                detail="No se pudo verificar la identidad del runtime de inferencia.",
-            ) from None
+            raise HTTPException(status_code=503, detail="No se pudo verificar la identidad del runtime de inferencia.") from None
     user_text = "\n".join(m.content for m in req.messages if m.role == "user")[-12000:]
     try:
         context = await retrieve(user_text, project_id=req.project_id, limit=5)
     except KnowledgeStoreUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     system = _build_workspace_chat_system_prompt(context)
-    inference_messages = [{"role": "system", "content": system}] + [
-        m.model_dump() for m in req.messages
-    ]
+    inference_messages = [{"role": "system", "content": system}] + [m.model_dump() for m in req.messages]
     runtime_model = billing_identity.runtime_model if billing_identity is not None else settings.chat_model
-    tokenizer_contract = (
-        billing_identity.tokenizer_contract if billing_identity is not None else SUPPORTED_TOKENIZER_CONTRACT
-    )
+    tokenizer_contract = billing_identity.tokenizer_contract if billing_identity is not None else SUPPORTED_TOKENIZER_CONTRACT
     try:
-        # Rechaza prompts que no caben antes de consumir CPU/RAM en Ollama.
-        # La cota incluye system prompt, historial, RAG, framing y salida máxima.
         budget = calculate_preflight_budget(
-            inference_messages,
-            req.max_tokens,
-            settings.num_ctx,
-            runtime_model=runtime_model,
-            expected_runtime_model=runtime_model,
+            inference_messages, req.max_tokens, settings.num_ctx,
+            runtime_model=runtime_model, expected_runtime_model=runtime_model,
             tokenizer_contract=tokenizer_contract,
             input_weight=settings.billing_input_credit_weight,
             output_weight=settings.billing_output_credit_weight,
         )
     except ContextBudgetExceeded:
-        raise HTTPException(
-            status_code=413,
-            detail="La conversación y la salida solicitada superan la ventana de contexto disponible.",
-        ) from None
+        raise HTTPException(status_code=413, detail="La conversación y la salida solicitada superan la ventana de contexto disponible.") from None
     except (TypeError, ValueError):
-        raise HTTPException(
-            status_code=503,
-            detail="No se pudo validar de forma segura el presupuesto de contexto del modelo.",
-        ) from None
-    billing_result = None
-    if settings.billing_enforcement_enabled:
-        # Identidad estable y fingerprint de la inferencia EFECTIVA: incluye
-        # system prompt, contexto RAG y el artefacto exacto atestado.
-        try:
-            payload_sha256 = attested_request_payload_sha256(
-                project_id=req.project_id,
-                public_model=req.model,
-                runtime_model=billing_identity.runtime_model,
-                model_digest=billing_identity.model_digest,
-                template_sha256=billing_identity.template_sha256,
-                tokenizer_id=billing_identity.tokenizer_contract,
-                effective_messages=inference_messages,
-                temperature=req.temperature,
-                max_tokens=req.max_tokens,
-                policy_version=budget.policy_version,
-            )
-        except (InvalidIdempotencyKey, TypeError, ValueError):
-            raise HTTPException(
-                status_code=400,
-                detail="La clave de idempotencia o la solicitud no cumple el formato permitido.",
-            ) from None
-        key_provider = EnvironmentResultKeyProvider()
-        try:
-            # Validar la clave ANTES de reservar créditos o ejecutar el modelo.
-            key_provider.active_key()
-        except ResultEncryptionError:
-            raise HTTPException(
-                status_code=503,
-                detail="La facturación está activada, pero falta la clave dedicada de cifrado de resultados.",
-            ) from None
-        cipher = AesGcmResultCipher(key_provider)
+        raise HTTPException(status_code=503, detail="No se pudo validar de forma segura el presupuesto de contexto del modelo.") from None
+    return {
+        "request_id": request_id, "billing_identity": billing_identity,
+        "idempotency_key": idempotency_key, "inference_messages": inference_messages,
+        "runtime_model": runtime_model, "budget": budget,
+    }
 
-        async def _run_metered_inference():
-            return await chat_with_usage(inference_messages, req.temperature, req.max_tokens)
 
-        try:
-            billing_result = await execute_durable_reserved_inference(
-                engine=engine,
-                user_id=str(user["id"]),
-                project_id=req.project_id,
-                request_id=request_id,
-                idempotency_key=idempotency_key,
-                payload_sha256=payload_sha256,
-                budget=budget,
-                expected_runtime_model=billing_identity.runtime_model,
-                inference_call=_run_metered_inference,
-                reservation_expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
-                cipher=cipher,
-                serialize_result=lambda value: serialize_billing_execution_result(
-                    value,
-                    expected_model=billing_identity.runtime_model,
-                    policy_version=budget.policy_version,
-                    input_weight=budget.input_weight,
-                    output_weight=budget.output_weight,
-                ),
-                deserialize_result=deserialize_billing_execution_result,
-                purchased_fallback_allowed=settings.billing_purchased_fallback_allowed,
-            )
-            result = billing_result.inference
-        except InsufficientCredits:
-            raise HTTPException(
-                status_code=402,
-                detail="No tienes créditos disponibles para completar esta solicitud.",
-            ) from None
-        except IdempotencyConflict:
-            raise HTTPException(
-                status_code=409,
-                detail="La clave Idempotency-Key ya se utilizó con otra solicitud.",
-            ) from None
-        except DurableExecutionRecoveryRequired:
-            raise HTTPException(
-                status_code=409,
-                detail="La ejecución anterior requiere conciliación; no se repetirá el consumo.",
-            ) from None
-        except DurableUsageReviewRequired:
-            raise HTTPException(
-                status_code=409,
-                detail="El consumo requiere revisión; el resultado se conserva de forma cifrada.",
-            ) from None
-        except UsageUnavailable:
-            raise HTTPException(
-                status_code=503,
-                detail="Ollama no proporcionó una medición verificable; no se entregó la respuesta.",
-            ) from None
-        except Exception:
-            try:
-                logger.warning("No se pudo completar la ejecución facturada")
-            except Exception:
-                pass
-            raise HTTPException(
-                status_code=503,
-                detail="No se pudo completar de forma segura la ejecución facturada.",
-            ) from None
-    else:
-        try:
-            result = await chat_with_usage(
-                inference_messages,
-                req.temperature, req.max_tokens,
-            )
-        except Exception:
-            try:
-                logger.warning("No se pudo completar la inferencia de chat")
-            except Exception:
-                pass
-            raise HTTPException(status_code=503, detail="El servicio de inferencia no está disponible") from None
-
-    # Telemetría sin prompts ni respuestas para observabilidad operativa.
+def _emit_usage_shadow(request_id, user, project_id, result):
     try:
         logger.info(json.dumps({
-            "event": "inference_usage_shadow",
-            "request_id": request_id,
-            "user_id": str(user["id"]),
-            "project_id": req.project_id,
+            "event": "inference_usage_shadow", "request_id": request_id,
+            "user_id": str(user["id"]), "project_id": project_id,
             "requested_model": getattr(result, "requested_model", None),
             "returned_model": getattr(result, "returned_model", None),
             "prompt_tokens": getattr(result, "prompt_eval_count", None),
@@ -696,49 +572,34 @@ async def workspace_chat(
             "done": getattr(result, "done", None),
         }, separators=(",", ":"), sort_keys=True))
     except Exception:
-        # La telemetría shadow nunca debe convertir una inferencia exitosa en error.
         try:
             logger.warning("No se pudo emitir el evento de uso shadow")
         except Exception:
-            # Incluso un handler de logging defectuoso debe quedar aislado.
             pass
 
-    # Fail closed: nunca devolver como ATOMIC CODE una respuesta de otro modelo.
+
+def _validate_inference_result(result, runtime_model):
     if result.requested_model != runtime_model or result.returned_model != runtime_model:
         raise HTTPException(status_code=503, detail="El modelo ejecutado no coincide con el modelo autorizado")
     if result.done is not True:
         raise HTTPException(status_code=503, detail="La inferencia no terminó correctamente")
 
-    # El ledger ya registra y liquida el uso cuando la facturación está activa.
-    # El evento shadow se reserva exclusivamente para el modo sin cargos, evitando
-    # duplicar la telemetría de consumo de una ejecución ya liquidada.
+
+async def _finalize_chat(req, user, request_id, result, billing_result):
+    _emit_usage_shadow(request_id, user, req.project_id, result)
     if billing_result is None:
         try:
-            await run_in_threadpool(
-                persist_shadow_usage_event,
-                request_id=request_id,
-                user_id=user["id"],
-                project_id=req.project_id,
-                result=result,
-            )
+            await run_in_threadpool(persist_shadow_usage_event, request_id=request_id, user_id=user["id"], project_id=req.project_id, result=result)
         except Exception:
             try:
                 logger.warning("No se pudo persistir el evento de uso shadow")
             except Exception:
                 pass
-
-    # El historial es secundario: un fallo al guardarlo no debe convertir una
-    # inferencia ya completada en HTTP 503, porque el cliente podría repetirla.
-    # La respuesta válida se entrega y se informa explícitamente del estado.
     history_saved = True
     try:
         await run_in_threadpool(
-            _save_chat_history,
-            user["id"],
-            req.project_id,
-            [message.model_dump() for message in req.messages] + [
-                {"role": "assistant", "content": result.content}
-            ],
+            _save_chat_history, user["id"], req.project_id,
+            [message.model_dump() for message in req.messages] + [{"role": "assistant", "content": result.content}],
         )
     except Exception:
         history_saved = False
@@ -746,31 +607,173 @@ async def workspace_chat(
             logger.warning("No se pudo guardar el historial de chat; se entrega la respuesta ya generada")
         except Exception:
             pass
-
+    usage_billing = (
+        {"mode": "ledger", "charged": True, "credits_reserved": False,
+         "credits_charged": credits_for_usage(result.prompt_eval_count, result.eval_count, input_weight=billing_result.settlement.__dict__.get("input_weight", settings.billing_input_credit_weight), output_weight=billing_result.settlement.__dict__.get("output_weight", settings.billing_output_credit_weight)) if billing_result is not None else None,
+         "reservation_id": billing_result.reservation.reservation_id, "recovered": billing_result.recovered}
+        if billing_result is not None else {"mode": "shadow", "charged": False, "credits_reserved": False}
+    )
+    # Compute ledger credits from actual result for correctness
+    if billing_result is not None:
+        usage_billing["credits_charged"] = credits_for_usage(
+            result.prompt_eval_count, result.eval_count,
+            input_weight=settings.billing_input_credit_weight,
+            output_weight=settings.billing_output_credit_weight,
+        )
     return {
         "id": f"chatcmpl-{request_id}", "object": "chat.completion", "created": 0,
-        "model": req.model,
-        "history_saved": history_saved,
-        # Se informa el modo real de contabilización de esta inferencia.
-        "usage_billing": (
-            {
-                "mode": "ledger",
-                "charged": True,
-                "credits_reserved": False,
-                "credits_charged": credits_for_usage(
-                    result.prompt_eval_count,
-                    result.eval_count,
-                    input_weight=budget.input_weight,
-                    output_weight=budget.output_weight,
-                ),
-                "reservation_id": billing_result.reservation.reservation_id,
-                "recovered": billing_result.recovered,
-            }
-            if billing_result is not None
-            else {"mode": "shadow", "charged": False, "credits_reserved": False}
-        ),
+        "model": req.model, "history_saved": history_saved, "usage_billing": usage_billing,
         "choices": [{"index": 0, "message": {"role": "assistant", "content": result.content}, "finish_reason": "stop"}],
     }
+
+
+async def _run_billing_inference(ctx, req, user, inference_call):
+    billing_identity = ctx["billing_identity"]
+    budget = ctx["budget"]
+    try:
+        payload_sha256 = attested_request_payload_sha256(
+            project_id=req.project_id, public_model=req.model,
+            runtime_model=billing_identity.runtime_model, model_digest=billing_identity.model_digest,
+            template_sha256=billing_identity.template_sha256, tokenizer_id=billing_identity.tokenizer_contract,
+            effective_messages=ctx["inference_messages"], temperature=req.temperature,
+            max_tokens=req.max_tokens, policy_version=budget.policy_version,
+        )
+    except (InvalidIdempotencyKey, TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="La clave de idempotencia o la solicitud no cumple el formato permitido.") from None
+    key_provider = EnvironmentResultKeyProvider()
+    try:
+        key_provider.active_key()
+    except ResultEncryptionError:
+        raise HTTPException(status_code=503, detail="La facturación está activada, pero falta la clave dedicada de cifrado de resultados.") from None
+    cipher = AesGcmResultCipher(key_provider)
+    try:
+        billing_result = await execute_durable_reserved_inference(
+            engine=engine, user_id=str(user["id"]), project_id=req.project_id,
+            request_id=ctx["request_id"], idempotency_key=ctx["idempotency_key"],
+            payload_sha256=payload_sha256, budget=budget,
+            expected_runtime_model=billing_identity.runtime_model,
+            inference_call=inference_call,
+            reservation_expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+            cipher=cipher,
+            serialize_result=lambda value: serialize_billing_execution_result(
+                value, expected_model=billing_identity.runtime_model,
+                policy_version=budget.policy_version, input_weight=budget.input_weight, output_weight=budget.output_weight,
+            ),
+            deserialize_result=deserialize_billing_execution_result,
+            purchased_fallback_allowed=settings.billing_purchased_fallback_allowed,
+        )
+        return billing_result.inference, billing_result
+    except InsufficientCredits:
+        raise HTTPException(status_code=402, detail="No tienes créditos disponibles para completar esta solicitud.") from None
+    except IdempotencyConflict:
+        raise HTTPException(status_code=409, detail="La clave Idempotency-Key ya se utilizó con otra solicitud.") from None
+    except DurableExecutionRecoveryRequired:
+        raise HTTPException(status_code=409, detail="La ejecución anterior requiere conciliación; no se repetirá el consumo.") from None
+    except DurableUsageReviewRequired:
+        raise HTTPException(status_code=409, detail="El consumo requiere revisión; el resultado se conserva de forma cifrada.") from None
+    except UsageUnavailable:
+        raise HTTPException(status_code=503, detail="Ollama no proporcionó una medición verificable; no se entregó la respuesta.") from None
+    except HTTPException:
+        raise
+    except Exception:
+        try:
+            logger.warning("No se pudo completar la ejecución facturada")
+        except Exception:
+            pass
+        raise HTTPException(status_code=503, detail="No se pudo completar de forma segura la ejecución facturada.") from None
+
+
+@router.post("/chat/completions")
+async def workspace_chat(
+    req: ChatRequest,
+    user=Depends(_csrf_user),
+    idempotency_key_header: str | None = Header(default=None, alias="Idempotency-Key"),
+):
+    ctx = await _prepare_workspace_chat(req, user, idempotency_key_header)
+    if not req.stream:
+        if settings.billing_enforcement_enabled:
+            async def _run_metered_inference():
+                return await chat_with_usage(ctx["inference_messages"], req.temperature, req.max_tokens)
+            result, billing_result = await _run_billing_inference(ctx, req, user, _run_metered_inference)
+        else:
+            try:
+                result = await chat_with_usage(ctx["inference_messages"], req.temperature, req.max_tokens)
+            except HTTPException:
+                raise
+            except Exception:
+                try:
+                    logger.warning("No se pudo completar la inferencia de chat")
+                except Exception:
+                    pass
+                raise HTTPException(status_code=503, detail="El servicio de inferencia no está disponible") from None
+            billing_result = None
+        _validate_inference_result(result, ctx["runtime_model"])
+        return await _finalize_chat(req, user, ctx["request_id"], result, billing_result)
+
+    async def event_stream():
+        try:
+            if settings.billing_enforcement_enabled:
+                # Con facturación activa, la respuesta se retiene hasta liquidar con
+                # medición verificable (mismo contrato fail-closed que stream=false).
+                async def _run_metered_inference():
+                    parts: list[str] = []
+                    final = None
+                    async for event in _chat_with_usage_stream(ctx["inference_messages"], req.temperature, req.max_tokens):
+                        if event["type"] == "delta":
+                            parts.append(event["content"])
+                        elif event["type"] == "done":
+                            final = event["result"]
+                    return final
+                try:
+                    result, billing_result = await _run_billing_inference(ctx, req, user, _run_metered_inference)
+                except HTTPException as exc:
+                    yield _sse("error", {"detail": exc.detail, "status_code": exc.status_code})
+                    return
+                try:
+                    _validate_inference_result(result, ctx["runtime_model"])
+                except HTTPException as exc:
+                    yield _sse("error", {"detail": exc.detail, "status_code": exc.status_code})
+                    return
+                response = await _finalize_chat(req, user, ctx["request_id"], result, billing_result)
+                if response["choices"][0]["message"]["content"]:
+                    yield _sse("message", {"delta": response["choices"][0]["message"]["content"]})
+                yield _sse("done", response)
+                return
+
+            parts: list[str] = []
+            result = None
+            async for event in _chat_with_usage_stream(ctx["inference_messages"], req.temperature, req.max_tokens):
+                if event["type"] == "delta":
+                    parts.append(event["content"])
+                    yield _sse("message", {"delta": event["content"]})
+                elif event["type"] == "done":
+                    result = event["result"]
+            if result is None:
+                yield _sse("error", {"detail": "La inferencia no produjo un resultado verificable", "status_code": 503})
+                return
+            try:
+                _validate_inference_result(result, ctx["runtime_model"])
+            except HTTPException as exc:
+                yield _sse("error", {"detail": exc.detail, "status_code": exc.status_code})
+                return
+            response = await _finalize_chat(req, user, ctx["request_id"], result, None)
+            yield _sse("done", response)
+        except HTTPException as exc:
+            yield _sse("error", {"detail": exc.detail, "status_code": exc.status_code})
+        except (GeneratorExit, asyncio.CancelledError):
+            raise
+        except Exception:
+            try:
+                logger.exception("No se pudo completar la inferencia de chat en streaming")
+            except Exception:
+                pass
+            yield _sse("error", {"detail": "El servicio de inferencia no está disponible", "status_code": 503})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+    )
 
 
 @router.post("/knowledge/ingest")

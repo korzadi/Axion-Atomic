@@ -60,10 +60,17 @@ def test_agent_run_detail_renders_persisted_snapshot():
 def test_chat_sends_full_history_with_idempotency_per_payload():
     assert 'model: "atomic-code"' in APP
     assert 'messages: history.concat([{ role: "user", content }])' in APP
-    assert 'headers: { "Idempotency-Key": pendingKey }' in APP
+    assert '"Idempotency-Key": pendingKey' in APP
     assert "if (!pendingKey || pendingFingerprint !== fingerprint)" in APP
-    assert 'body: fingerprint' in APP
+    # La huella de idempotencia ignora stream para que un reintento SSE/JSON
+    # no se trate como payload distinto; el cuerpo se envía como JSON.
+    assert 'JSON.stringify({ ...payload, stream: false })' in APP
+    assert 'body: JSON.stringify(payload)' in APP
     assert "await loadHistory()" in APP
+    # Streaming SSE real con fallback/parseo de eventos.
+    assert 'stream: true' in APP
+    assert 'text/event-stream' in APP
+    assert 'event === "done"' in APP
 
 
 def test_models_view_requires_live_runtime_confirmation():
