@@ -1,30 +1,32 @@
 # AXYRON ATOMIC V1.0 — Registro de progreso
 
-**Rama de trabajo:** `hardening/studio-independent-app` (PR #25)
-**Fase activa:** 12 — QA y liberación V1.0 (desarrollo inverso 12 → 7); endurecimiento de Studio independiente y SSO
-**Estado global:** EN DESARROLLO — V1.0 **no liberada**
-**Implementación global estimada:** ~90 % de criterios de aceptación con código presente (conteo textual de la matriz, 31 criterios)
-**Preparación productiva:** ~76 % (producción `a298344` con auth activa y readiness `ready`; CI 6/6 del HEAD `f4f455f`; staging con buzón real, token/catálogo QvaPay y AGT-04 pendientes)
-**Evidencia CI de la rama (HEAD `f4f455f`):** run `42553378796` de `AXYRON ATOMIC CI` **6/6 success** (python-tests, container-image-build, studio-browser-e2e ambos, postgres-migrations con 001–025 y suite ampliada, qdrant-cloud-integration, qdrant-e2e). Suite local al cerrar: `1072 passed, 27 skipped`. Dos intentos intermedios fallaron en postgres-migrations por el esquema real de consumo/créditos y se corrigieron (no se ocultaron).
+**Rama:** `main`. **HEAD definitivo (reconciliación):** **`4134313d59c4b45cdc7e9e1b58243900df68ace0`** (merge PR #25, 2026-11-09). PR #25: https://github.com/korzadi/Axion-Atomic/pull/25 (MERGED, CI 6/6 para head `8a723ce`; merge commit CI 6/6 run `42607072336`).
+**Estado global:** **V1.0 técnicamente implementada/desplegada en controlado; NO liberada comercialmente** — quedan validaciones externas (pago real E2E con evidencia, E2E buzón/MFA/OAuth/SSO en vivo con cuentas reales, smoke autenticado final + aceptación formal). No se simulan ni se declaran verificadas.
+**CI (`4134313`):** run `42607072336` **6/6 SUCCESS** (python-tests, studio-browser-e2e, container-image-build, postgres-migrations 001–025+idempotencia+suite PG, qdrant-e2e, qdrant-cloud-integration). **Local (2026-11-09):** `pytest -q` 1072 passed/27 skipped; `check_frontend_js.py` OK; `compileall` OK; `bash -n scripts/*.sh` OK; `git diff --check` OK.
+**Producción/controlado (autorizado, sin exponer secretos):** frontend `axyron-atomic-frontend:prod-20261109` (legales 200), API recreada (token QvaPay presente en `.env`, no impreso), `/health` 6/6 ok, `/billing/catalog` `checkout_enabled:true` (4 planes), Studio `/dashboard` 200 (Host `studio.axyronatomic.com`), migraciones DB al día hasta 025. AGT-04 runtime: `scripts/verify_sandbox_isolation.py` **TODAS LAS COMPROBACIONES PASARON** (uid no root, red bloqueada, rootfs RO, `/workspace` acotado). **Sin pago real ejecutado.** Postgres/Redis/KorzadiVPN intactos.
+
+> Regla: estimaciones ≠ disponibilidad/comercial. “Verificada” solo con evidencia reproducible del SHA/entorno indicado. Histórico de SHAs/porcentajes previos se conserva más abajo. Fuente de verdad por criterio: `docs/V1_ACCEPTANCE_MATRIX.md`.
 
 > Regla: los porcentajes son estimaciones de implementación basadas en la matriz de aceptación. No certifican disponibilidad operativa. Solo se declara **verificada** una capacidad cuando existe una prueba reproducible aprobada para el HEAD indicado. Las fases 10 y 12 conservan bloqueos externos que impiden declarar la V1.0 liberada. La fuente de verdad de los conteos por criterio es `docs/V1_ACCEPTANCE_MATRIX.md`; las cifras de 68 %/35 % de revisiones anteriores quedan como histórico.
 
-## Resumen oficial de las 12 fases
+## Resumen oficial de las 12 fases (reconciliado 2026-11-09, HEAD `4134313`)
 
-| Fase | Módulo | Avance | Estado |
-| ---: | --- | ---: | --- |
-| 1 | Estabilización y arquitectura | 70% | EN PROGRESO |
-| 2 | Autenticación y MFA | 68% | EN PROGRESO |
-| 3 | Axyron Studio | 65% | EN PROGRESO |
-| 4 | Modelos de IA | 65% | EN PROGRESO |
-| 5 | Agente AXYRON | 75% | EN PROGRESO |
-| 6 | Memoria y RAG | 70% | EN PROGRESO |
-| 7 | Archivos y sandbox | 65% | EN PROGRESO |
-| 8 | Administración | 80% | EN PROGRESO |
-| 9 | Créditos y facturación | 80% | EN PROGRESO |
-| 10 | Integración QvaPay | 50% | EN PROGRESO |
-| 11 | Instalación y documentación | 78% | EN PROGRESO |
-| 12 | QA y liberación V1.0 | 76% | EN PROGRESO |
+| Fase | Módulo | Implementado (repo) | Verificado (CI/runtime) | Pendiente externo |
+| ---: | --- | ---: | ---: | --- |
+| 1 | Estabilización y arquitectura | 86% | 82% (CI 6/6, contratos/RAG/tests) | Cierre integral ARC-01 multi-servicio staging |
+| 2 | Autenticación y MFA | 88% | 82% (CI/PG; auth prod 401) | E2E buzón/SMTP, MFA real, OAuth callbacks reales |
+| 3 | Axyron Studio | 92% | 86% (E2E browser/CI, rutas reales/SSO) | Smoke autenticado real + a11y lectores reales |
+| 4 | Modelos de IA | 82% | 78% (health/model routing/attestation) | E2E Ollama real end-to-end autenticado |
+| 5 | Agente AXYRON | 88% | 84% (CI/tests, runs/aprobaciones/reconcile) | E2E ejecución real con usuarios/modelo |
+| 6 | Memoria y RAG | 90% | 88% (qdrant-e2e/cloud CI) | Validación staging multiusuario real |
+| 7 | Archivos y sandbox | 88% | 84% (AGT-04 **PASÓ** runtime; workspace/confín) | Ensayo staging formal/operación continua |
+| 8 | Administración | 86% | 84% (RBAC/CI/PG/browser) | Validación staging con cuentas reales |
+| 9 | Créditos y facturación | 88% | 84% (ledger/reservas/reversos/CI) | E2E completo con actividad real controlada |
+| 10 | Integración QvaPay | 90% | 82% técnica (catálogo 4 planes, checkout/idempotencia, token activo; **sin pago real**) | **Primer pago real E2E con evidencia** (propietario) |
+| 11 | Instalación y documentación | 92% | 88% (docs/scripts/legales publicados+200) | Revisión jurídica/operativa final por operador |
+| 12 | QA y liberación V1.0 | 90% | 86% (CI 6/6 `4134313`, suite local) | Aceptación formal + externos (1)-(3) en REL-01 |
+
+**Global estimado:** implementación ~89% · verificado técnico ~84% · liberación comercial 0% hasta REL-01 externo.
 
 **Lectura de los porcentajes:** reflejan implementación y pruebas locales del código inspeccionado, no aceptación en staging. Las cifras heredadas del orden antiguo de fases se conservan solo como histórico en las secciones siguientes.
 

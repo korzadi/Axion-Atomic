@@ -61,12 +61,12 @@ El alcance de medición de tokens, cuotas, costes por modelo, créditos, suscrip
 - La Fase 1 contiene la auditoría inicial de los módulos inspeccionados y las brechas verificadas.
 - No habilitar cobros, ventas ni límites comerciales hasta completar las fases de diseño, implementación, seguridad y pruebas.
 
-## Estado de implementación
+## Estado de implementación (reconciliado 2026-11-09)
 
-- [Matriz de aceptación y seguimiento V1.0](docs/V1_ACCEPTANCE_MATRIX.md)
-- **Estado verificado (2026-11-08, tras la activación autorizada):** `main = fa0a536` (CI 6/6) y la rama de activación PR #24 lleva catálogo V1.0 publicado en producción (checkout QvaPay Lightning implementado; concesión FREE de 50 créditos verificada en vivo en la cuenta de prueba del propietario) y facturación en modo **ledger** con attestation configurada. Producción sirve el código de la rama (assets == repo). Los flags de pago/facturación dependen del `.env` desplegado; en el repositorio siguen fail-closed por defecto. El sandbox Docker **no** se declara verificado E2E: permanece fail-closed, desactivado por defecto y su activación requiere configuración explícita (AGT-04 parcial). La posesión de documentos legales publicados sigue pendiente; la venta pública queda en fase controlada con el primer pago real pendiente. La V1.0 no se declara liberada (`REL-01` bloqueada).
-
-Este repositorio está en desarrollo por fases. La presencia de una carpeta, documento o esquema no demuestra por sí sola que una capacidad esté integrada. Cada fase debe informar qué se implementó, qué pruebas se ejecutaron realmente y qué queda pendiente.
+- [Matriz de aceptación V1.0](docs/V1_ACCEPTANCE_MATRIX.md) · [Progreso](docs/V1_PROGRESS.md) · [Puerta producción](docs/PRODUCTION_INITIAL_RELEASE_GATE.md)
+- **HEAD `main`: `4134313` (merge PR #25) — CI 6/6** (run `42607072336`: python-tests, studio-browser-e2e, container-image-build, postgres-migrations 001–025, qdrant-e2e, qdrant-cloud-integration). Suite local: 1072 passed/27 skipped.
+- **Implementado y desplegado (controlado, autorizado):** Studio independiente + SSO, auth/MFA/privacidad, agente/RAG, facturación ledger, admin, migraciones al día (025). Legales publicados (`/privacidad.html /terminos.html /reembolsos.html`). QvaPay activo (catálogo 4 planes, `checkout_enabled:true`, token en `.env` sin exponer). AGT-04 **verificada en runtime** (aislamiento PASÓ). `/health` 6/6.
+- **No liberada comercialmente.** Pendiente externo (evidencia real): (1) primer pago QvaPay E2E, (2) E2E buzón/MFA/OAuth/SSO con cuentas reales, (3) smoke autenticado final + aceptación formal. No se simulan verificaciones ni se movieron fondos.
 
 ## Seguridad y contribuciones
 
