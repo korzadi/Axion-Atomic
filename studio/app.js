@@ -1004,7 +1004,7 @@ async function renderPrivacy() {
         </form>
         <div id="st-delete-status" class="st-muted" aria-live="polite" style="margin-top:10px"></div>
       </div>
-      <div class="st-card"><h3>Legal</h3><p class="st-muted">Los términos y la política de privacidad se publicarán en la web principal antes del lanzamiento comercial. Consulta con el operador de la instancia.</p></div>
+      <div class="st-card"><h3>Legal</h3><p class="st-muted">Consulta los documentos legales publicados en la web principal:</p><ul class="st-muted"><li><a href="${esc(webBase())}/terminos.html" target="_blank" rel="noopener">Términos de servicio</a></li><li><a href="${esc(webBase())}/privacidad.html" target="_blank" rel="noopener">Política de privacidad</a></li><li><a href="${esc(webBase())}/reembolsos.html" target="_blank" rel="noopener">Política de reembolsos</a></li></ul></div>
     </div>
   </div>`);
   $("#st-export-data").addEventListener("click", async (event) => {

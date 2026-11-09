@@ -41,6 +41,9 @@ STATIC_ASSETS = {
     "/faq.html",
     "/sso-start",
     "/app.js",
+    "/privacidad.html",
+    "/terminos.html",
+    "/reembolsos.html",
 }
 LITERAL = re.compile(r"""["'](/[A-Za-z0-9_{-][^"'\s]{0,158})["']""")
 
