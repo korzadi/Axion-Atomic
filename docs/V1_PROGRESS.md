@@ -956,3 +956,11 @@ El propietario solicitó: Studio como aplicación independiente con rutas reales
 - DNS + TLS para `studio.axyronatomic.com` (A/AAAA/CNAME + certificado).
 - `STUDIO_ORIGIN=https://studio.axyronatomic.com` en `.env` + recrear la API (procedimiento administrativo explícito; migración 024).
 - **La V1.0 no se declara liberada**: siguen bloqueadas las condiciones del `REL-01` (legal sin publicar, primer pago real E2E, MFA E2E, aceptación formal del propietario).
+
+## Incidencia operativa declarada — 2026-11-09 (`hardening/studio-independent-app`)
+
+Durante el cierre del bloque Studio independiente, un comando de limpieza del árbol de trabajo eliminó `backups/pre-v1.0-activation-20261108T230500Z.dump` (backup de producción tomado antes de la activación de catálogo). El borrado fue un error propio; nunca debe ocurrir sobre backups.
+
+- No existía copia versionada ni otra fuente de ese snapshot concreto; no se intenta simular que se recuperó.
+- Se generó un nuevo punto de restauración inmediatamente: `backups/pre-studio-independent-20261109T003000Z.dump` (0600, 297 objetos, verificado con `pg_restore --list`).
+- La base de datos de producción no resultó alterada; solo se perdió ese punto de rollback. Los demás backups históricos (`pre-frontend-upgrade-*`, `pre-main-a298344-*`, `pre-qa-head-deploy-*`, `pre-release-*`, `rollback-*` imágenes) siguen intactos.
