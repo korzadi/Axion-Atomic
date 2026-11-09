@@ -61,5 +61,5 @@ nginx
 
 - **Web principal**: pública, sin sesión obligatoria; landing en páginas separadas; SSO saliente por `/sso-start`.
 - **AXYRON Studio**: SPA con rutas reales (`/dashboard`, `/projects`, `/code`, `/knowledge`, `/agent`, `/models`, `/usage`, `/billing`, `/buy`, `/account`, `/security`, `/privacy`, `/integrations`, `/tools`); protección de sesión; 404 propia; responsive y accesible.
-- **SSO**: código de un solo uso (`sso_codes`, migración 024), 180 s TTL, sesión nueva **host-only** por host; nunca se amplía el dominio de las cookies. Ver `docs/AXYRON_STUDIO_INDEPENDENT.md`.
+- **SSO**: código de un solo uso (`sso_codes`, migración 024), 180 s TTL, `state` verificado, sesión nueva **host-only** por host; nunca se amplía el dominio de las cookies. El código viaja en el fragmento (`#code=…`), no en la query, y se borra del historial antes del intercambio. El logout revoca solo la sesión del host correspondiente; no hay cierre global. Ver `docs/AXYRON_STUDIO_INDEPENDENT.md`.
 - La API es única; no hay segundo backend ni datos diferentes para Studio.

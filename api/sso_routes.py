@@ -4,8 +4,9 @@ Diseño (equivalent to PKCE, con código de un solo uso y TTL corto):
 
 - Landing: ``POST /auth/sso/authorize`` (sesión + CSRF). Mints a one-time code
   bound to the authenticated user. Devuelve ``{studio_url}`` con ``code`` y
-  ``state`` (solo se guardan hashes). El Studio nunca recibe la sesión ni las
-  cookies del landing.
+  ``state`` en el fragmento de la URL (solo se guardan hashes). El fragmento no
+  viaja al servidor ni en ``Referer``; el Studio lo consume y lo borra. El
+  Studio nunca recibe la sesión ni las cookies del landing.
 - Studio: ``POST /auth/sso/exchange`` (público, con rate limiting estricto).
   Intercambia el código por UNA sesión nueva, host-only (el nginx del Studio
   proxea ``/auth/*`` al mismo servicio; la cookie se limita automáticamente al
@@ -47,7 +48,9 @@ class SsoExchangeRequest(BaseModel):
 def _digest(value: str) -> str:
     import hashlib
 
-    return hashlib.sha256(value.encode("ascii")).hexdigest()
+    # UTF-8 evita un 500 ante entradas no ASCII; un valor inválido debe
+    # rechazarse como 401, nunca tumbar el worker.
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _now() -> datetime:
@@ -110,7 +113,10 @@ def authorize_sso_code(*, user_id: str, origin: str, now: datetime | None = None
             "now": instant,
             "expires": expires,
         })
-    callback = f"{origin}/sso/callback?code={code}&state={state}"
+    # El código viaja en el fragmento (#), no en la query: los navegadores no
+    # lo envían al servidor ni lo incluyen en la cabecera Referer, y el Studio
+    # lo retira del historial antes de intercambiarlo.
+    callback = f"{origin}/sso/callback#code={code}&state={state}"
     return {
         "code": code,
         "state": state,
@@ -158,12 +164,15 @@ async def sso_authorize(
     require_csrf(user, csrf_cookie, csrf_header)
     _limit_or_503(request, "auth:sso:authorize:user", 20, timedelta(minutes=10), str(user["id"]))
     result = await run_in_threadpool(authorize_sso_code, user_id=str(user["id"]), origin=origin)
-    return {
+    response = JSONResponse({
         "code": result["code"],
         "state": result["state"],
         "expires_in": result["expires_in"],
         "studio_url": result["studio_url"],
-    }
+    })
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @router.post("/exchange")

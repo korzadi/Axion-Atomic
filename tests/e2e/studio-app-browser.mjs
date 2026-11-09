@@ -53,7 +53,24 @@ function mockAuthed(page) {
   page.route("**/workspace/chat/history**", (route) => route.fulfill(json({ messages: [], updated_at: null })));
   page.route("**/auth/mfa/status", (route) => route.fulfill(json({ enabled: false })));
   page.route("**/workspace/knowledge/sources**", (route) => route.fulfill(json({ items: [] })));
-  page.route("**/workspace/agent/runs**", (route) => route.fulfill(json({ items: [] })));
+  page.route("**/workspace/agent/runs**", (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== "GET") return route.fulfill(json({ status: "awaiting_approval" }));
+    if (/\/workspace\/agent\/runs\/[^/]+$/.test(url.pathname)) {
+      return route.fulfill(json({
+        id: "run-1", goal: "Analizar el proyecto", status: "awaiting_approval",
+        messages: [{ role: "assistant", content: "Plan propuesto para el proyecto." }],
+        pending_actions: [{ tool: "write_file", summary: "Modificar un archivo", action_hash: "hash-1" }],
+      }));
+    }
+    return route.fulfill(json({ items: [{ id: "run-1", goal: "Analizar el proyecto", status: "awaiting_approval", updated_at: "2026-11-09T00:00:00Z" }] }));
+  });
+  page.route("**/workspace/agent/approvals**", (route) => route.fulfill(json({
+    items: [{ id: "approval-1", tool: "write_file", what: "Modificar un archivo", why: "Corregir un defecto", expires_at: "2026-11-09T01:00:00Z" }],
+    plan_items: [],
+  })));
+  page.route("**/workspace/agent/plan-approvals**", (route) => route.fulfill(json({ id: "plan-1", status: "approved" })));
   page.route("**/workspace/models/availability**", (route) => route.fulfill(json({ models: [{ code: "atomic-code", available: true }] })));
 }
 
@@ -97,6 +114,24 @@ try {
     await page.goto(baseUrl + "/buy", { waitUntil: "domcontentloaded" });
     await page.getByRole("heading", { name: "Comprar créditos" }).waitFor();
     assert.equal(await page.locator(".st-buy-btn").count(), 2);
+
+    // Agente: ejecuciones, detalle persistido y aprobaciones reales (sin #approve)
+    await page.goto(baseUrl + "/agent", { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Agente AXYRON" }).waitFor();
+    await page.getByText("Analizar el proyecto").first().waitFor();
+    assert.equal(await page.locator('a[href="#approve"]').count(), 0);
+    await page.getByRole("button", { name: "Ver detalle" }).click();
+    await page.getByRole("heading", { name: "Detalle de la ejecución" }).waitFor();
+    await page.getByText("Plan propuesto para el proyecto.").waitFor();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Aprobar" }).click();
+    await page.getByText("Decisión registrada. La aprobación no ejecuta por sí sola la acción.").waitFor();
+
+    // Modelos: solo disponible cuando el runtime lo confirma
+    await page.goto(baseUrl + "/models", { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Modelos Atomic" }).waitFor();
+    await page.locator(".st-pill.good", { hasText: "Disponible ahora" }).first().waitFor();
+    await page.locator(".st-pill.warn", { hasText: "Próxima actualización" }).first().waitFor();
     assert.deepEqual(errors, [], "El Studio no debe lanzar errores JavaScript");
 
     // 404 propio
@@ -116,9 +151,10 @@ try {
     const page = await browser.newPage();
     mockAuthed(page);
     await page.route("**/auth/sso/exchange", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "authenticated", csrf_token: "csrf-token", expires_in: 43200 }) }));
-    await page.goto(baseUrl + "/sso/callback?code=code-mock-1234567890abcdef&state=state-mock-1234567890abcdef", { waitUntil: "domcontentloaded" });
+    await page.goto(baseUrl + "/sso/callback#code=code-mock-1234567890abcdef&state=state-mock-1234567890abcdef", { waitUntil: "domcontentloaded" });
     await page.getByRole("heading", { name: "Panel de control" }).waitFor();
     assert.equal(new URL(page.url()).pathname, "/dashboard");
+    assert.equal(new URL(page.url()).hash, "", "El código SSO no debe permanecer en la URL");
     await page.close();
   }
 

@@ -28,7 +28,11 @@ async function api(path, options = {}) {
   if (method !== "GET") headers.set("X-CSRF-Token", csrf());
   const response = await fetch(path, { ...options, headers, credentials: "same-origin" });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new ApiError(data.detail || data.message || `HTTP ${response.status}`, response.status);
+  if (!response.ok) {
+    const error = new ApiError(data.detail || data.message || `HTTP ${response.status}`, response.status);
+    error.data = data;
+    throw error;
+  }
   return data;
 }
 
@@ -181,9 +185,13 @@ async function renderSsoCallback() {
   const status = $("#st-sso-status");
   try {
     const params = new URLSearchParams(window.location.search);
-    const code = params.get("code") || "";
-    const stateParam = params.get("state") || "";
+    const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const code = params.get("code") || fragment.get("code") || "";
+    const stateParam = params.get("state") || fragment.get("state") || "";
     if (!code || !stateParam) throw new Error("Enlace de acceso incompleto");
+    // El código es de un solo uso: se retira de la URL antes de cualquier
+    // petición para no dejarlo en el historial, capturas ni referencias.
+    history.replaceState({}, "", "/sso/callback");
     await api("/auth/sso/exchange", { method: "POST", body: JSON.stringify({ code, state: stateParam }) });
     state.user = (await api("/auth/me")).user;
     await bootProjects();
@@ -245,6 +253,22 @@ function bindProjectSelector(onChange) {
   if (select) select.addEventListener("change", () => { state.projectId = select.value; onChange?.(select.value); });
 }
 
+function currentProject() {
+  return state.projects.find((project) => String(project.id) === String(state.projectId)) ?? null;
+}
+
+function currentRole() {
+  return currentProject()?.role ?? null;
+}
+
+function canDecide() {
+  return ["owner", "admin"].includes(currentRole());
+}
+
+function canEdit() {
+  return ["owner", "admin", "editor"].includes(currentRole());
+}
+
 /* ---------- Vistas ---------- */
 
 async function renderDashboard() {
@@ -253,7 +277,9 @@ async function renderDashboard() {
       <div class="st-card third"><h3>Servicios</h3><div id="st-health" class="st-kpi">…</div><p class="st-muted" id="st-health-detail">Comprobando…</p></div>
       <div class="st-card third"><h3>Proyectos</h3><div class="st-kpi st-grad" id="st-project-count">—</div><p class="st-muted">con tu cuenta</p></div>
       <div class="st-card third"><h3>Facturación</h3><div class="st-kpi st-grad" id="st-billing-mode">—</div><p class="st-muted">modo actual del servidor</p></div>
-      <div class="st-card"><h3>Accesos rápidos</h3><div class="st-row" style="justify-content:flex-start;gap:10px">
+      <div class="st-card third"><h3>Agente</h3><div class="st-kpi" id="st-agent-state">—</div><p class="st-muted" id="st-agent-detail">Sin proyecto activo</p></div>
+      <div class="st-card third"><h3>Modelo</h3><div class="st-kpi" id="st-model-state">—</div><p class="st-muted" id="st-model-detail">Sin verificar</p></div>
+      <div class="st-card third"><h3>Accesos rápidos</h3><div class="st-row" style="justify-content:flex-start;gap:10px">
         <a class="st-btn" href="/code">Atomic Code</a>
         <a class="st-btn" href="/agent">Agente AXYRON</a>
         <a class="st-btn" href="/knowledge">Conocimiento</a>
@@ -263,13 +289,52 @@ async function renderDashboard() {
     </div>
   </div>`);
   $("#st-project-count").textContent = num(state.projects.length);
-  withError(async () => {
+  try {
     const readiness = await api("/health/readiness");
     const ok = readiness.status === "ready";
     $("#st-health").textContent = ok ? "Operativo" : "Degradado";
     $("#st-health-detail").textContent = ok ? "Todos los servicios responden." : "Hay dependencias no disponibles.";
     $("#st-billing-mode").textContent = readiness.billing?.mode === "ledger" ? "Ledger real" : "Shadow (sombra)";
-  }, outlet);
+  } catch (error) {
+    const report = error?.data ?? null;
+    if (report && report.status) {
+      $("#st-health").textContent = report.status === "ready" ? "Operativo" : "Degradado";
+      const failing = Object.entries(report.dependencies ?? {}).filter(([, value]) => value !== "ok").map(([name]) => name);
+      $("#st-health-detail").textContent = failing.length ? `Dependencias no disponibles: ${failing.join(", ")}.` : "El servidor reportó estado degradado.";
+      $("#st-billing-mode").textContent = report.billing?.mode === "ledger" ? "Ledger real" : "Shadow (sombra)";
+    } else {
+      $("#st-health").textContent = "No disponible";
+      $("#st-health-detail").textContent = error.message || "No se pudo consultar el estado del servidor.";
+      $("#st-billing-mode").textContent = "No verificado";
+    }
+  }
+
+  if (!state.projectId) {
+    $("#st-agent-detail").textContent = "Crea o selecciona un proyecto para ver ejecuciones.";
+    $("#st-model-detail").textContent = "Crea o selecciona un proyecto para verificar el runtime.";
+    return;
+  }
+  try {
+    const runs = await api(`/workspace/agent/runs?project_id=${encodeURIComponent(state.projectId)}&limit=1`);
+    const last = (runs.items || [])[0];
+    $("#st-agent-state").textContent = last ? last.status : "Sin ejecuciones";
+    $("#st-agent-detail").textContent = last ? last.goal : "El agente todavía no ha ejecutado tareas en este proyecto.";
+  } catch {
+    $("#st-agent-state").textContent = "No disponible";
+    $("#st-agent-detail").textContent = "No se pudo consultar el estado del agente.";
+  }
+  try {
+    const availability = await api(`/workspace/models/availability?project_id=${encodeURIComponent(state.projectId)}`);
+    const model = (availability.models || []).find((item) => item.code === "atomic-code");
+    const available = model?.available === true;
+    $("#st-model-state").textContent = available ? "Disponible" : "No disponible";
+    $("#st-model-detail").textContent = available
+      ? "El runtime confirmó el modelo configurado."
+      : "Ollama no confirmó el modelo configurado.";
+  } catch {
+    $("#st-model-state").textContent = "No verificado";
+    $("#st-model-detail").textContent = "No se pudo comprobar la disponibilidad del modelo.";
+  }
 }
 
 async function renderProjects() {
@@ -280,26 +345,41 @@ async function renderProjects() {
           <div class="st-field"><label for="st-project-name">Nombre</label><input id="st-project-name" required minlength="2" maxlength="120" placeholder="Mi proyecto"></div>
           <button class="st-btn primary" type="submit">Crear</button>
         </form>
+        <p class="st-muted" style="margin-top:10px">El backend crea la propiedad y un workspace aislado. Si el almacenamiento falla, la operación falla de forma segura.</p>
       </div>
       <div class="st-card half"><h3>Tus proyectos</h3><div id="st-project-list" class="st-list"><div class="st-empty">Cargando…</div></div></div>
+      <div class="st-card"><h3>Gestión disponible</h3><p class="st-muted">Puedes crear, listar, seleccionar y abrir proyectos. El backend actual no expone un endpoint de borrado de proyectos, por lo que esta aplicación no muestra un botón de eliminación que no haría nada.</p></div>
     </div>
   </div>`);
   const list = $("#st-project-list");
   const render = async () => {
     list.innerHTML = state.projects.length
-      ? state.projects.map((p) => `<div class="st-item"><div class="st-item-main"><div class="st-item-title">${esc(p.name)}</div><div class="st-item-meta">Rol: ${esc(p.role ?? "miembro")}</div></div><a class="st-btn" href="/code">Abrir</a></div>`).join("")
+      ? state.projects.map((project) => {
+        const active = String(project.id) === String(state.projectId);
+        return `<div class="st-item"><div class="st-item-main"><div class="st-item-title">${esc(project.name)} ${active ? '<span class="st-pill good">Activo</span>' : ""}</div><div class="st-item-meta">Rol: ${esc(project.role ?? "miembro")} · ${esc(project.created_at ?? "")}</div></div><div class="st-row"><button class="st-btn" data-select-project="${esc(project.id)}" ${active ? "disabled" : ""}>${active ? "Seleccionado" : "Seleccionar"}</button><button class="st-btn primary" data-open-project="${esc(project.id)}">Abrir</button></div></div>`;
+      }).join("")
       : `<div class="st-empty">Todavía no hay proyectos.</div>`;
+    list.querySelectorAll("[data-select-project]").forEach((button) => button.addEventListener("click", async () => {
+      state.projectId = button.dataset.selectProject;
+      await render();
+      outlet.prepend(notice("good", "Proyecto seleccionado para el resto de módulos."));
+    }));
+    list.querySelectorAll("[data-open-project]").forEach((button) => button.addEventListener("click", async () => {
+      state.projectId = button.dataset.openProject;
+      await navigate("/code");
+    }));
   };
   await render();
   $("#st-project-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const input = $("#st-project-name");
     try {
-      const result = await api("/auth/projects", { method: "POST", body: JSON.stringify({ name: input.value.trim() }) });
+      const created = await api("/auth/projects", { method: "POST", body: JSON.stringify({ name: input.value.trim() }) });
       input.value = "";
       await bootProjects();
+      if (created.project?.id) state.projectId = created.project.id;
       await render();
-      outlet.prepend(notice("good", "Proyecto creado."));
+      outlet.prepend(notice("good", "Proyecto creado y seleccionado."));
     } catch (error) {
       outlet.prepend(notice("error", error.message));
     }
@@ -311,9 +391,12 @@ async function renderCode() {
     setOutlet(`<div class="st-view">${viewHead("Atomic Code", "Atomic Code 1.1", "Tu agente de programación.")}<div class="st-empty">Primero crea un proyecto desde <a href="/projects">Proyectos</a>.</div></div>`);
     return;
   }
-  const idempotencyKey = (() => {
+  let history = [];
+  let pendingKey = null;
+  let pendingFingerprint = "";
+  const newKey = () => {
     try { return (crypto.randomUUID && crypto.randomUUID()) || `axy-${Date.now()}`; } catch { return `axy-${Date.now()}`; }
-  })();
+  };
   setOutlet(`<div class="st-view">${viewHead("Atomic Code", "Atomic Code 1.1", "Respuestas reales del modelo; nada se simula.")}
     <div class="st-grid">
       <div class="st-card">${projectSelectorHtml()}</div>
@@ -332,9 +415,13 @@ async function renderCode() {
   const billingNote = $("#st-chat-billing");
   const loadHistory = async () => {
     chat.innerHTML = "";
+    billingNote.textContent = "";
     try {
       const data = await api(`/workspace/chat/history?project_id=${encodeURIComponent(state.projectId)}`);
       const messages = data.messages || [];
+      history = messages;
+      pendingKey = null;
+      pendingFingerprint = "";
       if (!messages.length) chat.innerHTML = '<div class="st-empty">Aún no hay conversación.</div>';
       for (const message of messages.slice(-20)) {
         const bubble = document.createElement("div");
@@ -361,17 +448,28 @@ async function renderCode() {
     chat.appendChild(userBubble);
     input.value = "";
     try {
+      const payload = {
+        model: "atomic-code",
+        project_id: state.projectId,
+        messages: history.concat([{ role: "user", content }]),
+        max_tokens: 1024,
+        temperature: 0.2,
+        stream: false,
+      };
+      const fingerprint = JSON.stringify(payload);
+      if (!pendingKey || pendingFingerprint !== fingerprint) {
+        pendingKey = newKey();
+        pendingFingerprint = fingerprint;
+      }
       const result = await api("/workspace/chat/completions", {
         method: "POST",
-        headers: { "Idempotency-Key": idempotencyKey },
-        body: JSON.stringify({
-          project_id: state.projectId,
-          messages: [{ role: "user", content }],
-          max_tokens: 1024,
-          temperature: 0.2,
-        }),
+        headers: { "Idempotency-Key": pendingKey },
+        body: fingerprint,
       });
       const answer = result.choices?.[0]?.message?.content ?? "(sin respuesta)";
+      history = payload.messages.concat([{ role: "assistant", content: answer }]);
+      pendingKey = null;
+      pendingFingerprint = "";
       const bubble = document.createElement("div");
       bubble.className = "st-bubble assistant";
       bubble.textContent = answer;
@@ -477,22 +575,138 @@ async function renderAgent() {
           <div class="st-field"><label for="st-goal">Objetivo</label><textarea id="st-goal" maxlength="10000" minlength="5" required placeholder="Describe qué debe hacer Axyron…"></textarea></div>
           <button class="st-btn primary" type="submit">Iniciar tarea</button>
         </form>
+        <p class="st-muted" style="margin-top:10px">El runtime crea una ejecución persistente. Las acciones que modifican recursos requieren aprobación humana; no se ejecutan de forma silenciosa.</p>
       </div>
-      <div class="st-card half"><h3>Ejecuciones recientes</h3><div id="st-runs" class="st-list"><div class="st-empty">Cargando…</div></div></div>
+      <div class="st-card half"><h3>Ejecuciones</h3><div id="st-runs" class="st-list"><div class="st-empty">Cargando…</div></div></div>
+      <div class="st-card"><h3>Aprobaciones pendientes</h3><div id="st-approvals" class="st-list"><div class="st-empty">Cargando…</div></div></div>
+      <div class="st-card" id="st-run-detail" hidden></div>
     </div>
   </div>`);
   const runsBox = $("#st-runs");
-  const refresh = async () => {
+  const approvalsBox = $("#st-approvals");
+  const detailBox = $("#st-run-detail");
+
+  const showDetail = async (runId) => {
+    detailBox.hidden = false;
+    detailBox.innerHTML = `<h3>Detalle de la ejecución</h3><div class="st-empty">Cargando…</div>`;
     try {
-      const data = await api(`/workspace/agent/runs?project_id=${encodeURIComponent(state.projectId)}`);
-      const runs = data.items || [];
-      runsBox.innerHTML = runs.length
-        ? runs.map((run) => `<div class="st-item"><div class="st-item-main"><div class="st-item-title">${esc(run.goal)}</div><div class="st-item-meta">${esc(run.status)} · ${esc(run.updated_at ?? "")}</div></div>${run.status === "awaiting_approval" ? '<a class="st-btn" href="#approve">Revisar</a>' : ""}</div>`).join("")
-        : `<div class="st-empty">Sin ejecuciones aún.</div>`;
-    } catch { runsBox.innerHTML = `<div class="st-empty">No se pudieron cargar las ejecuciones.</div>`; }
+      const detail = await api(`/workspace/agent/runs/${encodeURIComponent(runId)}?project_id=${encodeURIComponent(state.projectId)}`);
+      const messages = (detail.messages || []).map((message) => {
+        const content = typeof message?.content === "string" ? message.content : JSON.stringify(message?.content ?? "");
+        return `<div class="st-item"><div class="st-item-main"><div class="st-item-meta">${esc(message?.role ?? "mensaje")}</div><div>${esc(content)}</div></div></div>`;
+      }).join("");
+      const pending = (detail.pending_actions || []).map((action) => `<div class="st-item"><div class="st-item-main"><div class="st-item-title">${esc(action.tool ?? "Acción")}</div><div class="st-item-meta">${esc(action.summary ?? "")} · hash ${esc(action.action_hash ?? "")}</div></div><span class="st-pill warn">Pendiente</span></div>`).join("");
+      detailBox.innerHTML = `<div class="st-row"><h3 style="margin:0">Detalle de la ejecución</h3><button class="st-btn" id="st-run-detail-close">Cerrar</button></div>
+        <p class="st-muted">${esc(detail.goal ?? "")} · Estado: <strong>${esc(detail.status ?? "")}</strong></p>
+        ${detail.error ? `<div class="st-notice st-error" role="alert">${esc(detail.error)}</div>` : ""}
+        <h4>Mensajes</h4><div class="st-list">${messages || '<div class="st-empty">Sin mensajes persistidos.</div>'}</div>
+        <h4>Acciones pendientes</h4><div class="st-list">${pending || '<div class="st-empty">Sin acciones pendientes.</div>'}</div>`;
+      $("#st-run-detail-close", detailBox).addEventListener("click", () => { detailBox.hidden = true; detailBox.innerHTML = ""; });
+    } catch (error) {
+      detailBox.innerHTML = `<div class="st-row"><h3 style="margin:0">Detalle de la ejecución</h3><button class="st-btn" id="st-run-detail-close">Cerrar</button></div><div class="st-notice st-error" role="alert">${esc(error.message)}</div>`;
+      $("#st-run-detail-close", detailBox).addEventListener("click", () => { detailBox.hidden = true; detailBox.innerHTML = ""; });
+    }
   };
-  bindProjectSelector(refresh);
-  await refresh();
+
+  const load = async () => {
+    const decide = canDecide();
+    const edit = canEdit();
+    try {
+      const [runs, approvals] = await Promise.all([
+        api(`/workspace/agent/runs?project_id=${encodeURIComponent(state.projectId)}`),
+        api(`/workspace/agent/approvals?project_id=${encodeURIComponent(state.projectId)}`),
+      ]);
+      const items = runs.items || [];
+      runsBox.innerHTML = items.length
+        ? items.map((run) => `<div class="st-item"><div class="st-item-main"><div class="st-item-title">${esc(run.goal)}</div><div class="st-item-meta">${esc(run.status)} · ${esc(run.updated_at ?? "")}</div></div><div class="st-row">
+            <button class="st-btn" data-run-detail="${esc(run.id)}">Ver detalle</button>
+            ${run.status === "awaiting_approval" && edit ? `<button class="st-btn primary" data-resume-run="${esc(run.id)}">Continuar ejecución</button>` : ""}
+            ${run.status === "awaiting_approval" && decide ? `<button class="st-btn danger" data-cancel-run="${esc(run.id)}">Cancelar ejecución</button>` : ""}
+            ${run.status === "needs_reconciliation" && decide ? `<button class="st-btn" data-reconcile-run="${esc(run.id)}" data-resolution="applied">Marcar aplicada</button><button class="st-btn danger" data-reconcile-run="${esc(run.id)}" data-resolution="failed">Marcar no aplicada</button>` : ""}
+          </div></div>`).join("")
+        : `<div class="st-empty">Sin ejecuciones aún.</div>`;
+
+      runsBox.querySelectorAll("[data-run-detail]").forEach((button) => button.addEventListener("click", () => showDetail(button.dataset.runDetail)));
+
+      runsBox.querySelectorAll("[data-resume-run]").forEach((button) => button.addEventListener("click", async () => {
+        if (!confirm("Continuar esta ejecución aplicará únicamente las acciones que ya hayan sido aprobadas. ¿Deseas continuar?")) return;
+        button.disabled = true;
+        try {
+          const result = await api(`/workspace/agent/runs/${encodeURIComponent(button.dataset.resumeRun)}/resume?project_id=${encodeURIComponent(state.projectId)}`, { method: "POST" });
+          outlet.prepend(notice("good", result.status === "awaiting_approval" ? "La ejecución sigue esperando aprobación." : result.status === "needs_reconciliation" ? "La acción requiere reconciliación humana." : `Ejecución actualizada: ${result.status}`));
+          await load();
+        } catch (error) { outlet.prepend(notice("error", error.message)); }
+        finally { button.disabled = false; }
+      }));
+
+      runsBox.querySelectorAll("[data-cancel-run]").forEach((button) => button.addEventListener("click", async () => {
+        const note = prompt("Indica el motivo de la cancelación (mínimo 8 caracteres). No se aplicará ninguna acción pendiente:");
+        if (!note || note.trim().length < 8) { outlet.prepend(notice("error", "El motivo debe tener al menos 8 caracteres.")); return; }
+        if (!confirm("Se cancelará la ejecución y se invalidarán sus aprobaciones pendientes. ¿Continuar?")) return;
+        button.disabled = true;
+        try {
+          await api(`/workspace/agent/runs/${encodeURIComponent(button.dataset.cancelRun)}/cancel?project_id=${encodeURIComponent(state.projectId)}`, { method: "POST", body: JSON.stringify({ note: note.trim() }) });
+          outlet.prepend(notice("good", "Ejecución cancelada. No se aplicaron acciones pendientes."));
+          await load();
+        } catch (error) { outlet.prepend(notice("error", error.message)); }
+        finally { button.disabled = false; }
+      }));
+
+      runsBox.querySelectorAll("[data-reconcile-run]").forEach((button) => button.addEventListener("click", async () => {
+        const resolution = button.dataset.resolution;
+        const note = prompt("Describe la verificación manual de la acción interrumpida (mínimo 8 caracteres). No se ejecutará nada automáticamente:");
+        if (!note || note.trim().length < 8) { outlet.prepend(notice("error", "El motivo debe tener al menos 8 caracteres.")); return; }
+        if (!confirm(`Se registrará la acción como ${resolution === "applied" ? "aplicada" : "no aplicada"} sin ejecutarla. ¿Continuar?`)) return;
+        button.disabled = true;
+        try {
+          const detail = await api(`/workspace/agent/runs/${encodeURIComponent(button.dataset.reconcileRun)}?project_id=${encodeURIComponent(state.projectId)}`);
+          const pending = detail.pending_actions || [];
+          if (pending.length !== 1) { outlet.prepend(notice("error", "La ejecución debe tener exactamente una acción pendiente para reconciliar.")); return; }
+          await api(`/workspace/agent/runs/${encodeURIComponent(button.dataset.reconcileRun)}/reconcile?project_id=${encodeURIComponent(state.projectId)}`, { method: "POST", body: JSON.stringify({ action_hash: pending[0].action_hash, resolution, note: note.trim() }) });
+          outlet.prepend(notice("good", "Reconciliación registrada. Pulsa Continuar ejecución para reanudar."));
+          await load();
+        } catch (error) { outlet.prepend(notice("error", error.message)); }
+        finally { button.disabled = false; }
+      }));
+
+      const approvalItems = approvals.items || [];
+      const planItems = approvals.plan_items || [];
+      approvalsBox.innerHTML = (approvalItems.length || planItems.length)
+        ? approvalItems.map((item) => `<div class="st-item"><div class="st-item-main"><div class="st-item-title">${esc(item.what ?? item.tool ?? "Acción propuesta")}</div><div class="st-item-meta">${esc(item.why ?? "Requiere revisión")} · caduca ${esc(item.expires_at ?? "")}</div></div>${decide ? `<div class="st-row"><button class="st-btn" data-approval="${esc(item.id)}" data-approve="true">Aprobar</button><button class="st-btn danger" data-approval="${esc(item.id)}" data-approve="false">Rechazar</button></div>` : '<span class="st-pill warn">Solo propietario o administrador</span>'}</div>`).join("")
+          + planItems.map((item) => `<div class="st-item"><div class="st-item-main"><div class="st-item-title">Plan: ${esc(item.goal)}</div><div class="st-item-meta">Aprobación de plan · no ejecuta herramientas</div></div>${decide ? `<div class="st-row"><button class="st-btn" data-plan-approval="${esc(item.id)}" data-approve="true">Aprobar</button><button class="st-btn danger" data-plan-approval="${esc(item.id)}" data-approve="false">Rechazar</button></div>` : '<span class="st-pill warn">Solo propietario o administrador</span>'}</div>`).join("")
+        : `<div class="st-empty">No hay aprobaciones pendientes.</div>`;
+
+      approvalsBox.querySelectorAll("[data-approval]").forEach((button) => button.addEventListener("click", async () => {
+        const approved = button.dataset.approve === "true";
+        if (!confirm(`${approved ? "¿Aprobar" : "¿Rechazar"} esta acción propuesta? La decisión no ejecuta la acción por sí sola.`)) return;
+        button.disabled = true;
+        try {
+          await api(`/workspace/agent/approvals/${encodeURIComponent(button.dataset.approval)}?project_id=${encodeURIComponent(state.projectId)}`, { method: "POST", body: JSON.stringify({ approved, note: "Decisión desde Axyron Studio" }) });
+          outlet.prepend(notice("good", "Decisión registrada. La aprobación no ejecuta por sí sola la acción."));
+          await load();
+        } catch (error) { outlet.prepend(notice("error", error.message)); }
+        finally { button.disabled = false; }
+      }));
+
+      approvalsBox.querySelectorAll("[data-plan-approval]").forEach((button) => button.addEventListener("click", async () => {
+        const approved = button.dataset.approve === "true";
+        if (!confirm(`${approved ? "¿Aprobar" : "¿Rechazar"} este plan? La decisión no ejecutará herramientas.`)) return;
+        button.disabled = true;
+        try {
+          await api(`/workspace/agent/plan-approvals/${encodeURIComponent(button.dataset.planApproval)}?project_id=${encodeURIComponent(state.projectId)}`, { method: "POST", body: JSON.stringify({ approved, note: "Decisión desde Axyron Studio" }) });
+          outlet.prepend(notice("good", "Decisión del plan registrada; no se ejecutaron herramientas."));
+          await load();
+        } catch (error) { outlet.prepend(notice("error", error.message)); }
+        finally { button.disabled = false; }
+      }));
+    } catch (error) {
+      runsBox.innerHTML = `<div class="st-empty">No se pudieron cargar las ejecuciones.</div>`;
+      approvalsBox.innerHTML = `<div class="st-empty">No se pudieron cargar las aprobaciones.</div>`;
+      outlet.prepend(notice("error", error.message));
+    }
+  };
+  bindProjectSelector(load);
+  await load();
   $("#st-agent-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const goal = $("#st-goal").value.trim();
@@ -501,29 +715,61 @@ async function renderAgent() {
       const run = await api("/workspace/agent/runs", { method: "POST", body: JSON.stringify({ project_id: state.projectId, goal }) });
       outlet.prepend(notice("good", `Tarea creada: ${run.status}`));
       $("#st-goal").value = "";
-      await refresh();
+      await load();
     } catch (error) { outlet.prepend(notice("error", error.message)); }
   });
 }
 
 async function renderModels() {
   setOutlet(`<div class="st-view">${viewHead("Modelos", "Modelos Atomic", "Catálogo del servidor y disponibilidad en tiempo real.")}
-    <div class="st-grid"><div id="st-models" class="st-grid" style="grid-column:span 12"><div class="st-empty">Cargando catálogo…</div></div></div>
+    <div class="st-grid">
+      <div class="st-card"><h3>Modelos publicados</h3><div id="st-models" class="st-grid"><div class="st-empty">Cargando catálogo…</div></div></div>
+      <div class="st-card"><h3>Disponibilidad del runtime</h3><p class="st-muted">Solo se marca «Disponible ahora» cuando Ollama confirma el modelo configurado para el proyecto activo.</p><button class="st-btn primary" id="st-models-check">Volver a comprobar</button><div id="st-models-result" class="st-muted" aria-live="polite" style="margin-top:10px"></div></div>
+      <div class="st-card"><h3>Próximas capacidades</h3><p class="st-muted">Atomic Reasoning, Atomic Vision y Atomic Video no forman parte del catálogo operativo actual. No se presentan como modelos disponibles.</p><span class="st-pill warn">Próxima actualización</span></div>
+    </div>
   </div>`);
+  const box = $("#st-models");
+  let catalog;
   try {
-    const catalog = await api("/billing/catalog");
-    const box = $("#st-models");
-    box.innerHTML = catalog.models.map((model) => `<div class="st-card third"><div class="st-ico" style="font-size:1.5rem">⌘</div><h3>${esc(model.name)}</h3><p class="st-muted">${esc(model.description)}</p><p style="margin-top:10px"><span class="st-pill ${model.available_for_chat ? "good" : "warn"}">${model.available_for_chat ? "Disponible" : "Próxima actualización"}</span></p></div>`).join("")
-      + `<div class="st-card"><h3>Disponibilidad del runtime</h3><p class="st-muted">Comprueba contra Ollama si el chat está listo ahora mismo.</p><button class="st-btn primary" id="st-models-check">Comprobar disponibilidad</button><div id="st-models-result" class="st-muted" aria-live="polite" style="margin-top:10px"></div></div>`;
-    $("#st-models-check").addEventListener("click", async () => {
-      const out = $("#st-models-result");
-      out.textContent = "Comprobando…";
-      try {
-        const data = await api(`/workspace/models/availability?project_id=${encodeURIComponent(state.projectId ?? "")}`);
-        out.textContent = (data.models ?? []).map((m) => `${m.code}: ${m.available === true ? "disponible" : "no disponible"}`).join(" · ") || "Sin datos.";
-      } catch (error) { out.textContent = error.message; }
-    });
-  } catch (error) { outlet.prepend(notice("error", error.message)); }
+    catalog = await api("/billing/catalog");
+  } catch (error) {
+    box.innerHTML = `<div class="st-empty">${esc(error.message)}</div>`;
+    return;
+  }
+  const models = catalog.models || [];
+
+  const loadAvailability = async () => {
+    const result = $("#st-models-result");
+    if (!state.projectId) {
+      box.innerHTML = models.map((model) => `<div class="st-card third"><h3>${esc(model.name)}</h3><p class="st-muted">${esc(model.description)}</p><span class="st-pill warn">Sin verificar</span><p class="st-muted">Selecciona un proyecto para comprobar el runtime.</p></div>`).join("");
+      result.textContent = "Crea o selecciona un proyecto para verificar Ollama.";
+      return;
+    }
+    result.textContent = "Comprobando contra Ollama…";
+    let live = new Map();
+    try {
+      const data = await api(`/workspace/models/availability?project_id=${encodeURIComponent(state.projectId)}`);
+      live = new Map((data.models || []).map((model) => [model.code, model.available === true]));
+    } catch (error) {
+      result.textContent = `No se pudo verificar Ollama: ${error.message}`;
+    }
+    box.innerHTML = models.map((model) => {
+      const verified = live.get(model.code);
+      const available = verified === true;
+      const label = verified === undefined ? "Sin verificar" : available ? "Disponible ahora" : "No disponible";
+      const detail = verified === undefined
+        ? "El runtime no respondió a la comprobación."
+        : available
+          ? "Ollama confirmó este modelo para el proyecto activo."
+          : "El catálogo lo publica, pero el runtime no lo confirmó; no se puede iniciar inferencia.";
+      return `<div class="st-card third"><h3>${esc(model.name)}</h3><p class="st-muted">${esc(model.description)}</p><span class="st-pill ${available ? "good" : "warn"}">${label}</span><p class="st-muted">${detail}</p>${available ? '<p><a class="st-btn" href="/code">Abrir Atomic Code</a></p>' : ""}</div>`;
+    }).join("") || `<div class="st-empty">No hay modelos publicados.</div>`;
+    if (result.textContent.startsWith("Comprobando")) {
+      result.textContent = live.size ? "Comprobación completada." : "El runtime no devolvió modelos.";
+    }
+  };
+  $("#st-models-check").addEventListener("click", loadAvailability);
+  await loadAvailability();
 }
 
 async function renderUsage() {
@@ -641,10 +887,18 @@ async function renderBuy() {
 async function renderAccount() {
   setOutlet(`<div class="st-view">${viewHead("Cuenta", "Cuenta y seguridad", "Tu identidad, tu sesión y tu segundo factor.")}
     <div class="st-grid">
-      <div class="st-card half"><h3>Tu cuenta</h3><div id="st-account" class="st-list"><div class="st-empty">Cargando…</div></div></div>
+      <div class="st-card half"><h3>Tu cuenta</h3><div id="st-account" class="st-list"><div class="st-empty">Cargando…</div></div>
+        <p class="st-muted" style="margin-top:10px">El cambio de contraseña con sesión activa no tiene endpoint en este backend. Usa la recuperación de contraseña de la web principal.</p>
+      </div>
       <div class="st-card half"><h3>Autenticación multifactor</h3><div id="st-mfa" class="st-list"><div class="st-empty">Cargando…</div></div></div>
+      <div class="st-card"><h3>Sesión</h3><p class="st-muted">Cerrar sesión aquí revoca la sesión de este host (Studio). No revoca la sesión de la web principal ni otras sesiones de tu cuenta; esta versión no ofrece cierre de sesión global.</p><button class="st-btn" id="st-account-logout">Cerrar sesión en este dominio</button></div>
     </div>
   </div>`);
+  $("#st-account-logout").addEventListener("click", async () => {
+    try { await api("/auth/logout", { method: "POST", body: "{}" }); } catch {}
+    state.user = null;
+    await navigate("/login");
+  });
   try {
     const me = await api("/auth/me");
     $("#st-account").innerHTML = `<div class="st-item"><div class="st-item-main"><div class="st-item-title">${esc(me.user.display_name ?? me.user.email)}</div><div class="st-item-meta">${esc(me.user.email)}</div></div><span class="st-pill good">Sesión activa</span></div>`;
@@ -685,12 +939,12 @@ async function renderSecurity() {
   setOutlet(`<div class="st-view">${viewHead("Seguridad", "Seguridad de la cuenta", "Qué está protegido hoy y por qué.")}
     <div class="st-grid">
       <div class="st-card half"><h3>MFA</h3><div id="st-sec-mfa" class="st-muted">Consultando…</div></div>
-      <div class="st-card half"><h3>Sesiones</h3><p class="st-muted">Tus sesiones usan cookies HttpOnly y Secure, con rotación al entrar y CSRF en cada mutación. Cerrar sesión aquí revoca esta sesión.</p><button class="st-btn" id="st-logout">Cerrar sesión</button></div>
+      <div class="st-card half"><h3>Sesiones</h3><p class="st-muted">Tus sesiones usan cookies HttpOnly y Secure, con rotación al entrar y CSRF en cada mutación. Cerrar sesión aquí revoca únicamente la sesión de este host (Studio); no cierra la web principal ni otras sesiones de tu cuenta. Esta versión no implementa cierre de sesión global.</p><button class="st-btn" id="st-logout">Cerrar sesión en este dominio</button></div>
       <div class="st-card"><h3>Controles del servidor</h3><ul class="st-muted">
         <li>Sesiones con expiración y revocación.</li>
         <li>CSRF obligatorio en operaciones de escritura.</li>
         <li>Aislamiento por proyecto y autorización por rol.</li>
-        <li>Sandbox Docker aislado con red deshabilitada (AGT-04 verificado).</li>
+        <li>Sandbox con backend fail-closed: Docker solo se inyecta con configuración explícita y su validación E2E sigue pendiente.</li>
         <li>Aprobación humana para acciones sensibles del agente.</li>
       </ul></div>
     </div>
@@ -711,7 +965,7 @@ async function renderPrivacy() {
     <div class="st-grid">
       <div class="st-card"><h3>Datos medidos</h3><ul class="st-muted">
         <li>Los contadores de tokens se guardan asociados a tu usuario y proyecto (tabla <code>inference_usage_events</code>), sin prompts ni respuestas.</li>
-        <li>El historial de chat se guarda cifrado en reposo por proyecto y puede borrarse con el proyecto.</li>
+        <li>El historial de chat se guarda por usuario y proyecto en la base de datos (cifrado de disco según el operador, no cifrado a nivel de aplicación). No hay autoservicio de borrado de proyectos; la eliminación corresponde al operador.</li>
         <li>RAG aísla documentos y fragmentos por proyecto.</li>
       </ul></div>
       <div class="st-card"><h3>Disponibilidad de derechos</h3><p class="st-muted">Exportación y eliminación completa de datos personales están en desarrollo; no hay autoservicio aún. Para solicitudes de privacidad, escribe a la dirección de contacto publicada por el operador de la instancia.</p><span class="st-pill warn">Parcial</span></div>
@@ -723,7 +977,7 @@ async function renderPrivacy() {
 async function renderIntegrations() {
   setOutlet(`<div class="st-view">${viewHead("API e integraciones", "API e integraciones", "Qué hay disponible hoy.")}
     <div class="st-grid">
-      <div class="st-card"><h3>API propia (compatible con OpenAI)</h3><p class="st-muted">Endpoints bajo <code>/workspace</code> e <code>/auth</code>, autenticados por cookie de sesión o herencia del proveedor; el uso heredado <code>/v1/*</code> está desactivado por defecto.</p><span class="st-pill good">Disponible</span></div>
+      <div class="st-card"><h3>API propia (compatible con OpenAI)</h3><p class="st-muted">La API multiusuario usa <code>/workspace</code> y <code>/auth</code> con sesión de host, CSRF y membresía de proyecto. La API heredada <code>/v1/*</code> con clave de servicio está desactivada por defecto y no identifica usuario ni proyecto.</p><span class="st-pill good">Disponible</span></div>
       <div class="st-card"><h3>Atomic Video / Vision / Reasoning</h3><p class="st-muted">Modelos de generación y visión en desarrollo. No están disponibles ni se ofrecen hoy.</p><span class="st-pill warn">Próxima actualización</span></div>
       <div class="st-card"><h3>AXYRON CONNECT · Plugin Hub · Tool Registry</h3><p class="st-muted">Conectores, plugins y herramientas de terceros requieren permisos, verificación y pruebas. Aún no están activados.</p><span class="st-pill warn">Próxima actualización</span></div>
     </div>
@@ -739,10 +993,10 @@ async function renderTools() {
         <li>Cancelación con motivo auditado.</li>
       </ul></div>
       <div class="st-card"><h3>Sandbox Docker (AGT-04)</h3><ul class="st-muted">
-        <li>Daemon dedicado userns-remapped con TLS; imagen fijada por digest.</li>
-        <li>Sin red saliente, rootfs de solo lectura, uid/GID no root, sin sockets Docker.</li>
-      </ul><span class="st-pill good">Verificado</span></div>
-      <div class="st-card"><h3>Terminal desde el navegador</h3><p class="st-muted">No disponible. La ejecución real ocurre solo tras aprobación humana vía el agente con sandbox habilitado.</p><span class="st-pill warn">Ausente</span></div>
+        <li>El backend Docker es fail-closed y solo se inyecta con configuración explícita; está desactivado por defecto.</li>
+        <li>El diseño prevé daemon dedicado, imagen por digest, sin red saliente, rootfs de solo lectura y sin sockets Docker; la activación y validación E2E siguen pendientes.</li>
+      </ul><span class="st-pill warn">Parcial</span></div>
+      <div class="st-card"><h3>Terminal desde el navegador</h3><p class="st-muted">No disponible. El agente puede proponer acciones y requiere aprobación humana, pero el sandbox Docker no está validado E2E; no se anuncia ejecución autónoma.</p><span class="st-pill warn">Ausente</span></div>
     </div>
   </div>`);
 }

@@ -41,7 +41,7 @@ Una sola cuenta, dos hosts, **ninguna cookie compartida entre ellos**. La sesió
 
 1. En la web principal, el enlace «Axyron Studio» lleva a `/sso-start` (página estática `frontend/sso-start.html`).
 2. Si hay sesión (cookie `axion_session` de la web principal), esa página llama a `POST /auth/sso/authorize` con CSRF. La API emite un **código de un solo uso** (48 bytes aleatorios, TTL 180 s, almacenado como SHA-256 junto con el state) y devuelve `{studio_url, code, state}`.
-3. El navegador navega a `studio.axyronatomic.com/sso/callback?code=…&state=…`.
+3. El navegador navega a `studio.axyronatomic.com/sso/callback#code=…&state=…`. El código y el state viajan en el **fragmento**, que no se envía al servidor ni en la cabecera `Referer`; el Studio consume el fragmento y limpia la URL con `history.replaceState` antes de llamar al intercambio.
 4. `studio/app.js` consume `POST /auth/sso/exchange` con `{code, state}`. La API **consume el código atómicamente** (única transacción con `FOR UPDATE`), verifica `state`, y crea **una sesión nueva** (`create_session`) cuya cookie se emite **host-only** por el vhost del Studio (sin atributo `Domain`): no es visible ni útil en la web principal.
 5. El Studio carga `/auth/me` y entra directamente a `/dashboard`.
 
@@ -52,7 +52,7 @@ Una sola cuenta, dos hosts, **ninguna cookie compartida entre ellos**. La sesió
 | Replay | Código de un solo uso, `consumed_at` atómico; un segundo intercambio devuelve 401 |
 | Expiración | TTL 180 s; los caducados devuelven 401 |
 | Fuga entre hosts | Ningún atributo `Domain`; cookies host-only por aplicación |
-| Secreto en claro | Solo hashes SHA-256 (`sso_codes`); el código existe solo en memoria del navegador y en la URL una vez |
+| Secreto en claro | Solo hashes SHA-256 (`sso_codes`); el código existe una vez en el fragmento del navegador, que se borra antes del intercambio y no se envía al servidor ni en `Referer` |
 | CSRF | `state` verificado en el intercambio; `authorize` exige sesión + CSRF; `exchange` con límite estricto por IP |
 | Revocación | Las sesiones del Studio son independientes: revocar la de la web principal no revoca la del Studio |
 | Persistencia | No se usan tokens en localStorage/sessionStorage; solo cookies HttpOnly |
@@ -70,13 +70,29 @@ Nginx: `deploy/studio.conf` monta el vhost `studio.axyronatomic.com` (proxy a `a
 2. Emitir/instalar el certificado para ese nombre (o terminar TLS en el proxy de borde y reenviar HTTP/HTTPS a `:8080`).
 3. Montar `deploy/studio.conf` en el nginx (el `Dockerfile.frontend` ya copia `studio/` a `/usr/share/nginx/studio/` y `deploy/studio.conf` a `conf.d/`).
 4. Poner `STUDIO_ORIGIN=https://studio.axyronatomic.com` en `.env` y recrear la API (operación explícita; migración `024_sso_codes.sql` con `python -m api.migrate`).
-5. Verificar: `https://axyron.com` → registro → «AXYRON Studio» → `/dashboard` autenticado; `https://studio.axyronatomic.com/buy?plan=starter_300` directo; 404 en ruta inexistente; cookies **host-only** en DevTools.
+5. Verificar: `https://axyronatomic.com` → registro → «AXYRON Studio» → `/dashboard` autenticado; `https://studio.axyronatomic.com/buy?plan=starter_300` directo; 404 en ruta inexistente; cookies **host-only** en DevTools. El dominio canónico debe ser confirmado por el propietario antes de publicar; este documento asume `axyronatomic.com` porque es el configurado en el repositorio.
 
 ### Límites honestos
 
 - El intercambio SSO crea una sesión independiente por host; **no** hay cierre de sesión global. La sesión del Studio expira por su cuenta (`SESSION_TTL`, 12 h) o revocándola desde su propio `/auth/logout`.
 - El login propio del Studio (`/login`) es el camino principal cuando el SSO no está configurado; ambos producen sesiones host-only independientes.
 - El vhost del Studio proxy a la misma API; no hay backend dedicado ni datos diferentes.
+
+### Endurecimiento y correcciones — 2026-11-09
+
+Cambios aplicados en esta pasada de revisión, todos sobre la SPA independiente y el SSO:
+
+- **SSO sin código en la query:** `studio_url` usa `#code=…&state=…`; el callback acepta fragmento o query por compatibilidad, limpia la URL antes de intercambiar y el backend añade `Cache-Control: no-store` a `authorize`.
+- **State no ASCII:** el hash pasó de `encode("ascii")` a `encode("utf-8")`; una entrada inválida devuelve 401 en lugar de provocar un 500. Se añadió prueba de regresión y otra que rechaza cuentas suspendidas entre `authorize` y `exchange`.
+- **Atomic Code:** el chat envía el **historial completo** (ya no solo el último mensaje, que sobrescribía el historial persistido) y usa una `Idempotency-Key` nueva por payload, reutilizada solo al reintentar el mismo contenido.
+- **Dashboard:** un readiness degradado (HTTP 503 con cuerpo) muestra «Degradado» y las dependencias que fallan, en lugar de un error genérico.
+- **Agente:** la UI lista ejecuciones y muestra detalle persistido, aprobaciones de acción/plan, `resume`, `cancel` y `reconcile` con `action_hash`. No hay enlaces ficticios `#approve`; la aprobación solo registra la decisión y lo indica en pantalla.
+- **Modelos:** la disponibilidad se marca solo si `/workspace/models/availability` lo confirma; Reasoning, Vision y Video se muestran como «Próxima actualización».
+- **Proyectos:** crear, seleccionar y abrir persisten `state.projectId`; no se simula borrado porque `/auth/projects` no expone `DELETE`.
+- **Sesión:** la UI declara que el logout revoca **solo** la sesión del host Studio y que no existe cierre de sesión global. Tampoco se simula cambio de contraseña con sesión activa (no hay endpoint).
+- **Contrato de pruebas:** nuevo `tests/test_studio_app_contract.py` (12 pruebas) y E2E ampliado con agente, aprobaciones, disponibilidad de modelos y SSO por fragmento.
+
+Evidencia local de esta pasada (HEAD sin commitear en `hardening/studio-independent-app`): `python -m pytest -q` → **1070 passed, 25 skipped**; `node tests/e2e/studio-app-browser.mjs` → aprobado; `python scripts/check_frontend_js.py` → sintaxis válida. Las pruebas PostgreSQL del SSO no se ejecutan sobre SQLite local (`FOR UPDATE`); su validación corresponde al job PostgreSQL de CI. No se declara CI verde para este estado hasta que exista una ejecución asociada al SHA.
 
 ## Diferencias frente a la arquitectura anterior
 

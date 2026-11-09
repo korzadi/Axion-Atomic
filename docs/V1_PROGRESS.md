@@ -1,10 +1,11 @@
 # AXYRON ATOMIC V1.0 — Registro de progreso
 
-**Rama de trabajo:** `agent/opencode-vps`
-**Fase activa:** 12 — QA y liberación V1.0 (desarrollo inverso 12 → 7)
-**Estado global:** EN DESARROLLO  
+**Rama de trabajo:** `hardening/studio-independent-app` (PR #25)
+**Fase activa:** 12 — QA y liberación V1.0 (desarrollo inverso 12 → 7); endurecimiento de Studio independiente y SSO
+**Estado global:** EN DESARROLLO — V1.0 **no liberada**
 **Implementación global estimada:** ~90 % de criterios de aceptación con código presente (conteo textual de la matriz, 31 criterios)
-**Preparación productiva:** ~75 % (producción `a298344` con auth activa y readiness `ready`; CI 6/6 del HEAD; staging con buzón real, token/catálogo QvaPay y AGT-04 pendientes)
+**Preparación productiva:** ~75 % (producción `a298344` con auth activa y readiness `ready`; staging con buzón real, token/catálogo QvaPay y AGT-04 pendientes)
+**Evidencia local de la rama:** `python -m pytest -q` → 1070 passed, 25 skipped; E2E de Studio aprobado; `check_frontend_js.py` aprobado. Las pruebas SSO PostgreSQL requieren CI; no hay CI verde declarada para el HEAD sin commitear.
 
 > Regla: los porcentajes son estimaciones de implementación basadas en la matriz de aceptación. No certifican disponibilidad operativa. Solo se declara **verificada** una capacidad cuando existe una prueba reproducible aprobada para el HEAD indicado. Las fases 10 y 12 conservan bloqueos externos que impiden declarar la V1.0 liberada. La fuente de verdad de los conteos por criterio es `docs/V1_ACCEPTANCE_MATRIX.md`; las cifras de 68 %/35 % de revisiones anteriores quedan como histórico.
 
@@ -14,7 +15,7 @@
 | ---: | --- | ---: | --- |
 | 1 | Estabilización y arquitectura | 70% | EN PROGRESO |
 | 2 | Autenticación y MFA | 60% | EN PROGRESO |
-| 3 | Axyron Studio | 50% | EN PROGRESO |
+| 3 | Axyron Studio | 65% | EN PROGRESO |
 | 4 | Modelos de IA | 65% | EN PROGRESO |
 | 5 | Agente AXYRON | 75% | EN PROGRESO |
 | 6 | Memoria y RAG | 70% | EN PROGRESO |
@@ -26,6 +27,17 @@
 | 12 | QA y liberación V1.0 | 70% | EN PROGRESO |
 
 **Lectura de los porcentajes:** reflejan implementación y pruebas locales del código inspeccionado, no aceptación en staging. Las cifras heredadas del orden antiguo de fases se conservan solo como histórico en las secciones siguientes.
+
+## Studio independiente y SSO — endurecimiento 2026-11-09
+
+**Estado:** implementado y probado localmente; despliegue y validación real pendientes del propietario.
+
+- La SPA independiente (`studio/`) usa rutas reales y consume los contratos reales: proyectos, chat con historial completo e idempotencia por payload, conocimiento, agente (ejecuciones, detalle, aprobaciones, `resume`, `cancel`, `reconcile`), disponibilidad de modelos, consumo, facturación, cuenta y seguridad.
+- No se simulan capacidades ausentes: no hay borrado de proyectos ni cambio de contraseña con sesión activa; el logout se documenta como host-only y no existe logout global.
+- SSO por código de un solo uso con `state`, TTL 180 s, hashes SHA-256, sesión nueva host-only y código en el fragmento de la URL (no en la query), eliminado del historial antes del intercambio.
+- Correcciones de seguridad: hash UTF-8 del state (401 en vez de 500) y `Cache-Control: no-store` en `authorize`.
+- Pruebas nuevas: `tests/test_studio_app_contract.py` (10) y E2E ampliado de agente/modelos/SSO. Las pruebas PostgreSQL del SSO siguen dependiendo del job CI con PostgreSQL real.
+- Pendiente: CI del SHA final, E2E con backend real/Qdrant y dominios definitivos, DNS/TLS de `studio.axyronatomic.com`, `STUDIO_ORIGIN` en `.env`, aceptación del propietario. El dominio canónico debe confirmarse antes de publicar.
 
 ## Fase 1 — Autenticación y cuentas
 

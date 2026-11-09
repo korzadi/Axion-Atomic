@@ -55,7 +55,8 @@ def current_user_exchange(token: str):
 def test_authorize_then_exchange_creates_working_session():
     user_id = _user()
     code = sso_routes.authorize_sso_code(user_id=user_id, origin=ORIGIN)
-    assert code["studio_url"].startswith(ORIGIN + "/sso/callback?code=")
+    assert code["studio_url"].startswith(ORIGIN + "/sso/callback#code=")
+    assert "?code=" not in code["studio_url"]
 
     token, csrf = sso_routes.exchange_sso_code(code=code["code"], state=code["state"])
     assert token and csrf
@@ -119,3 +120,22 @@ def test_authorize_requires_https_origin():
     with pytest.raises(HTTPException) as caught:
         sso_routes.authorize_sso_code(user_id=user_id, origin="http://studio.axyronatomic.com")
     assert caught.value.status_code == 503
+
+
+def test_exchange_non_ascii_state_is_rejected_without_crashing():
+    """Una entrada no ASCII debe ser 401, no un UnicodeEncodeError/500."""
+    user_id = _user()
+    code = sso_routes.authorize_sso_code(user_id=user_id, origin=ORIGIN)
+    with pytest.raises(HTTPException) as caught:
+        sso_routes.exchange_sso_code(code=code["code"], state="ñ" * 43)
+    assert caught.value.status_code == 401
+
+
+def test_exchange_rejects_account_suspended_after_authorize():
+    user_id = _user()
+    code = sso_routes.authorize_sso_code(user_id=user_id, origin=ORIGIN)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE users SET status='disabled' WHERE id=:id"), {"id": user_id})
+    with pytest.raises(HTTPException) as caught:
+        sso_routes.exchange_sso_code(code=code["code"], state=code["state"])
+    assert caught.value.status_code == 401

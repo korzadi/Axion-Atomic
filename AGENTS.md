@@ -10,7 +10,7 @@ Guía operativa para sesiones de OpenCode. Antes de programar, carga la skill `p
 - Un test: `python3 -m pytest -q tests/test_billing_budget.py::Clase::test_nombre`.
 - La suite normal usa SQLite y dobles; no requiere Ollama, Qdrant ni PostgreSQL reales.
 - Los tests `*_postgres.py` / `test_postgres_migrations.py` se saltan salvo que `DATABASE_URL` empiece por `postgresql`. Solo exporta esa variable apuntando a una BD efímera: insertan y migran datos reales.
-- Verificación frontend: `python3 scripts/check_frontend_js.py` (requiere Node). Solo valida sintaxis de los scripts inline del HTML principal y de `studio.js`, `workspace.js`, `admin.js`.
+- Verificación frontend: `python3 scripts/check_frontend_js.py` (requiere Node). Valida sintaxis de los scripts inline del HTML principal, de `workspace.js`, `admin.js` y de la app independiente `studio/app.js`.
 - No hay linter, typecheck ni `package.json`. No inventes comandos npm; el frontend es estático y no se compila.
 
 ## Arquitectura que no es obvia

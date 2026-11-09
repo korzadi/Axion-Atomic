@@ -139,8 +139,14 @@ La ruta `/health` comprueba ahora que el endpoint de etiquetas de Ollama incluya
 
 > **Estado actual verificado — 2026-11-09 (Studio independiente + SSO, rama `hardening/studio-independent-app`).**
 > - AXYRON Studio ahora es una aplicación independiente con rutas reales (`/dashboard`, `/projects`, …), documento propio y estilos propios; la web principal conserva landing + SSO (`/sso-start`).
-> - SSO landing ↔ Studio por código de un solo uso implementado y probado en PostgreSQL efímero (7/7); `STUDIO_ORIGIN` requerido en `.env` para habilitarlo (sin él, 503 fail-closed).
+> - SSO landing ↔ Studio por código de un solo uso implementado y probado en PostgreSQL efímero (7/7 en ese estado); se añadieron 2 casos nuevos (state no ASCII y cuenta suspendida) pendientes de CI. `STUDIO_ORIGIN` requerido en `.env` para habilitarlo (sin él, 503 fail-closed).
 > - Migración `024_sso_codes.sql` añadida; verificada desde cero en instancia desechable.
 > - CI del Studio standalone en verde (`studio-browser-e2e`, 6/6) tras ampliar el job.
 > - Despliegue del Studio (DNS `studio.axyronatomic.com`, TLS, vhost `deploy/studio.conf`, `STUDIO_ORIGIN` en `.env`, `python -m api.migrate`) corresponde al propietario.
 > - **REL-01 sigue bloqueada**: legal sin publicar, primer pago real E2E, MFA E2E y aceptación formal pendientes.
+
+> **Endurecimiento de Studio/SSO — 2026-11-09 (misma rama, sin desplegar).**
+> - SSO: código en fragmento (`#code=…`), URL limpiada antes del intercambio, `state` hasheado en UTF-8 (401 en vez de 500) y `Cache-Control: no-store` en `authorize`.
+> - Studio: chat con historial completo e idempotencia por payload; agente con detalle/aprobaciones/`resume`/`cancel`/`reconcile`; modelos con verificación en vivo; dashboard muestra readiness degradado; logout documentado como host-only (sin logout global).
+> - Evidencia local: `pytest -q` → 1070 passed, 25 skipped; E2E Playwright de Studio aprobado; `check_frontend_js.py` aprobado. **No hay CI verde declarada para este estado**: falta ejecutar CI sobre el SHA final.
+> - Siguen bloqueados: despliegue DNS/TLS de `studio.axyronatomic.com`, `STUDIO_ORIGIN` en `.env`, migración real, E2E con dependencias reales, primer pago QvaPay, MFA E2E, legal y aceptación del propietario. Confirmar el dominio canónico antes de publicar.
