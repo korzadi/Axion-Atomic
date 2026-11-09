@@ -40,6 +40,7 @@ STATIC_ASSETS = {
     "/precios.html",
     "/faq.html",
     "/sso-start",
+    "/sso-start.html",
     "/app.js",
     "/privacidad.html",
     "/terminos.html",

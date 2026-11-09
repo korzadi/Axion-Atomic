@@ -120,7 +120,7 @@ document.addEventListener("click", (event) => {
 /* ---------- Autenticación compartida (SSO con la web principal) ---------- */
 
 function landingSsoUrl() {
-  return `${landingBase}/sso-start`;
+  return `${landingBase}/sso-start.html`;
 }
 
 async function renderLogin() {
@@ -137,6 +137,11 @@ async function renderLogin() {
           <div class="st-field" id="st-mfa-field" style="display:none"><label for="st-mfa-code">Código MFA</label><input id="st-mfa-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></div>
           <button class="st-btn primary" type="submit" id="st-login-submit">Entrar</button>
         </form>
+        <div id="st-oauth-row" style="display:none;gap:10px;margin-top:16px">
+          <div style="display:flex;align-items:center;gap:10px;color:var(--st-muted);font-size:.84rem"><span style="flex:1;height:1px;background:var(--st-border)"></span><span>o continúa con</span><span style="flex:1;height:1px;background:var(--st-border)"></span></div>
+          <a id="st-oauth-google" class="st-btn" href="/auth/oauth/google/start" style="justify-content:center" rel="nofollow">Continuar con Google</a>
+          <a id="st-oauth-github" class="st-btn" href="/auth/oauth/github/start" style="justify-content:center" rel="nofollow">Continuar con GitHub</a>
+        </div>
         <div style="display:grid;gap:10px;margin-top:16px">
           <a class="st-btn" href="${landingSsoUrl()}" style="justify-content:center">Entrar con AXYRON ATOMIC SSO</a>
           <a class="st-muted" href="${landingBase}/" style="text-align:center;font-size:.85rem">¿Sin cuenta? Regístrate en la web principal →</a>
@@ -178,6 +183,16 @@ async function renderLogin() {
       submit.disabled = false;
     }
   });
+
+  try {
+    const p = await api("/auth/oauth/providers");
+    const row = $("#st-oauth-row"), g = $("#st-oauth-google"), gh = $("#st-oauth-github");
+    if (row && g && gh && p) {
+      g.style.display = p.google ? "" : "none";
+      gh.style.display = p.github ? "" : "none";
+      row.style.display = (p.google || p.github) ? "grid" : "none";
+    }
+  } catch {}
 }
 
 async function renderSsoCallback() {
