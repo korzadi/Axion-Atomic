@@ -118,6 +118,8 @@ jobs:
         run: npx playwright install chromium
       - name: Run AXYRON STUDIO browser end-to-end tests
         run: node tests/e2e/studio-browser.mjs
+      - name: Run AXYRON Studio (independiente) browser end-to-end tests
+        run: node tests/e2e/studio-app-browser.mjs
 
   qdrant-e2e:
     runs-on: ubuntu-24.04

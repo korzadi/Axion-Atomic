@@ -935,3 +935,24 @@ El propietario autorizó expresamente completar la V1.0: usar el token QvaPay pr
 
 ### Siguiente paso
 Merge del PR #24 a `main` (autorizado); verificar CI en `main`; fast-forward de las tres ramas; ejecución del primer pago real por el propietario para cerrar el E2E vivo; publicación legal por el propietario para poder declarar REL-01/V1.0.
+
+## AXYRON Studio independiente y SSO landing ↔ Studio — 2026-11-09 (`hardening/studio-independent-app`)
+
+El propietario solicitó: Studio como aplicación independiente con rutas reales, página por sección, y SSO landing ↔ Studio, sin duplicar infraestructura ni exponer secretos.
+
+### Implementado
+- **AXYRON Studio standalone** (`studio/`): documento propio (`index.html`), estilos propios (`studio.css`), router con `history.pushState` y rutas reales: `/dashboard`, `/projects`, `/code`, `/knowledge`, `/agent`, `/models`, `/usage`, `/billing`, `/buy`, `/account`, `/security`, `/privacy`, `/integrations`, `/tools`. Protección de rutas privadas (redirección a `/login`), historial atrás/adelante, carga directa de cualquier ruta (fallback SPA en nginx), 404 propia, estados de carga/error, responsive y accesible (axe 0 violaciones, teclado sin trampas).
+- **SSO landing ↔ Studio** (`api/sso_routes.py`): `POST /auth/sso/authorize` (sesión + CSRF; código único 48 B, TTL 180 s, hashes SHA-256) y `POST /auth/sso/exchange` (consumo atómico con `FOR UPDATE`, verificación de state, creación de **sesión nueva host-only**). Migración `024_sso_codes.sql` (+ rollback). Configuración `STUDIO_ORIGIN` (HTTPS público, fail-closed 503 si ausente). 7 pruebas PostgreSQL de ciclo (replay, estado incorrecto, caducidad, desconocido, distinción de sesiones landing/studio).
+- **Landing**: `/sso-start` (`frontend/sso-start.html`): conecta con Studio vía SSO; si no hay sesión, ofrece login en la web principal. Enlaces «AXYRON Studio» reorientados de `/app/inicio` a `/sso-start` en las 8 páginas públicas.
+- **Nginx**: `deploy/studio.conf` (vhost `studio.axyronatomic.com`: root propio `/usr/share/nginx/studio`, proxy a la misma API en `/auth|/workspace|/billing|/health|/v1`, SPA fallback). `Dockerfile.frontend` empaqueta `studio/` y ambos vhosts.
+- **Pruebas**: E2E de Studio con 17 rutas (carga directa, recarga, atrás/adelante, 404, protección de sesión, SSO callback simulado, axe, teclado) en `tests/e2e/studio-app-browser.mjs`; añadido al job `studio-browser-e2e` de CI. Suite contractual front↔backend ampliada con `studio/index.html`, `studio/app.js` y `sso-start.html`.
+
+### Verificación
+- Suite local: **1056 passed, 25 skipped** (sin regresiones). E2E landing y E2E Studio aprobados. axe (todas las páginas públicas + Studio): **0 violaciones**. Teclado: **0 problemas**. `check_frontend_js.py`, `compileall`, `bash -n`, `pip check`, `git diff --check`: OK.
+- `nginx -t` del contenedor frontend en red desechable con stub `api`: **configuración válida**; vhost studio responde 200 en `/`, `/dashboard`, `/buy`, `/sso/callback` y proxifica `/health/live` al backend interno.
+- PostgreSQL efímero: migraciones 001→024 aplican desde cero.
+
+### Pendiente (propietario)
+- DNS + TLS para `studio.axyronatomic.com` (A/AAAA/CNAME + certificado).
+- `STUDIO_ORIGIN=https://studio.axyronatomic.com` en `.env` + recrear la API (procedimiento administrativo explícito; migración 024).
+- **La V1.0 no se declara liberada**: siguen bloqueadas las condiciones del `REL-01` (legal sin publicar, primer pago real E2E, MFA E2E, aceptación formal del propietario).

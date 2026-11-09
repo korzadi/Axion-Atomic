@@ -12,6 +12,12 @@ Plataforma de ingeniería de software supervisada, modular y verificable.
 
 El código de este repositorio es la base técnica que se está adaptando a AXYRON ATOMIC. Los nombres históricos del proyecto de partida no forman parte de la identidad del producto.
 
+## Dos aplicaciones frontend
+
+- **Web principal** (`frontend/`): landing, páginas propias (`/modelos.html`, `/funciones.html`, …), registro, login, comercial e SSO saliente (`/sso-start`).
+- **AXYRON Studio** (`studio/`): aplicación independiente con rutas reales (`/dashboard`, `/projects`, `/code`, `/knowledge`, `/agent`, `/models`, `/usage`, `/billing`, `/buy`, `/account`, `/security`, `/privacy`, `/integrations`, `/tools`). Documento, estilos raíz y navegación propios; protección de sesión; 404 propia.
+- **SSO** landing ↔ Studio por código de un solo uso con sesión nueva host-only (sin ampliar el dominio de las cookies). Ver `docs/AXYRON_STUDIO_INDEPENDENT.md`.
+
 ## Arquitectura objetivo
 
 - Axyron Core y Agent Runtime.

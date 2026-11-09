@@ -136,3 +136,11 @@ La ruta `/health` comprueba ahora que el endpoint de etiquetas de Ollama incluya
 > - Registro verificado EN VIVO por el propietario (cuenta real `gemeni0305@gmail.com`, verificación de correo entregada, 50 créditos FREE acreditados atómicamente: lote `promotion` 50/50 y ledger `grant` +50).
 > - **Falta para la condición de salida:** publicación de términos/privacidad/reembolsos, primer pago real E2E de QvaPay, MFA E2E de cuenta real y aceptación formal del propietario. `REL-01` bloqueada; la V1.0 no se declara liberada.
 > - Intervención operativa autorizada documentada: IP secundaria 172.16.0.1 (br-54dec66c6382) por desaparición de docker0; regla UFW #14 para el daemon sandbox. Rollback de imágenes `rollback-v1.0-20261108` / `rollback-pre-pages`.
+
+> **Estado actual verificado — 2026-11-09 (Studio independiente + SSO, rama `hardening/studio-independent-app`).**
+> - AXYRON Studio ahora es una aplicación independiente con rutas reales (`/dashboard`, `/projects`, …), documento propio y estilos propios; la web principal conserva landing + SSO (`/sso-start`).
+> - SSO landing ↔ Studio por código de un solo uso implementado y probado en PostgreSQL efímero (7/7); `STUDIO_ORIGIN` requerido en `.env` para habilitarlo (sin él, 503 fail-closed).
+> - Migración `024_sso_codes.sql` añadida; verificada desde cero en instancia desechable.
+> - CI del Studio standalone en verde (`studio-browser-e2e`, 6/6) tras ampliar el job.
+> - Despliegue del Studio (DNS `studio.axyronatomic.com`, TLS, vhost `deploy/studio.conf`, `STUDIO_ORIGIN` en `.env`, `python -m api.migrate`) corresponde al propietario.
+> - **REL-01 sigue bloqueada**: legal sin publicar, primer pago real E2E, MFA E2E y aceptación formal pendientes.

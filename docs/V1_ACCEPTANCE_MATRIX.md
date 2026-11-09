@@ -413,3 +413,11 @@ El propietario autorizó expresamente la activación completa (catálogo documen
 4. Aceptación formal del propietario para declarar V1.0 liberada.
 
 Notas de honestidad: la activación de flags se hizo sobre la rama de desarrollo con autorización del propietario; el despliegue se realizó desde esa rama con backup y rollback; la decisión de retener la venta pública hasta el legal corresponde al propietario. Los porcentajes de criterios no suben artificialmente: con los avisos vivos de arriba, la implementación es ~95 % y las pruebas verificadas ~85 %; la preparación productiva sigue limitada por REL-01 (legal + pago real).
+
+## AXYRON Studio independiente y SSO — 2026-11-09 (`hardening/studio-independent-app`)
+
+- **STU-01/STU-03/STU-approvals:** la SPA integrada en la landing se reemplazó por una aplicación independiente (`studio/`) con rutas reales, documento propio, estilos propios y SSO. El HTML principal ya no esconde la aplicación bajo `#app/*`.
+- **STU-04 (UX/accesibilidad):** axe 0 violaciones y auditoría de teclado 0 problemas también en el Studio standalone (`tests/e2e/studio-app-browser.mjs`, `tests/e2e/a11y-scan.mjs`).
+- **SEC (SSO):** flujo de código de un solo uso (`sso_codes`, migración 024), sesión nueva host-only por host, sin cookies compartidas entre landing y Studio. 7 pruebas PostgreSQL de ciclo completo (autorización, intercambio, replay, caducidad, estado incorrecto, desconocido, distinción de sesiones).
+- **QA-01/QA-02:** el job `studio-browser-e2e` de CI ejecuta ambos E2E (landing y Studio standalone). Suite local **1056 passed, 25 skipped**.
+- **Despliegue:** el Studio queda listo en el repositorio y el contenedor; DNS/TLS del vhost `studio.axyronatomic.com` y `STUDIO_ORIGIN` en `.env` corresponden al propietario. La V1.0 sigue **no liberada** (`REL-01`).

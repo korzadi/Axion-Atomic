@@ -61,3 +61,9 @@ En `https://admin.axyronatomic.com` (si el operador lo expone): gestión de cuen
 ## Ayuda
 
 Si algo no funciona (verificación de correo, MFA, permisos de un proyecto, checkout ausente), solicita ayuda al administrador de tu instancia indicando la URL, la hora y el mensaje de error exacto. No compartas contraseñas, códigos MFA, tokens ni sesiones.
+
+## AXYRON Studio independiente y SSO
+
+En la web principal (`axyronatomic.com`), el enlace «AXYRON Studio» abre directamente `studio.axyronatomic.com` (o `https://tu-dominio/sso-start`); tu sesión existente se reutiliza de forma segura vía SSO: sin copiar credenciales ni ampliar cookies. Si el SSO no está configurado, entra desde la página de acceso del Studio con tu correo y contraseña habituales.
+
+Dentro de Studio tienes una página por sección: Resumen (`/dashboard`), Proyectos (`/projects`), Atomic Code (`/code`), Conocimiento (`/knowledge`), Agente (`/agent`), Modelos (`/models`), Consumo (`/usage`), Créditos y facturación (`/billing`), Comprar (`/buy`), Cuenta (`/account`), Seguridad (`/security`), Privacidad (`/privacy`), API e integraciones (`/integrations`) y Herramientas (`/tools`). Cada ruta funciona cargada directamente, recargada y con los botones atrás/adelante del navegador. Si la ruta no existe, Studio muestra una página 404 propia.
