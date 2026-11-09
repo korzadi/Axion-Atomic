@@ -8,6 +8,14 @@ const axeSource = readFileSync(new URL("../../node_modules/axe-core/axe.min.js",
 const files = {
   "/": "Axyron Atomic — Tu asistente de IA, más poderoso, más libre .html",
   "/admin-test": "admin.html",
+  "/modelos.html": "modelos.html",
+  "/funciones.html": "funciones.html",
+  "/como.html": "como.html",
+  "/demo.html": "demo.html",
+  "/seguridad.html": "seguridad.html",
+  "/precios.html": "precios.html",
+  "/faq.html": "faq.html",
+  "/sso-start": "sso-start.html",
 };
 const assets = {
   "/studio.js": "studio.js",
@@ -92,14 +100,11 @@ const keyboardAudit = async (page, label, maxTabs = 30) => {
 };
 
 try {
-  for (const hash of ["#app/inicio", "#app/facturacion"]) {
+  for (const path of ["/", "/modelos.html", "/funciones.html", "/como.html", "/demo.html", "/seguridad.html", "/precios.html", "/faq.html", "/sso-start"]) {
     const studioPage = await browser.newPage();
     routeStudioMocks(studioPage);
-    await studioPage.goto(baseUrl + "/" + hash);
+    await studioPage.goto(baseUrl + path);
     await studioPage.waitForLoadState("networkidle");
-    if (hash === "#app/inicio") {
-      await studioPage.getByRole("heading", { name: /Axyron Atomic/ }).waitFor({ timeout: 5000 }).catch(() => {});
-    }
     await studioPage.waitForTimeout(500);
     await studioPage.addScriptTag({ content: axeSource });
     const studioReport = await studioPage.evaluate(async () => {
@@ -107,7 +112,7 @@ try {
       const results = await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] } });
       return results.violations.map(v => ({ id: v.id, impact: v.impact, description: v.description, nodes: v.nodes.length, target: v.nodes.slice(0, 2).map(n => n.target.join(" ")) }));
     });
-    console.log(`\n=== / (autenticado, studio ${hash}) — ${studioReport.length} violaciones ===`);
+    console.log(`\n=== ${path} — ${studioReport.length} violaciones ===`);
     for (const v of studioReport) {
       console.log(`- [${v.impact}] ${v.id}: ${v.description} (${v.nodes} nodos) ${v.target.join(" | ")}`);
     }

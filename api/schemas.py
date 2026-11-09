@@ -126,6 +126,15 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=1024)
+    new_password: str = Field(min_length=12, max_length=1024)
+
+
+class AccountDeletionRequest(BaseModel):
+    note: str = Field(default="", max_length=2000)
+
+
 class ProjectCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=120)
 

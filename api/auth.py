@@ -63,6 +63,34 @@ def create_user(email: str, password: str, display_name: str, terms_accepted_at:
     return user_id
 
 
+def change_password(*, user_id: str, current_password: str, new_password: str) -> None:
+    """Cambia la contraseña con verificación del primer factor y revoca todas las sesiones.
+
+    La revocación es total (incluida la sesión que realiza el cambio): un token
+    robado deja de servir y el usuario vuelve a iniciar sesión con la nueva
+    contraseña. Toda la operación ocurre en una única transacción.
+    """
+    now = _now()
+    with engine.begin() as conn:
+        row = conn.execute(text("""
+            SELECT password_hash, status FROM users WHERE id=:id FOR UPDATE
+        """), {"id": user_id}).mappings().first()
+        if row is None or row["status"] != "active":
+            raise HTTPException(status_code=401, detail="La cuenta no está habilitada")
+        if not verify_password(row["password_hash"], current_password):
+            raise HTTPException(status_code=400, detail="La contraseña actual no es correcta")
+        if verify_password(row["password_hash"], new_password):
+            raise HTTPException(status_code=400, detail="La nueva contraseña debe ser distinta de la actual")
+        new_hash = hash_password(new_password)
+        conn.execute(text("""
+            UPDATE users SET password_hash=:password_hash, updated_at=:now WHERE id=:id
+        """), {"password_hash": new_hash, "now": now, "id": user_id})
+        conn.execute(text("""
+            UPDATE user_sessions SET revoked_at=:now
+            WHERE user_id=:id AND revoked_at IS NULL
+        """), {"now": now, "id": user_id})
+
+
 def authenticate(email: str, password: str, user_agent: str | None = None) -> tuple[dict, str, str]:
     normalized = email.strip().casefold()
     with engine.begin() as conn:

@@ -12,6 +12,12 @@ Plataforma de ingeniería de software supervisada, modular y verificable.
 
 El código de este repositorio es la base técnica que se está adaptando a AXYRON ATOMIC. Los nombres históricos del proyecto de partida no forman parte de la identidad del producto.
 
+## Dos aplicaciones frontend
+
+- **Web principal** (`frontend/`): landing, páginas propias (`/modelos.html`, `/funciones.html`, …), registro, login, comercial e SSO saliente (`/sso-start`).
+- **AXYRON Studio** (`studio/`): aplicación independiente con rutas reales (`/dashboard`, `/projects`, `/code`, `/knowledge`, `/agent`, `/models`, `/usage`, `/billing`, `/buy`, `/account`, `/security`, `/privacy`, `/integrations`, `/tools`). Documento, estilos raíz y navegación propios; protección de sesión; 404 propia.
+- **SSO** landing ↔ Studio por código de un solo uso con sesión nueva host-only (sin ampliar el dominio de las cookies). Ver `docs/AXYRON_STUDIO_INDEPENDENT.md`.
+
 ## Arquitectura objetivo
 
 - Axyron Core y Agent Runtime.
@@ -58,7 +64,7 @@ El alcance de medición de tokens, cuotas, costes por modelo, créditos, suscrip
 ## Estado de implementación
 
 - [Matriz de aceptación y seguimiento V1.0](docs/V1_ACCEPTANCE_MATRIX.md)
-- **Estado verificado (2026-11-08, tras la activación autorizada):** `main = fa0a536` (CI 6/6) y la rama de activación PR #24 lleva catálogo V1.0 publicado en producción (checkout QvaPay Lightning operativo; free de concesión FREE 50 créditos verificado en vivo en la cuenta de prueba del propietario), facturación en modo **ledger** con attestation configurada, y sandbox AGT-04 real (daemon dedicado userns-remapped con TLS, imagen fijada por digest, verificación verde). Producción sirve el código de la rama (assets == repo). `QVAPAY_ENABLED=true`, `BILLING_ENFORCEMENT_ENABLED=true`, `SANDBOX_DOCKER_ENABLED=true`. La posesión de documentos legales publicados sigue pendiente; la venta pública queda en fase controlada con el primer pago real pendiente. La V1.0 no se declara liberada (`REL-01` bloqueada).
+- **Estado verificado (2026-11-08, tras la activación autorizada):** `main = fa0a536` (CI 6/6) y la rama de activación PR #24 lleva catálogo V1.0 publicado en producción (checkout QvaPay Lightning implementado; concesión FREE de 50 créditos verificada en vivo en la cuenta de prueba del propietario) y facturación en modo **ledger** con attestation configurada. Producción sirve el código de la rama (assets == repo). Los flags de pago/facturación dependen del `.env` desplegado; en el repositorio siguen fail-closed por defecto. El sandbox Docker **no** se declara verificado E2E: permanece fail-closed, desactivado por defecto y su activación requiere configuración explícita (AGT-04 parcial). La posesión de documentos legales publicados sigue pendiente; la venta pública queda en fase controlada con el primer pago real pendiente. La V1.0 no se declara liberada (`REL-01` bloqueada).
 
 Este repositorio está en desarrollo por fases. La presencia de una carpeta, documento o esquema no demuestra por sí sola que una capacidad esté integrada. Cada fase debe informar qué se implementó, qué pruebas se ejecutaron realmente y qué queda pendiente.
 
@@ -71,27 +77,32 @@ Este repositorio está en desarrollo por fases. La presencia de una carpeta, doc
 - Revisar los cambios y ejecutar las pruebas pertinentes antes de fusionar.
 
 
-## AXYRON STUDIO — primera versión SPA
+## AXYRON STUDIO — aplicación independiente
 
-AXYRON STUDIO se distribuye como un servicio independiente: `Dockerfile.frontend` construye la imagen Nginx sin privilegios `axyron-atomic-frontend`, mientras `Dockerfile` construye exclusivamente la API Python `axyron-atomic-api`. El frontend sirve los archivos de `frontend/` y reenvía las rutas dinámicas al servicio interno `api:8000`; el puerto local `127.0.0.1:8070` es la entrada web unificada. La página principal seleccionada se conserva y carga `studio.css` y `studio.js`.
+AXYRON STUDIO se distribuye como un servicio independiente: `Dockerfile.frontend` construye la imagen Nginx sin privilegios `axyron-atomic-frontend`, mientras `Dockerfile` construye exclusivamente la API Python `axyron-atomic-api`. Nginx sirve la web principal desde `frontend/` y el Studio desde `studio/` (documento, estilos y router propios); el puerto local `127.0.0.1:8070` es la entrada web unificada y ambos frontends consumen la misma API `api:8000`.
 
 Uso desde la perspectiva del usuario final: [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 
-### Secciones de la primera versión
+### Secciones de aplicación
 
-- **Resumen:** estado HTTP de la API, proyectos y consumo real disponible.
-- **Proyectos:** lista y creación mediante `/auth/projects`.
-- **Atomic Code:** chat autenticado mediante `/workspace/chat/history` y `/workspace/chat/completions`; no ofrece streaming porque el backend no lo implementa.
+- **Resumen:** readiness real (incluye estado degradado con sus dependencias), proyectos, última ejecución del agente y disponibilidad de modelos.
+- **Proyectos:** lista, creación, selección y apertura mediante `/auth/projects`; no se simula borrado porque el backend no expone `DELETE`.
+- **Atomic Code:** chat autenticado mediante `/workspace/chat/history` y `/workspace/chat/completions`, con historial completo e idempotencia por payload; no ofrece streaming porque el backend no lo implementa.
 - **Conocimiento:** indexación de texto y carga de documentos, listado y eliminación de fuentes por proyecto.
-- **Agente Axyron:** ejecuciones persistentes y decisiones de aprobación disponibles en el backend. La aprobación registra una decisión; no debe interpretarse como ejecución automática de la acción.
-- **Modelos Atomic:** catálogo del servidor. Atomic Video, Atomic Vision y Atomic Reasoning se identifican como próximas actualizaciones mientras no estén publicados como disponibles.
+- **Agente Axyron:** ejecuciones persistentes, detalle, aprobaciones de acción y de plan, `resume`, `cancel` y `reconcile`. La aprobación registra una decisión; no debe interpretarse como ejecución automática de la acción.
+- **Modelos Atomic:** catálogo del servidor y verificación en vivo con `/workspace/models/availability`. Atomic Video, Atomic Vision y Atomic Reasoning se identifican como próximas actualizaciones mientras no estén publicados como disponibles.
 - **Consumo:** telemetría por proyecto cuando existen mediciones.
-- **Facturación:** catálogo y órdenes propias en modo informativo; no se inicia checkout ni se acreditan créditos desde la interfaz.
-- **Cuenta y seguridad:** datos de sesión y estado/enrolamiento MFA; las operaciones no expuestas por el backend no se simulan.
-- **Administración:** portal independiente en `https://admin.axyronatomic.com`; no forma parte de la navegación de Axyron Studio. La API permite consultar permisos y roles, conceder/revocar roles globales y cambiar el estado de cuentas de forma auditada con confirmaciones y MFA; los cobros y precios comerciales siguen desactivados.
+- **Facturación:** catálogo real, órdenes propias y checkout QvaPay Lightning; la acreditación depende de la conciliación idempotente del servidor, nunca del navegador.
+- **Cuenta y seguridad:** datos de sesión y estado/enrolamiento MFA. El logout revoca solo la sesión del host Studio; no existe logout global ni cambio de contraseña con sesión activa, y no se simulan.
+- **Administración:** portal independiente en `https://admin.axyronatomic.com`; no forma parte de la navegación de Axyron Studio. La API permite consultar permisos y roles, conceder/revocar roles globales y cambiar el estado de cuentas de forma auditada con confirmaciones y MFA. La facturación y los cobros dependen de los flags del servidor y de la conciliación idempotente; el primer pago real E2E sigue pendiente.
 - **Privacidad y legal:** controles técnicos existentes y elementos legales pendientes, sin simular solicitudes de datos que aún no tienen endpoint.
 - **API e integraciones:** estado informativo de la API y conectores pendientes de un flujo seguro de credenciales.
 - **Herramientas:** capacidades del runtime supervisado y sandbox/automatización identificados como próximas actualizaciones cuando el ciclo no esté validado.
+
+### Pruebas y límites de la aplicación Studio
+
+- `python -m pytest -q` cubre contratos backend y estáticos (incluido `tests/test_studio_app_contract.py`); `node tests/e2e/studio-app-browser.mjs` ejecuta el E2E con Playwright sobre backend simulado; `python scripts/check_frontend_js.py` valida la sintaxis de los scripts.
+- El E2E con dependencias reales (Ollama, Qdrant, PostgreSQL, dominios y TLS) y el CI del SHA final siguen pendientes. El SSO requiere `STUDIO_ORIGIN` y no existe cierre de sesión global.
 
 ### Identidad visual
 

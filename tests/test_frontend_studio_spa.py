@@ -11,7 +11,9 @@ def test_spa_assets_are_linked_from_the_selected_landing_page():
     assert 'id="studio-nav"' in html
     assert 'href="/studio.css"' in html
     assert 'src="/studio.js"' in html
-    assert 'href="#app/inicio"' in html
+    # AXYRON Studio ahora es una aplicación independiente; la web principal
+    # enlaza por SSO hacia ella, no a una sección escondida.
+    assert 'href="/sso-start"' in html
     assert '<style id="axyron-hidden-state-fix">[hidden]{display:none!important}</style>' in html
 
 

@@ -80,6 +80,18 @@ class Settings(BaseSettings):
             raise ValueError("QDRANT_URL debe ser una URL HTTPS pública válida del clúster")
         return value.strip()
 
+    @field_validator("studio_origin")
+    @classmethod
+    def require_secure_studio_origin(cls, value: str | None) -> str | None:
+        """El origen del Studio debe ser un origen HTTPS público válido."""
+        if value is None or not value.strip():
+            return None
+        if not is_public_https_origin(value):
+            raise ValueError("STUDIO_ORIGIN debe ser un origen HTTPS público válido")
+        parsed = urlsplit(value.strip())
+        host = (parsed.hostname or "").rstrip(".").lower()
+        return f"https://{host}" + (f":{parsed.port}" if parsed.port else "")
+
     @field_validator("oauth_public_base_url")
     @classmethod
     def require_secure_oauth_public_origin(cls, value: str | None) -> str | None:
@@ -111,6 +123,10 @@ class Settings(BaseSettings):
     billing_tokenizer_contract: str = "qwen2_byte_fallback"
     auth_cookie_secure: bool = True
     oauth_public_base_url: str | None = None
+    # Origen del host de AXYRON STUDIO (p. ej. https://studio.axyronatomic.com).
+    # SSO landing -> studio: solo se mintea un código cuando está configurado
+    # con un origen HTTPS público válido; si no, /auth/sso/authorize responde 503.
+    studio_origin: str | None = None
     google_oauth_client_id: str | None = Field(default=None, validation_alias=AliasChoices("GOOGLE_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_ID"))
     google_oauth_client_secret: str | None = Field(default=None, validation_alias=AliasChoices("GOOGLE_CLIENT_SECRET", "GOOGLE_OAUTH_CLIENT_SECRET"))
     github_oauth_client_id: str | None = Field(default=None, validation_alias=AliasChoices("AXYRON_GITHUB_CLIENT_ID", "AXION_GITHUB_CLIENT_ID"))

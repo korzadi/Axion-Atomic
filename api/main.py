@@ -22,6 +22,7 @@ from api.payment_routes import router as payment_router
 from api.admin_routes import router as admin_router
 from api.catalog_routes import router as catalog_router
 from api.checkout_routes import router as checkout_router
+from api.sso_routes import router as sso_router
 from api.usage_routes import router as usage_router
 from api.capacity import CapacityExceeded
 from api.rcache import close_cache, ping_cache
@@ -58,6 +59,7 @@ async def close_redis_cache():
 
 app.include_router(auth_router)
 app.include_router(auth_recovery_router)
+app.include_router(sso_router)
 app.include_router(workspace_router)
 app.include_router(payment_router)
 app.include_router(checkout_router)

@@ -49,3 +49,17 @@
 ## Aprobaciones y auditoría
 - Tabla `action_approvals` (migración 003): una fila por acción, estados `pending/approved/rejected/used`, expiración, canje único (`UPDATE ... WHERE state='approved' AND action_hash=?`).
 - `audit_log` + `audit_chain_head`: cadena de hashes con control de concurrencia optimista. **Detecta** alteraciones y truncamientos; no las impide (requiere permisos de solo-inserción en la base de datos para el rol de la aplicación, a configurar en el despliegue).
+
+## Dos frontends independientes + SSO (2026-11-09)
+
+```
+nginx
+ ├─ server_name axyronatomic.com           → /usr/share/nginx/html (web principal: landing, precios, FAQ...)
+ └─ server_name studio.axyronatomic.com    → /usr/share/nginx/studio (AXYRON Studio: /dashboard, /projects, ...)
+         proxy → api:8000 (mismas rutas /auth|/workspace|/billing|/health|/v1)
+```
+
+- **Web principal**: pública, sin sesión obligatoria; landing en páginas separadas; SSO saliente por `/sso-start`.
+- **AXYRON Studio**: SPA con rutas reales (`/dashboard`, `/projects`, `/code`, `/knowledge`, `/agent`, `/models`, `/usage`, `/billing`, `/buy`, `/account`, `/security`, `/privacy`, `/integrations`, `/tools`); protección de sesión; 404 propia; responsive y accesible.
+- **SSO**: código de un solo uso (`sso_codes`, migración 024), 180 s TTL, `state` verificado, sesión nueva **host-only** por host; nunca se amplía el dominio de las cookies. El código viaja en el fragmento (`#code=…`), no en la query, y se borra del historial antes del intercambio. El logout revoca solo la sesión del host correspondiente; no hay cierre global. Ver `docs/AXYRON_STUDIO_INDEPENDENT.md`.
+- La API es única; no hay segundo backend ni datos diferentes para Studio.

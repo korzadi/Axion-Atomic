@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Axyron Studio — tu espacio de trabajo AXYRON ATOMIC</title>
+<meta name="description" content="AXYRON Studio: proyectos, Atomic Code, agente AXYRON, conocimiento RAG, consumo, créditos y facturación.">
+<meta name="theme-color" content="#070b18">
+<!-- Dominio canónico de la web principal. Cambiarlo requiere decisión explícita
+     del propietario y actualización conjunta de DNS, TLS y STUDIO_ORIGIN. -->
+<meta name="landing-origin" content="https://axyronatomic.com">
+<link rel="stylesheet" href="/studio.css">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Ccircle cx=%2732%27 cy=%2732%27 r=%2732%27 fill=%27%23070b18%27/%3E%3Cpath d=%27M32 6L10 54h11l11-27 11 27h11z%27 fill=%27%2327d9f2%27/%3E%3C/svg%3E">
+</head>
+<body>
+<div id="studio-app" class="studio-app" aria-live="polite">
+  <header class="st-topbar">
+    <a class="st-logo" href="/dashboard" aria-label="Axyron Studio">
+      <svg viewBox="0 0 64 64" aria-hidden="true" class="st-logo-mark"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#438cff"/><stop offset="1" stop-color="#a879ff"/></linearGradient></defs><ellipse cx="32" cy="38" rx="26" ry="9" fill="none" stroke="url(#lg)" stroke-width="3" transform="rotate(-18 32 38)"/><path d="M32 8L12 52h10l10-25 10 25h10z" fill="url(#lg)"/></svg>
+      <span>AXYRON <em>STUDIO</em></span>
+    </a>
+    <a id="st-landing-link" class="st-link" href="https://axyronatomic.com/">← Web principal</a>
+  </header>
+
+  <aside class="st-sidebar" aria-label="Navegación de Axyron Studio">
+    <nav class="st-nav">
+      <a href="/dashboard" data-page="dashboard"><span class="st-ico">⌂</span>Resumen</a>
+      <a href="/projects" data-page="projects"><span class="st-ico">▦</span>Proyectos</a>
+      <a href="/code" data-page="code"><span class="st-ico">⌘</span>Atomic Code</a>
+      <a href="/knowledge" data-page="knowledge"><span class="st-ico">◇</span>Conocimiento</a>
+      <a href="/agent" data-page="agent"><span class="st-ico">✧</span>Agente AXYRON</a>
+      <a href="/models" data-page="models"><span class="st-ico">◈</span>Modelos</a>
+      <a href="/usage" data-page="usage"><span class="st-ico">◷</span>Consumo</a>
+      <a href="/billing" data-page="billing"><span class="st-ico">＄</span>Créditos y facturación</a>
+      <a href="/buy" data-page="buy"><span class="st-ico">⊕</span>Comprar créditos</a>
+      <a href="/account" data-page="account"><span class="st-ico">◎</span>Cuenta</a>
+      <a href="/security" data-page="security"><span class="st-ico">⛨</span>Seguridad</a>
+      <a href="/privacy" data-page="privacy"><span class="st-ico">♧</span>Privacidad</a>
+      <a href="/integrations" data-page="integrations"><span class="st-ico">⌘</span>API e integraciones</a>
+      <a href="/tools" data-page="tools"><span class="st-ico">⚙</span>Herramientas</a>
+    </nav>
+    <div class="st-foot">
+      <span class="st-dot" aria-hidden="true"></span>Conexión protegida<br>
+      Sesión host-only sobre este dominio
+    </div>
+  </aside>
+
+  <main class="st-main" id="st-main" tabindex="-1">
+    <div id="st-outlet" aria-live="polite"></div>
+  </main>
+</div>
+
+<script src="/app.js" defer></script>
+</body>
+</html>

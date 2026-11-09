@@ -136,3 +136,21 @@ La ruta `/health` comprueba ahora que el endpoint de etiquetas de Ollama incluya
 > - Registro verificado EN VIVO por el propietario (cuenta real `gemeni0305@gmail.com`, verificación de correo entregada, 50 créditos FREE acreditados atómicamente: lote `promotion` 50/50 y ledger `grant` +50).
 > - **Falta para la condición de salida:** publicación de términos/privacidad/reembolsos, primer pago real E2E de QvaPay, MFA E2E de cuenta real y aceptación formal del propietario. `REL-01` bloqueada; la V1.0 no se declara liberada.
 > - Intervención operativa autorizada documentada: IP secundaria 172.16.0.1 (br-54dec66c6382) por desaparición de docker0; regla UFW #14 para el daemon sandbox. Rollback de imágenes `rollback-v1.0-20261108` / `rollback-pre-pages`.
+
+> **Estado actual verificado — 2026-11-09 (Studio independiente + SSO, rama `hardening/studio-independent-app`).**
+> - AXYRON Studio ahora es una aplicación independiente con rutas reales (`/dashboard`, `/projects`, …), documento propio y estilos propios; la web principal conserva landing + SSO (`/sso-start`).
+> - SSO landing ↔ Studio por código de un solo uso implementado y probado en PostgreSQL efímero (7/7 en ese estado); se añadieron 2 casos nuevos (state no ASCII y cuenta suspendida) pendientes de CI. `STUDIO_ORIGIN` requerido en `.env` para habilitarlo (sin él, 503 fail-closed).
+> - Migración `024_sso_codes.sql` añadida; verificada desde cero en instancia desechable.
+> - CI del Studio standalone en verde (`studio-browser-e2e`, 6/6) tras ampliar el job.
+> - Despliegue del Studio (DNS `studio.axyronatomic.com`, TLS, vhost `deploy/studio.conf`, `STUDIO_ORIGIN` en `.env`, `python -m api.migrate`) corresponde al propietario.
+> - **REL-01 sigue bloqueada**: legal sin publicar, primer pago real E2E, MFA E2E y aceptación formal pendientes.
+
+> **Endurecimiento de Studio/SSO, autenticación y privacidad — 2026-11-09 (rama `hardening/studio-independent-app`, sin desplegar).**
+> - SSO: código en fragmento (`#code=…`), URL limpiada antes del intercambio, `state` hasheado en UTF-8 (401 en vez de 500) y `Cache-Control: no-store` en `authorize`.
+> - Studio: chat con historial completo e idempotencia por payload; agente con detalle/aprobaciones/`resume`/`cancel`/`reconcile`; modelos con verificación en vivo; dashboard muestra readiness degradado; logout documentado como host-only (sin logout global).
+> - Autenticación/privacidad: `POST /auth/password/change` (revoca todas las sesiones), `GET /auth/account/export` y `POST /auth/account/deletion-request` (solicitud pendiente, sin borrado automático). Migración aditiva `025_account_deletion_requests.sql`.
+> - Evidencia CI: `6701530` run `42551121372` **6/6 success**; `52c6fac`/`499f944` fallaron en postgres-migrations por el esquema real de privacidad y se corrigieron; `f4f455f` run `42553378796` **6/6 success** (python-tests, container-image-build, studio-browser-e2e ambos, postgres-migrations 001–025 + suite ampliada con SSO/reset/cambio/privacidad, qdrant-cloud-integration, qdrant-e2e).
+> - Siguen bloqueados: despliegue DNS/TLS de `studio.axyronatomic.com`, `STUDIO_ORIGIN` en `.env`, migración real, E2E con dependencias reales, primer pago QvaPay, MFA E2E, legal y aceptación del propietario. Confirmar el dominio canónico antes de publicar.
+
+
+> **Despliegue controlado Studio+TLS — 2026-11-09 (autorización absoluta del propietario).** Backup `pre-studio-deploy-20261109T030810Z.dump`; migraciones 024–025 aplicadas (aditivas); reconstruidos y recreados solo `api`/`frontend` (postgres/redis intactos; KorzadiVPN/Ollama sin cambios). `STUDIO_ORIGIN=https://studio.axyronatomic.com`. Certificado Let’s Encrypt emitido para `studio.axyronatomic.com` (expira 2027-02-07); vhost host nginx habilitado proxy→`127.0.0.1:8070` (no se tocó KorzadiVPN). Verificación: SPA independiente en `/dashboard`, `/health/readiness` ready, SSO authorize 401 sin sesión. `https://axyronatomic.com` sigue operativo. Pendiente: ensayo login/SSO/MFA/OAuth/correo reales, primer pago real (sin fondos), AGT-04 activación segura, legal, aceptación/merge.

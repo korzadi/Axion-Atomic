@@ -121,7 +121,7 @@ input:focus{outline:2px solid var(--ac);border-color:transparent}
 <a class="logo" href="/" aria-label="Axyron Atomic">
 <svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#3b82f6"/><stop offset="1" stop-color="#a855f7"/></linearGradient></defs><ellipse cx="32" cy="38" rx="28" ry="10" fill="none" stroke="url(#lg)" stroke-width="3.5" transform="rotate(-18 32 38)"/><path d="M32 6 10 54h11l11-27 11 27h11z" fill="url(#lg)"/><circle cx="32" cy="40" r="3.5" fill="#fff"/></svg>
 <span>Axyron <span class="grad">Atomic</span></span></a>
-<nav class="links" id="links"><a href="/modelos.html">Modelos</a><a href="/funciones.html">Funciones</a><a href="/como.html">Cómo funciona</a><a href="/demo.html" aria-current="page">Demo</a><a href="/seguridad.html">Seguridad</a><a href="/precios.html">Precios</a><a href="/faq.html">FAQ</a><a href="#app/inicio" id="studio-nav" hidden>Axyron Studio</a><div class="mauth"><button class="btn" data-open="login">Iniciar sesión</button><button class="btn p" data-open="reg">Registrarse</button></div></nav>
+<nav class="links" id="links"><a href="/modelos.html">Modelos</a><a href="/funciones.html">Funciones</a><a href="/como.html">Cómo funciona</a><a href="/demo.html" aria-current="page">Demo</a><a href="/seguridad.html">Seguridad</a><a href="/precios.html">Precios</a><a href="/faq.html">FAQ</a><a href="/sso-start" id="studio-nav" hidden>Axyron Studio</a><div class="mauth"><button class="btn" data-open="login">Iniciar sesión</button><button class="btn p" data-open="reg">Registrarse</button></div></nav>
 <div class="acts">
 <div class="theme"><button class="btn" id="tbtn" aria-label="Cambiar tema" aria-haspopup="true"><span id="ticon">🖥️</span></button>
 <div class="tmenu" id="tmenu"><button data-t="light">☀️ Claro</button><button data-t="dark">🌙 Oscuro</button><button data-t="system">🖥️ Sistema</button></div></div>
@@ -153,7 +153,7 @@ input:focus{outline:2px solid var(--ac);border-color:transparent}
 <form id="fm" novalidate>
 <div id="nm"><label for="n">Nombre</label><input id="n" autocomplete="name"></div>
 <label for="e">Correo</label><input id="e" type="email" autocomplete="email">
-<label for="p">Contraseña</label><input id="p" type="password" autocomplete="current-password" minlength="12"><div id="termsRow" style="display:none;margin-top:12px"><label><input id="terms" type="checkbox"> Acepto los términos y la política de privacidad.</label></div><div id="mfaRow" style="display:none;margin-top:12px"><label for="mfaCode">Código MFA</label><input id="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></div>
+<label for="p">Contraseña</label><input id="p" type="password" autocomplete="current-password" minlength="12"><div id="termsRow" style="display:none;margin-top:12px"><label><input id="terms" type="checkbox"> Acepto los <a href="/terminos.html" target="_blank" rel="noopener">términos</a> y la <a href="/privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.</label></div><div id="mfaRow" style="display:none;margin-top:12px"><label for="mfaCode">Código MFA</label><input id="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></div>
 <button class="btn p big" style="width:100%;justify-content:center;margin-top:18px" id="sb"></button>
 <div class="msg" id="mg" role="status"></div></form>
 <div class="sw" id="sw"></div></dialog>

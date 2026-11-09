@@ -1,4 +1,8 @@
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 COPY frontend/ /usr/share/nginx/html/
+# Aplicación independiente AXYRON STUDIO: servida bajo su propio vhost
+# (studio.axyronatomic.com) desde /usr/share/nginx/studio.
+COPY studio/ /usr/share/nginx/studio/
 COPY deploy/frontend.conf /etc/nginx/conf.d/default.conf
+COPY deploy/studio.conf /etc/nginx/conf.d/studio.conf
 EXPOSE 8080

@@ -55,6 +55,10 @@ def main():
     studio_script = frontend / "studio.js"
     subprocess.run(["node", "--check", str(studio_script)], text=True, check=True)
     print("Axyron Studio SPA JS: sintaxis válida")
+    studio_independent = frontend.parent / "studio" / "app.js"
+    if studio_independent.exists():
+        subprocess.run(["node", "--check", str(studio_independent)], text=True, check=True)
+        print("Axyron Studio (independiente) JS: sintaxis válida")
     admin_script = frontend / "admin.js"
     subprocess.run(["node", "--check", str(admin_script)], text=True, check=True)
     print("Admin portal JS: sintaxis válida")
