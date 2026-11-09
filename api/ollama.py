@@ -1,5 +1,6 @@
+import json
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, AsyncIterator, Literal
 
 import httpx
 
@@ -68,17 +69,21 @@ def parse_chat_response(data: dict[str, Any], requested_model: str) -> Inference
     )
 
 
-async def chat_with_usage(messages, temperature=0.2, max_tokens=2048) -> InferenceResult:
-    payload = {
+def _chat_payload(messages, temperature, max_tokens, stream: bool) -> dict[str, Any]:
+    return {
         "model": settings.chat_model,
         "messages": messages,
-        "stream": False,
+        "stream": stream,
         "options": {
             "temperature": temperature,
             "num_predict": max_tokens,
             "num_ctx": settings.num_ctx,
         },
     }
+
+
+async def chat_with_usage(messages, temperature=0.2, max_tokens=2048) -> InferenceResult:
+    payload = _chat_payload(messages, temperature, max_tokens, stream=False)
     async with ollama_gate.slot():
         async with httpx.AsyncClient(timeout=settings.ollama_request_timeout_seconds) as client:
             response = await client.post(
@@ -88,6 +93,53 @@ async def chat_with_usage(messages, temperature=0.2, max_tokens=2048) -> Inferen
             response.raise_for_status()
             data = response.json()
     return parse_chat_response(data, requested_model=settings.chat_model)
+
+
+async def chat_with_usage_stream(
+    messages, temperature=0.2, max_tokens=2048,
+) -> AsyncIterator[dict[str, Any]]:
+    """Genera deltas NDJSON de Ollama (stream=true) y el resultado final agregado.
+
+    Emite dicts con ``type``: ``delta`` (texto incremental) o ``done`` (resultado
+    ``InferenceResult`` agregado con contadores finales). Mantiene el gate de
+    capacidad durante toda la transmisión; el caller debe consumir el iterador
+    completo o cerrarlo para liberar el slot.
+    """
+    payload = _chat_payload(messages, temperature, max_tokens, stream=True)
+    content_parts: list[str] = []
+    final_data: dict[str, Any] | None = None
+    async with ollama_gate.slot():
+        async with httpx.AsyncClient(timeout=settings.ollama_request_timeout_seconds) as client:
+            async with client.stream(
+                "POST",
+                settings.ollama_base_url.rstrip("/") + "/api/chat",
+                json=payload,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(data, dict):
+                        continue
+                    message = data.get("message")
+                    delta = message.get("content") if isinstance(message, dict) else None
+                    if isinstance(delta, str) and delta:
+                        content_parts.append(delta)
+                        yield {"type": "delta", "content": delta}
+                    if data.get("done") is True:
+                        final_data = data
+                        break
+    if final_data is None:
+        raise ValueError("Ollama no envió un evento done válido")
+    aggregated = dict(final_data)
+    aggregated.setdefault("message", {})
+    if isinstance(aggregated["message"], dict):
+        aggregated["message"]["content"] = "".join(content_parts)
+    yield {"type": "done", "result": parse_chat_response(aggregated, requested_model=settings.chat_model)}
 
 
 async def chat(messages, temperature=0.2, max_tokens=2048):

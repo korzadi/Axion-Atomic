@@ -331,7 +331,7 @@
         messages: nextHistory,
         temperature: Number($("ws-temperature").value),
         max_tokens: Number.parseInt($("ws-max-tokens").value, 10),
-        stream: false
+        stream: true
       };
       const requestFingerprint = JSON.stringify(chatPayload);
       if (!pendingIdempotencyKey || pendingRequestFingerprint !== requestFingerprint) {
