@@ -73,14 +73,15 @@ const state = { user: null, projectId: null, projects: [] };
 
 function route() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
-  if (path.startsWith("/sso/callback")) return "sso-callback";
+  if (path === "/login" || path === "/sso/callback") return path.slice(1);
   const name = path === "/" || path === "/dashboard" ? "dashboard" : path.slice(1);
   return Object.prototype.hasOwnProperty.call(routes, name) ? name : "404";
 }
 
 async function navigate(path) {
-  if (window.location.pathname + window.location.search !== path) {
-    window.history.pushState({}, "", path);
+  const url = new URL(path, window.location.origin);
+  if (window.location.pathname + window.location.search !== url.pathname + url.search) {
+    window.history.pushState({}, "", url.pathname + url.search);
   }
   await render();
 }
@@ -89,8 +90,12 @@ async function render() {
   const name = route();
   updateNav(name);
   if (name === "404") return renderNotFound();
-  if (name === "sso-callback") return renderSsoCallback();
-  if (!state.user) return renderLogin();
+  if (name === "sso-callback" || name === "sso/callback") return renderSsoCallback();
+  if (!state.user) {
+    if (name !== "login" && name !== "sso-callback") history.replaceState({}, "", "/login?next=" + encodeURIComponent(window.location.pathname + window.location.search));
+    return renderLogin();
+  }
+  if (name === "login") return navigate("/dashboard");
   const renderer = routes[name] ?? renderNotFound;
   outlet.innerHTML = "";
   await renderer();
