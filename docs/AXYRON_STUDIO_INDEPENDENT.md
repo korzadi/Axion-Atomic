@@ -70,7 +70,7 @@ Nginx: `deploy/studio.conf` monta el vhost `studio.axyronatomic.com` (proxy a `a
 2. Emitir/instalar el certificado para ese nombre (o terminar TLS en el proxy de borde y reenviar HTTP/HTTPS a `:8080`).
 3. Montar `deploy/studio.conf` en el nginx (el `Dockerfile.frontend` ya copia `studio/` a `/usr/share/nginx/studio/` y `deploy/studio.conf` a `conf.d/`).
 4. Poner `STUDIO_ORIGIN=https://studio.axyronatomic.com` en `.env` y recrear la API (operación explícita; migración `024_sso_codes.sql` con `python -m api.migrate`).
-5. Verificar: `https://axyronatomic.com` → registro → «AXYRON Studio» → `/dashboard` autenticado; `https://studio.axyronatomic.com/buy?plan=starter_300` directo; 404 en ruta inexistente; cookies **host-only** en DevTools. El dominio canónico debe ser confirmado por el propietario antes de publicar; este documento asume `axyronatomic.com` porque es el configurado en el repositorio.
+5. Verificar: `https://axyronatomic.com` → registro → «AXYRON Studio» → `/dashboard` autenticado; `https://studio.axyronatomic.com/buy?plan=starter_300` directo; 404 en ruta inexistente; cookies **host-only** en DevTools. Dominio canónico definitivo: `axyronatomic.com`; origen SSO definitivo del Studio: `https://studio.axyronatomic.com`. La validación DNS/TLS/certificados y el ensayo en esos hosts reales requiere intervención del operador.
 
 ### Límites honestos
 

@@ -982,3 +982,5 @@ Durante el cierre del bloque Studio independiente, un comando de limpieza del á
 - No existía copia versionada ni otra fuente de ese snapshot concreto; no se intenta simular que se recuperó.
 - Se generó un nuevo punto de restauración inmediatamente: `backups/pre-studio-independent-20261109T003000Z.dump` (0600, 297 objetos, verificado con `pg_restore --list`).
 - La base de datos de producción no resultó alterada; solo se perdió ese punto de rollback. Los demás backups históricos (`pre-frontend-upgrade-*`, `pre-main-a298344-*`, `pre-qa-head-deploy-*`, `pre-release-*`, `rollback-*` imágenes) siguen intactos.
+
+- **Dominios canónicos (decisión de producto, 2026-11-09):** `axyronatomic.com` (web principal) y `studio.axyronatomic.com` (AXYRON Studio); **origen SSO definitivo `https://studio.axyronatomic.com`**. La verificación operativa en esos hosts (DNS/TLS/certificados, `STUDIO_ORIGIN` en `.env`, migración 024/025 reales, SSO E2E en dominio vivo) es intervención del operador y no se ejecuta desde este repositorio.
