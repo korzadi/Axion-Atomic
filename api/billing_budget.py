@@ -9,6 +9,7 @@ devuelto ANTES de llamar al motor.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation, ROUND_CEILING
 
 
 POLICY_VERSION = "atomic-code-budget-v1"
@@ -23,6 +24,18 @@ class UnsupportedTokenizerContract(ValueError):
     """No existe una cota segura para el tokenizer/runtime solicitado."""
 
 
+def _weight_decimal(value, field: str) -> Decimal:
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        raise ValueError(f"{field} debe ser un ponderador numérico no negativo")
+    try:
+        weight = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValueError(f"{field} debe ser un ponderador numérico no negativo") from None
+    if not weight.is_finite() or weight < 0:
+        raise ValueError(f"{field} debe ser un ponderador numérico no negativo")
+    return weight
+
+
 @dataclass(frozen=True)
 class InferenceBudget:
     policy_version: str
@@ -30,8 +43,8 @@ class InferenceBudget:
     tokenizer_contract: str
     input_tokens_upper_bound: int
     output_tokens_upper_bound: int
-    input_weight: int
-    output_weight: int
+    input_weight: float
+    output_weight: float
     reserved_credits: int
     context_window: int
 
@@ -44,8 +57,8 @@ def calculate_preflight_budget(
     runtime_model: str,
     expected_runtime_model: str,
     tokenizer_contract: str,
-    input_weight: int = 1,
-    output_weight: int = 1,
+    input_weight: int | float = 1,
+    output_weight: int | float = 1,
     framing_tokens_per_message: int = 32,
     template_overhead_tokens: int = 256,
 ) -> InferenceBudget:
@@ -57,11 +70,13 @@ def calculate_preflight_budget(
     if tokenizer_contract != SUPPORTED_TOKENIZER_CONTRACT:
         raise UnsupportedTokenizerContract("Tokenizer sin cota superior verificada")
     numeric = (
-        max_output_tokens, context_window, input_weight, output_weight,
+        max_output_tokens, context_window,
         framing_tokens_per_message, template_overhead_tokens,
     )
     if any(isinstance(v, bool) or not isinstance(v, int) or v < 0 for v in numeric):
-        raise ValueError("Los límites y ponderadores deben ser enteros no negativos")
+        raise ValueError("Los límites y enteros auxiliares deben ser enteros no negativos")
+    input_weight_dec = _weight_decimal(input_weight, "input_weight")
+    output_weight_dec = _weight_decimal(output_weight, "output_weight")
     if max_output_tokens < 1 or context_window < 1:
         raise ValueError("La salida y la ventana de contexto deben ser positivas")
     if not isinstance(messages, list) or not messages:
@@ -85,15 +100,18 @@ def calculate_preflight_budget(
     if total_token_bound > context_window:
         raise ContextBudgetExceeded("El prompt completo y la salida máxima no caben en contexto")
 
-    reserved = input_upper * input_weight + max_output_tokens * output_weight
+    reserved = int(
+        (Decimal(input_upper) * input_weight_dec + Decimal(max_output_tokens) * output_weight_dec)
+        .to_integral_value(rounding=ROUND_CEILING)
+    )
     return InferenceBudget(
         policy_version=POLICY_VERSION,
         runtime_model=runtime_model,
         tokenizer_contract=tokenizer_contract,
         input_tokens_upper_bound=input_upper,
         output_tokens_upper_bound=max_output_tokens,
-        input_weight=input_weight,
-        output_weight=output_weight,
+        input_weight=float(input_weight_dec),
+        output_weight=float(output_weight_dec),
         reserved_credits=reserved,
         context_window=context_window,
     )

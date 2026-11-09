@@ -16,9 +16,22 @@ FRONTEND_FILES = [
     ROOT / "frontend" / "studio.js",
     ROOT / "frontend" / "workspace.js",
     ROOT / "frontend" / "admin.js",
-]
+] + sorted(ROOT.glob("frontend/*.html"))
 
-STATIC_ASSETS = {"/studio.js", "/studio.css", "/workspace.js", "/admin.js", "/favicon.ico"}
+STATIC_ASSETS = {
+    "/studio.js",
+    "/studio.css",
+    "/workspace.js",
+    "/admin.js",
+    "/favicon.ico",
+    "/modelos.html",
+    "/funciones.html",
+    "/como.html",
+    "/demo.html",
+    "/seguridad.html",
+    "/precios.html",
+    "/faq.html",
+}
 LITERAL = re.compile(r"""["'](/[A-Za-z0-9_{-][^"'\s]{0,158})["']""")
 
 

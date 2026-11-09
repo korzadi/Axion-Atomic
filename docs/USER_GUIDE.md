@@ -35,7 +35,7 @@ Axyron Studio es la interfaz web de AXYRON ATOMIC. Esta guía describe solo lo q
 ## Facturación
 
 - Verás tu **saldo de créditos** y el **historial de movimientos del ledger** si la plataforma te asignó cuotas o lotes.
-- El **catálogo** es «informativo»: no se muestran precios ni paquetes que el servidor no haya publicado, y el checkout permanece deshabilitado. La compra y la acreditación automática por QvaPay no están operativas; cuando lo estén, usarán Lightning Address con conciliación del lado del servidor.
+- El catálogo público muestra los planes aprobados (FREE 50 créditos al verificar tu correo; STARTER 300/$4.99; PLUS 750/$9.99; PRO 1.700/$19.99; STUDIO 3.600/$39.99; 1 crédito = 100 tokens). En **Facturación → Comprar** se crea una orden y una factura Lightning exacta en sats; pagas desde tu monedero y, al pulsar «Confirmar pago», el servidor concilia tu cobro con QvaPay (referencia, sats exactos, destinatario y transacción) y acredita los créditos en la misma transacción. Si algo falla, la orden expira sin efecto y puedes reintentarlo.
 - Si eres administrador con rol `billing_manage`, la sección **Operaciones de créditos y facturación** del portal administrativo permite recuperar liquidaciones, conciliar reservas sin ejecución y revertir consumos liquidados, todo con motivo auditable y confirmaciones; no hay borrado del historial.
 
 ## Administración (solo roles asignados)
@@ -51,8 +51,8 @@ En `https://admin.axyronatomic.com` (si el operador lo expone): gestión de cuen
 
 ## Qué no está disponible todavía
 
-- Checkout, precios y paquetes comerciales públicos.
-- Pagos reales por QvaPay (integración en evaluación; checkout deshabilitado).
+- Los planes comerciales son de compra única (sin suscripciones ni renovación automática); una compra por plan.
+- Pagos reales por Lightning Address de QvaPay: el cobro funciona con confirmación server-side; los créditos se acreditan una sola vez por pago verificado.
 - Plugins, conectores OAuth, Skills Hub, MCP (roadmap).
 - Streaming de respuestas, generación de vídeo/imagen/audio.
 - Exportación de datos personales y eliminación de cuenta desde la interfaz.

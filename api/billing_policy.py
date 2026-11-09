@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation, ROUND_CEILING
 from typing import Literal
 
 
@@ -40,20 +41,40 @@ class AllocationPlan:
     remaining: int
 
 
+def _weight_decimal(value, field: str) -> Decimal:
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        raise ValueError(f"{field} debe ser un ponderador numérico no negativo")
+    try:
+        weight = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValueError(f"{field} debe ser un ponderador numérico no negativo") from None
+    if not weight.is_finite() or weight < 0:
+        raise ValueError(f"{field} debe ser un ponderador numérico no negativo")
+    return weight
+
+
 def credits_for_usage(
     prompt_tokens: int | None,
     output_tokens: int | None,
     *,
-    input_weight: int = 1,
-    output_weight: int = 1,
+    input_weight: int | float = 1,
+    output_weight: int | float = 1,
 ) -> int:
-    """Convert known non-negative provider counters into integer credits."""
+    """Convert known non-negative provider counters into integer credits.
+
+    Decimal-exact arithmetic: 100 tokens × 0,01 crédito/token liquida exactamente
+    1 crédito (el redondeo flotante ascendente daría 2). El redondeo siempre es
+    al alza y 0 tokens líquidan 0 créditos.
+    """
     if prompt_tokens is None or output_tokens is None:
         raise UsageUnavailable("No se puede liquidar un uso con contadores desconocidos")
-    values = (prompt_tokens, output_tokens, input_weight, output_weight)
+    values = (prompt_tokens, output_tokens)
     if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in values):
         raise ValueError("Los contadores y ponderadores deben ser enteros no negativos")
-    return prompt_tokens * input_weight + output_tokens * output_weight
+    total = Decimal(prompt_tokens) * _weight_decimal(input_weight, "input_weight") + Decimal(
+        output_tokens
+    ) * _weight_decimal(output_weight, "output_weight")
+    return int(total.to_integral_value(rounding=ROUND_CEILING))
 
 
 def plan_allocation(
