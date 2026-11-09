@@ -4,8 +4,8 @@
 **Fase activa:** 12 — QA y liberación V1.0 (desarrollo inverso 12 → 7); endurecimiento de Studio independiente y SSO
 **Estado global:** EN DESARROLLO — V1.0 **no liberada**
 **Implementación global estimada:** ~90 % de criterios de aceptación con código presente (conteo textual de la matriz, 31 criterios)
-**Preparación productiva:** ~75 % (producción `a298344` con auth activa y readiness `ready`; staging con buzón real, token/catálogo QvaPay y AGT-04 pendientes)
-**Evidencia local de la rama:** `python -m pytest -q` → 1070 passed, 25 skipped; E2E de Studio aprobado; `check_frontend_js.py` aprobado. Las pruebas SSO PostgreSQL requieren CI; no hay CI verde declarada para el HEAD sin commitear.
+**Preparación productiva:** ~76 % (producción `a298344` con auth activa y readiness `ready`; CI 6/6 del HEAD `f4f455f`; staging con buzón real, token/catálogo QvaPay y AGT-04 pendientes)
+**Evidencia CI de la rama (HEAD `f4f455f`):** run `42553378796` de `AXYRON ATOMIC CI` **6/6 success** (python-tests, container-image-build, studio-browser-e2e ambos, postgres-migrations con 001–025 y suite ampliada, qdrant-cloud-integration, qdrant-e2e). Suite local al cerrar: `1072 passed, 27 skipped`. Dos intentos intermedios fallaron en postgres-migrations por el esquema real de consumo/créditos y se corrigieron (no se ocultaron).
 
 > Regla: los porcentajes son estimaciones de implementación basadas en la matriz de aceptación. No certifican disponibilidad operativa. Solo se declara **verificada** una capacidad cuando existe una prueba reproducible aprobada para el HEAD indicado. Las fases 10 y 12 conservan bloqueos externos que impiden declarar la V1.0 liberada. La fuente de verdad de los conteos por criterio es `docs/V1_ACCEPTANCE_MATRIX.md`; las cifras de 68 %/35 % de revisiones anteriores quedan como histórico.
 
@@ -14,7 +14,7 @@
 | Fase | Módulo | Avance | Estado |
 | ---: | --- | ---: | --- |
 | 1 | Estabilización y arquitectura | 70% | EN PROGRESO |
-| 2 | Autenticación y MFA | 60% | EN PROGRESO |
+| 2 | Autenticación y MFA | 68% | EN PROGRESO |
 | 3 | Axyron Studio | 65% | EN PROGRESO |
 | 4 | Modelos de IA | 65% | EN PROGRESO |
 | 5 | Agente AXYRON | 75% | EN PROGRESO |
@@ -23,10 +23,16 @@
 | 8 | Administración | 80% | EN PROGRESO |
 | 9 | Créditos y facturación | 80% | EN PROGRESO |
 | 10 | Integración QvaPay | 50% | EN PROGRESO |
-| 11 | Instalación y documentación | 90% | EN PROGRESO |
-| 12 | QA y liberación V1.0 | 70% | EN PROGRESO |
+| 11 | Instalación y documentación | 78% | EN PROGRESO |
+| 12 | QA y liberación V1.0 | 76% | EN PROGRESO |
 
 **Lectura de los porcentajes:** reflejan implementación y pruebas locales del código inspeccionado, no aceptación en staging. Las cifras heredadas del orden antiguo de fases se conservan solo como histórico en las secciones siguientes.
+
+## Autenticación, privacidad y cobertura CI — 2026-11-09
+
+- `POST /auth/password/change` implementado con sesión+CSRF, verificación de contraseña actual, política de longitud, rechazo de reutilización y revocación total de sesiones. Studio expone el formulario real.
+- `GET /auth/account/export` y `POST /auth/account/deletion-request` implementados con rate limit/CSRF según corresponda. Exporta metadatos acotados sin prompts/respuestas/secretos; la eliminación es una solicitud pendiente idempotente y auditable, sin borrado automático. Migración aditiva `025_account_deletion_requests.sql`.
+- CI postgres-migrations amplió cobertura (SSO, reset, cambio de contraseña, privacidad; migraciones 001–025). Evidencia final: `f4f455f` run `42553378796` 6/6 success.
 
 ## Studio independiente y SSO — endurecimiento 2026-11-09
 

@@ -145,8 +145,9 @@ La ruta `/health` comprueba ahora que el endpoint de etiquetas de Ollama incluya
 > - Despliegue del Studio (DNS `studio.axyronatomic.com`, TLS, vhost `deploy/studio.conf`, `STUDIO_ORIGIN` en `.env`, `python -m api.migrate`) corresponde al propietario.
 > - **REL-01 sigue bloqueada**: legal sin publicar, primer pago real E2E, MFA E2E y aceptación formal pendientes.
 
-> **Endurecimiento de Studio/SSO — 2026-11-09 (misma rama, sin desplegar).**
+> **Endurecimiento de Studio/SSO, autenticación y privacidad — 2026-11-09 (rama `hardening/studio-independent-app`, sin desplegar).**
 > - SSO: código en fragmento (`#code=…`), URL limpiada antes del intercambio, `state` hasheado en UTF-8 (401 en vez de 500) y `Cache-Control: no-store` en `authorize`.
 > - Studio: chat con historial completo e idempotencia por payload; agente con detalle/aprobaciones/`resume`/`cancel`/`reconcile`; modelos con verificación en vivo; dashboard muestra readiness degradado; logout documentado como host-only (sin logout global).
-> - Evidencia local: `pytest -q` → 1070 passed, 25 skipped; E2E Playwright de Studio aprobado; `check_frontend_js.py` aprobado. **No hay CI verde declarada para este estado**: falta ejecutar CI sobre el SHA final.
+> - Autenticación/privacidad: `POST /auth/password/change` (revoca todas las sesiones), `GET /auth/account/export` y `POST /auth/account/deletion-request` (solicitud pendiente, sin borrado automático). Migración aditiva `025_account_deletion_requests.sql`.
+> - Evidencia CI: `6701530` run `42551121372` **6/6 success**; `52c6fac`/`499f944` fallaron en postgres-migrations por el esquema real de privacidad y se corrigieron; `f4f455f` run `42553378796` **6/6 success** (python-tests, container-image-build, studio-browser-e2e ambos, postgres-migrations 001–025 + suite ampliada con SSO/reset/cambio/privacidad, qdrant-cloud-integration, qdrant-e2e).
 > - Siguen bloqueados: despliegue DNS/TLS de `studio.axyronatomic.com`, `STUDIO_ORIGIN` en `.env`, migración real, E2E con dependencias reales, primer pago QvaPay, MFA E2E, legal y aceptación del propietario. Confirmar el dominio canónico antes de publicar.
