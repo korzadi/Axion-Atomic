@@ -42,7 +42,7 @@ def export_account_data(user_id: str) -> dict:
             SELECT project_id,
                    COUNT(*) AS requests,
                    COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
-                   COALESCE(SUM(completion_tokens), 0) AS completion_tokens
+                   COALESCE(SUM(output_tokens), 0) AS output_tokens
             FROM inference_usage_events
             WHERE user_id=:id
             GROUP BY project_id
