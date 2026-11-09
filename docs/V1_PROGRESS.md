@@ -986,3 +986,12 @@ Durante el cierre del bloque Studio independiente, un comando de limpieza del á
 - La base de datos de producción no resultó alterada; solo se perdió ese punto de rollback. Los demás backups históricos (`pre-frontend-upgrade-*`, `pre-main-a298344-*`, `pre-qa-head-deploy-*`, `pre-release-*`, `rollback-*` imágenes) siguen intactos.
 
 - **Dominios canónicos (decisión de producto, 2026-11-09):** `axyronatomic.com` (web principal) y `studio.axyronatomic.com` (AXYRON Studio); **origen SSO definitivo `https://studio.axyronatomic.com`**. La verificación operativa en esos hosts (DNS/TLS/certificados, `STUDIO_ORIGIN` en `.env`, migración 024/025 reales, SSO E2E en dominio vivo) es intervención del operador y no se ejecuta desde este repositorio.
+
+
+## Cierre técnico streaming SSE — 2026-11-09 (`main`)
+
+- PR #27 mergeado: `4d7433a` (feat `ad46c9b`). CI del PR #27: 12/12 checks success (runs `42615327639`, `42615355073`).
+- Implementado streaming SSE E2E real: `api/ollama.py` (`chat_with_usage_stream`, NDJSON + resultado agregado/contadores), `api/workspace_routes.py` (`/workspace/chat/completions` `stream=true` → `text/event-stream`; `stream=false` JSON preservado). Preserva auth/CSRF, rol, rate limits, RAG, atestación runtime, idempotencia, validación de modelo, billing durable fail-closed y historial.
+- Studio independiente + clientes legacy consumen SSE con fallback JSON e idempotencia estable por payload.
+- Pruebas añadidas/actualizadas: `tests/test_ollama_stream.py`, `tests/test_workspace_chat_streaming.py`, `tests/test_studio_app_contract.py`, mock E2E `tests/e2e/studio-app-browser.mjs`. Local (`main@4d7433a`, venv): `1079 passed, 27 skipped`.
+- **No ejecutado:** pagos reales, despliegue, reinicios/migraciones reales en VPS/prod, cambios de secretos. CI en `main` para `4d7433a` **confirmada verde** (AXYRON ATOMIC CI run `42616095036`, 2026-11-09). Pendientes externos V1.0 sin cambio (REL-01): primer pago real QvaPay con evidencia; E2E vivo buzón/MFA/OAuth/SSO real; smoke autenticado + aceptación formal/legal.
