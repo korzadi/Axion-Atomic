@@ -10,13 +10,13 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from api.auth import (
-    COOKIE_NAME, CSRF_COOKIE, authenticate, create_user, current_user,
+    COOKIE_NAME, CSRF_COOKIE, authenticate, change_password, create_user, current_user,
     require_csrf, revoke_session, verify_credentials, create_session,
 )
 from api.config import settings
 from api.schemas import (
-    LoginRequest, RegisterRequest, ProjectCreateRequest,
-    MfaChallengeVerifyRequest, MfaConfirmRequest,
+    LoginRequest, RegisterRequest, ProjectCreateRequest, PasswordChangeRequest,
+    MfaChallengeVerifyRequest, MfaConfirmRequest, AccountDeletionRequest,
 )
 from api.mfa import AesGcmTotpCipher, EnvironmentMfaKeyProvider, MfaError
 from api.mfa_store import (
@@ -30,6 +30,7 @@ from api.rate_limit import consume_rate_limit, rate_limit_key
 from api.oauth import begin, consume_state, configured, provider_profile, resolve_user
 from api.email_delivery import email_delivery_configured, send_verification_email
 from api.email_verification import issue_email_verification_token
+from api.account_privacy import export_account_data, request_account_deletion
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 SESSION_MAX_AGE = 12 * 60 * 60
@@ -331,6 +332,28 @@ async def me(user=Depends(_authenticated_user)):
     return {"user": {key: user[key] for key in ("id", "email", "display_name")}}
 
 
+
+
+@router.get("/account/export")
+async def account_export(user=Depends(_authenticated_user)):
+    """Exporta datos acotados a la cuenta autenticada. No incluye secretos."""
+    return await run_in_threadpool(export_account_data, user["id"])
+
+
+@router.post("/account/deletion-request")
+async def account_deletion_request(
+    req: AccountDeletionRequest,
+    request: Request,
+    user=Depends(_csrf_guard),
+):
+    """Registra una solicitud de eliminación; la eliminación efectiva es manual/auditada."""
+    await run_in_threadpool(
+        _enforce_rate_limit, request,
+        namespace="auth:account-deletion:user", subject=user["id"],
+        limit=3, window=timedelta(days=1),
+    )
+    return await run_in_threadpool(request_account_deletion, user["id"], req.note)
+
 @router.post("/logout")
 async def logout(
     request: Request,
@@ -342,6 +365,33 @@ async def logout(
     response.delete_cookie(COOKIE_NAME, path="/", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
     response.delete_cookie(CSRF_COOKIE, path="/", secure=settings.auth_cookie_secure, httponly=False, samesite="lax")
     return {"status": "logged_out"}
+
+
+@router.post("/password/change")
+async def password_change(
+    req: PasswordChangeRequest,
+    request: Request,
+    response: Response,
+    user=Depends(_csrf_guard),
+):
+    """Cambio de contraseña con sesión activa; revoca todas las sesiones al terminar."""
+    await run_in_threadpool(
+        _enforce_rate_limit, request,
+        namespace="auth:password-change:user", subject=user["id"],
+        limit=5, window=timedelta(minutes=10),
+    )
+    await run_in_threadpool(
+        change_password,
+        user_id=user["id"],
+        current_password=req.current_password,
+        new_password=req.new_password,
+    )
+    response.delete_cookie(COOKIE_NAME, path="/", secure=settings.auth_cookie_secure, httponly=True, samesite="lax")
+    response.delete_cookie(CSRF_COOKIE, path="/", secure=settings.auth_cookie_secure, httponly=False, samesite="lax")
+    return {
+        "status": "password_changed",
+        "message": "Contraseña actualizada. Todas las sesiones se cerraron; inicia sesión de nuevo.",
+    }
 
 
 @router.get("/projects")

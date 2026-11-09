@@ -322,5 +322,37 @@ class RecoveryRateLimitFailureTests(unittest.TestCase):
         consume.assert_not_called()
 
 
+
+class PasswordChangeRouteTests(unittest.TestCase):
+    def test_password_change_requires_auth_and_csrf_via_dependency(self):
+        # La ruta usa Depends(_csrf_guard); el contrato de seguridad vive en el
+        # guard compartido. Validamos que el endpoint aplica rate limit, llama al
+        # servicio y limpia las cookies de sesión.
+        from api.auth_routes import password_change
+        request = Mock(spec=Request)
+        request.client.host = "198.51.100.55"
+        response = Response()
+        user = {"id": "user-55", "csrf_hash": "hash"}
+        with patch("api.auth_routes.settings.auth_enabled", True):
+            with patch("api.auth_routes._enforce_rate_limit") as limiter:
+                with patch("api.auth_routes.change_password") as changer:
+                    result = asyncio.run(password_change(
+                        Mock(current_password="Current-Password-123!", new_password="New-Strong-Password-456!"),
+                        request, response, user,
+                    ))
+        limiter.assert_called_once()
+        self.assertEqual(limiter.call_args.kwargs["namespace"], "auth:password-change:user")
+        self.assertEqual(limiter.call_args.kwargs["subject"], "user-55")
+        changer.assert_called_once_with(
+            user_id="user-55",
+            current_password="Current-Password-123!",
+            new_password="New-Strong-Password-456!",
+        )
+        self.assertEqual(result["status"], "password_changed")
+        cookies = response.headers.getlist("set-cookie")
+        self.assertTrue(any(c.startswith("axion_session=") and "max-age=0" in c.lower() for c in cookies))
+        self.assertTrue(any(c.startswith("axion_csrf=") and "max-age=0" in c.lower() for c in cookies))
+
+
 if __name__ == "__main__":
     unittest.main()

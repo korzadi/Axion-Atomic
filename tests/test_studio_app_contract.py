@@ -110,6 +110,18 @@ def test_privacy_copy_does_not_overclaim_encryption_or_deletion():
     assert "historial de chat se guarda cifrado en reposo" not in APP
     assert "no cifrado a nivel de aplicación" in APP
     assert "No hay autoservicio de borrado de proyectos" in APP
+    assert 'api("/auth/account/export")' in APP
+    assert 'api("/auth/account/deletion-request"' in APP
+    assert "eliminación efectiva la revisa y ejecuta el operador" in APP
+    assert "no se borra automáticamente" in APP
+
+
+def test_password_change_is_wired_to_real_backend():
+    assert 'api("/auth/password/change"' in APP
+    assert "current_password" in APP
+    assert "new_password" in APP
+    assert "La nueva contraseña y su confirmación no coinciden." in APP
+    assert "cambio de contraseña con sesión activa no tiene endpoint" not in APP
 
 
 def test_logout_scope_is_documented_as_host_only():

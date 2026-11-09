@@ -888,7 +888,13 @@ async function renderAccount() {
   setOutlet(`<div class="st-view">${viewHead("Cuenta", "Cuenta y seguridad", "Tu identidad, tu sesión y tu segundo factor.")}
     <div class="st-grid">
       <div class="st-card half"><h3>Tu cuenta</h3><div id="st-account" class="st-list"><div class="st-empty">Cargando…</div></div>
-        <p class="st-muted" style="margin-top:10px">El cambio de contraseña con sesión activa no tiene endpoint en este backend. Usa la recuperación de contraseña de la web principal.</p>
+        <form id="st-password-form" class="st-grid-form" style="margin-top:12px">
+          <div class="st-field"><label for="st-current-password">Contraseña actual</label><input id="st-current-password" type="password" autocomplete="current-password" maxlength="1024" required></div>
+          <div class="st-field"><label for="st-new-password">Nueva contraseña (mínimo 12 caracteres)</label><input id="st-new-password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></div>
+          <div class="st-field"><label for="st-confirm-password">Repite la nueva contraseña</label><input id="st-confirm-password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></div>
+          <button class="st-btn primary" type="submit">Cambiar contraseña</button>
+        </form>
+        <p class="st-muted" style="margin-top:10px">Al cambiarla se revocan todas tus sesiones, incluida esta; tendrás que iniciar sesión de nuevo con la nueva contraseña.</p>
       </div>
       <div class="st-card half"><h3>Autenticación multifactor</h3><div id="st-mfa" class="st-list"><div class="st-empty">Cargando…</div></div></div>
       <div class="st-card"><h3>Sesión</h3><p class="st-muted">Cerrar sesión aquí revoca la sesión de este host (Studio). No revoca la sesión de la web principal ni otras sesiones de tu cuenta; esta versión no ofrece cierre de sesión global.</p><button class="st-btn" id="st-account-logout">Cerrar sesión en este dominio</button></div>
@@ -898,6 +904,28 @@ async function renderAccount() {
     try { await api("/auth/logout", { method: "POST", body: "{}" }); } catch {}
     state.user = null;
     await navigate("/login");
+  });
+  $("#st-password-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const current = $("#st-current-password").value;
+    const next = $("#st-new-password").value;
+    if (next !== $("#st-confirm-password").value) {
+      outlet.prepend(notice("error", "La nueva contraseña y su confirmación no coinciden."));
+      return;
+    }
+    const button = event.currentTarget.querySelector("button[type=submit]");
+    button.disabled = true;
+    try {
+      await api("/auth/password/change", {
+        method: "POST",
+        body: JSON.stringify({ current_password: current, new_password: next }),
+      });
+      state.user = null;
+      await navigate("/login");
+    } catch (error) {
+      outlet.prepend(notice("error", error.message));
+      button.disabled = false;
+    }
   });
   try {
     const me = await api("/auth/me");
@@ -968,10 +996,53 @@ async function renderPrivacy() {
         <li>El historial de chat se guarda por usuario y proyecto en la base de datos (cifrado de disco según el operador, no cifrado a nivel de aplicación). No hay autoservicio de borrado de proyectos; la eliminación corresponde al operador.</li>
         <li>RAG aísla documentos y fragmentos por proyecto.</li>
       </ul></div>
-      <div class="st-card"><h3>Disponibilidad de derechos</h3><p class="st-muted">Exportación y eliminación completa de datos personales están en desarrollo; no hay autoservicio aún. Para solicitudes de privacidad, escribe a la dirección de contacto publicada por el operador de la instancia.</p><span class="st-pill warn">Parcial</span></div>
+      <div class="st-card"><h3>Exportación de datos</h3><p class="st-muted">Descarga un JSON con los datos acotados a tu cuenta (perfil, proyectos, consumo agregado y saldo/ledger recientes). No incluye prompts, respuestas ni secretos.</p><button class="st-btn" id="st-export-data">Exportar mis datos</button><div id="st-export-status" class="st-muted" aria-live="polite" style="margin-top:10px"></div></div>
+      <div class="st-card"><h3>Solicitud de eliminación</h3><p class="st-muted">Registra una solicitud auditable de eliminación de tu cuenta. La eliminación efectiva la revisa y ejecuta el operador, preservando los registros financieros y de auditoría cuando corresponda; no se borra automáticamente.</p>
+        <form id="st-delete-request-form" class="st-grid-form">
+          <div class="st-field"><label for="st-delete-note">Motivo (opcional)</label><textarea id="st-delete-note" maxlength="2000" placeholder="Indica el motivo si lo deseas"></textarea></div>
+          <button class="st-btn danger" type="submit">Registrar solicitud de eliminación</button>
+        </form>
+        <div id="st-delete-status" class="st-muted" aria-live="polite" style="margin-top:10px"></div>
+      </div>
       <div class="st-card"><h3>Legal</h3><p class="st-muted">Los términos y la política de privacidad se publicarán en la web principal antes del lanzamiento comercial. Consulta con el operador de la instancia.</p></div>
     </div>
   </div>`);
+  $("#st-export-data").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const status = $("#st-export-status");
+    button.disabled = true;
+    status.textContent = "Preparando exportación…";
+    try {
+      const data = await api("/auth/account/export");
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `axyron-account-export-${(data.user?.id || "cuenta").slice(0, 12)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      status.textContent = "Exportación descargada. Revisa el archivo con cuidado: contiene metadatos de tu cuenta.";
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+  $("#st-delete-request-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const status = $("#st-delete-status");
+    if (!confirm("Se registrará una solicitud de eliminación de tu cuenta para revisión del operador. No se eliminará automáticamente. ¿Continuar?")) return;
+    try {
+      const result = await api("/auth/account/deletion-request", {
+        method: "POST",
+        body: JSON.stringify({ note: $("#st-delete-note").value }),
+      });
+      status.textContent = result.message || "Solicitud registrada.";
+      $("#st-delete-note").value = "";
+    } catch (error) {
+      status.textContent = error.message;
+    }
+  });
 }
 
 async function renderIntegrations() {
