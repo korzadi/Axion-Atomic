@@ -73,7 +73,7 @@ const state = { user: null, projectId: null, projects: [] };
 
 function route() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
-  if (path === "/login" || path === "/sso/callback") return path.slice(1);
+  if (path === "/login" || path === "/register" || path === "/sso/callback") return path.slice(1);
   const name = path === "/" || path === "/dashboard" ? "dashboard" : path.slice(1);
   return Object.prototype.hasOwnProperty.call(routes, name) ? name : "404";
 }
@@ -92,10 +92,11 @@ async function render() {
   if (name === "404") return renderNotFound();
   if (name === "sso-callback" || name === "sso/callback") return renderSsoCallback();
   if (!state.user) {
-    if (name !== "login" && name !== "sso-callback") history.replaceState({}, "", "/login?next=" + encodeURIComponent(window.location.pathname + window.location.search));
+    if (name === "register") return renderRegister();
+    if (name !== "login") history.replaceState({}, "", "/login?next=" + encodeURIComponent(window.location.pathname + window.location.search));
     return renderLogin();
   }
-  if (name === "login") return navigate("/dashboard");
+  if (name === "login" || name === "register") return navigate("/dashboard");
   const renderer = routes[name] ?? renderNotFound;
   outlet.innerHTML = "";
   await renderer();
@@ -196,6 +197,71 @@ async function renderLogin() {
       g.style.display = p.google ? "" : "none";
       gh.style.display = p.github ? "" : "none";
       row.style.display = (p.google || p.github) ? "grid" : "none";
+    }
+  } catch {}
+}
+
+
+
+async function renderRegister() {
+  outlet.innerHTML = `
+    <div class="st-view login-page">
+      <div class="st-card">
+        <p class="st-eyebrow">Crear cuenta</p>
+        <h1 class="st-title">Únete a Axyron Studio</h1>
+        <p class="st-subtitle">Crea tu cuenta para usar AXYRON ATOMIC. Recibirás un correo para verificarla.</p>
+        <div id="st-reg-status" aria-live="polite"></div>
+        <form id="st-reg-form" class="st-grid-form" novalidate style="margin-top:16px">
+          <div class="st-field"><label for="st-reg-name">Nombre</label><input id="st-reg-name" type="text" autocomplete="name" required maxlength="120"></div>
+          <div class="st-field"><label for="st-reg-email">Correo</label><input id="st-reg-email" type="email" autocomplete="email" required></div>
+          <div class="st-field"><label for="st-reg-password">Contraseña (mínimo 12 caracteres)</label><input id="st-reg-password" type="password" autocomplete="new-password" required minlength="12"></div>
+          <label style="font-size:.88rem;color:var(--st-muted);display:flex;gap:8px;align-items:flex-start"><input id="st-reg-terms" type="checkbox" style="margin-top:3px"> <span>Acepto los <a href="${landingBase}/terminos.html" target="_blank" rel="noopener">términos</a> y la <a href="${landingBase}/privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.</span></label>
+          <button class="st-btn primary" type="submit" id="st-reg-submit">Crear cuenta</button>
+        </form>
+        <div id="st-reg-oauth" style="display:none;gap:10px;margin-top:16px">
+          <div style="display:flex;align-items:center;gap:10px;color:var(--st-muted);font-size:.84rem"><span style="flex:1;height:1px;background:var(--st-border)"></span><span>o regístrate con</span><span style="flex:1;height:1px;background:var(--st-border)"></span></div>
+          <a id="st-reg-google" class="st-btn" href="/auth/oauth/google/start?terms_accepted=true" style="justify-content:center" rel="nofollow">Continuar con Google</a>
+          <a id="st-reg-github" class="st-btn" href="/auth/oauth/github/start?terms_accepted=true" style="justify-content:center" rel="nofollow">Continuar con GitHub</a>
+          <p class="st-muted" style="font-size:.8rem;text-align:center">Al continuar aceptas los términos y la política de privacidad.</p>
+        </div>
+        <div style="text-align:center;font-size:.85rem;margin-top:16px"><a href="/login" class="st-muted">¿Ya tienes cuenta? Inicia sesión</a></div>
+      </div>
+    </div>`;
+  const status = $("#st-reg-status");
+  $("#st-reg-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = $("#st-reg-submit");
+    submit.disabled = true;
+    status.innerHTML = "";
+    const display_name = $("#st-reg-name").value.trim();
+    const email = $("#st-reg-email").value.trim();
+    const password = $("#st-reg-password").value;
+    const terms_accepted = $("#st-reg-terms").checked;
+    if (!display_name || !terms_accepted) {
+      status.appendChild(notice("error", "Completa tu nombre y acepta los términos."));
+      submit.disabled = false; return;
+    }
+    if (password.length < 12) {
+      status.appendChild(notice("error", "La contraseña debe tener al menos 12 caracteres."));
+      submit.disabled = false; return;
+    }
+    try {
+      const v = await api("/auth/register", { method: "POST", body: JSON.stringify({ email, password, display_name, terms_accepted: true }) });
+      status.appendChild(notice("good", v.message || "Si los datos son válidos, recibirás un correo para activar tu cuenta."));
+      $("#st-reg-form").reset();
+    } catch (error) {
+      status.appendChild(notice("error", error.message || "No se pudo crear la cuenta"));
+    } finally { submit.disabled = false; }
+  });
+  try {
+    const p = await api("/auth/oauth/providers");
+    const row = $("#st-reg-oauth"), g = $("#st-reg-google"), gh = $("#st-reg-github");
+    if (row && g && gh && p) {
+      g.style.display = p.google ? "" : "none";
+      gh.style.display = p.github ? "" : "none";
+      row.style.display = (p.google || p.github) ? "grid" : "none";
+      const guard = (ev) => { if (!$("#st-reg-terms").checked) { ev.preventDefault(); status.prepend(notice("error", "Acepta los términos para registrarte con un proveedor externo.")); } };
+      g.onclick = guard; gh.onclick = guard;
     }
   } catch {}
 }
